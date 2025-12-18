@@ -34,7 +34,7 @@ void CubeRenderer::createBuffers() {
     );
     indexBuffer->upload(indices.data(), sizeof(uint16_t) * indices.size());
     
-    std::cout << "      ✓ Buffers creados (8 vértices, 36 índices)" << std::endl;
+    std::cout << "      ✓ Buffers creados (24 vértices, 36 índices)" << std::endl;
 }
 
 void CubeRenderer::createPipeline(VkRenderPass renderPass, uint32_t width, uint32_t height) {
@@ -53,14 +53,15 @@ void CubeRenderer::createPipeline(VkRenderPass renderPass, uint32_t width, uint3
     
     std::vector<reactor::VertexInputAttribute> attributes = {
         {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = offsetof(Vertex, pos)},
-        {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = offsetof(Vertex, color)}
+        {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = offsetof(Vertex, normal)},
+        {.location = 2, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = offsetof(Vertex, color)}
     };
     
-    // Push constant range
+    // Push constant range (MVP + Model matrices)
     VkPushConstantRange pushConstant{};
     pushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     pushConstant.offset = 0;
-    pushConstant.size = sizeof(glm::mat4);
+    pushConstant.size = sizeof(glm::mat4) * 2;  // MVP + Model
     
     // Crear pipeline
     pipeline = std::make_unique<reactor::GraphicsPipeline>(
@@ -79,12 +80,17 @@ void CubeRenderer::createPipeline(VkRenderPass renderPass, uint32_t width, uint3
     std::cout << "      ✓ Pipeline creado" << std::endl;
 }
 
-void CubeRenderer::render(reactor::CommandBuffer& cmd, const glm::mat4& mvp) {
+void CubeRenderer::render(reactor::CommandBuffer& cmd, const glm::mat4& mvp, const glm::mat4& model) {
     // Bind pipeline
     cmd.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->handle());
     
-    // Push constants (MVP matrix)
-    cmd.pushConstants(pipeline->layout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &mvp);
+    // Push constants (MVP + Model matrices)
+    struct PushConstants {
+        glm::mat4 mvp;
+        glm::mat4 model;
+    } pushConstants{mvp, model};
+    
+    cmd.pushConstants(pipeline->layout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), &pushConstants);
     
     // Bind vertex buffer
     std::vector<VkBuffer> buffers = {vertexBuffer->handle()};
@@ -99,35 +105,60 @@ void CubeRenderer::render(reactor::CommandBuffer& cmd, const glm::mat4& mvp) {
 }
 
 std::vector<Vertex> CubeRenderer::getCubeVertices() {
+    // Cada cara tiene 4 vértices con normales correctas para Phong shading
     return {
-        // Front face (cyan/teal - como LunarG)
-        {{-0.5f, -0.5f,  0.5f}, {0.0f, 0.6f, 0.6f}},
-        {{ 0.5f, -0.5f,  0.5f}, {0.0f, 0.6f, 0.6f}},
-        {{ 0.5f,  0.5f,  0.5f}, {0.0f, 0.7f, 0.7f}},
-        {{-0.5f,  0.5f,  0.5f}, {0.0f, 0.7f, 0.7f}},
+        // Front face (Z+) - Cyan/Teal como LunarG
+        {{-0.5f, -0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.8f, 0.8f}},
+        {{ 0.5f, -0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.8f, 0.8f}},
+        {{ 0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.9f, 0.9f}},
+        {{-0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.9f, 0.9f}},
         
-        // Back face (gray)
-        {{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}},
-        {{ 0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}},
-        {{ 0.5f,  0.5f, -0.5f}, {0.6f, 0.6f, 0.6f}},
-        {{-0.5f,  0.5f, -0.5f}, {0.6f, 0.6f, 0.6f}}
+        // Back face (Z-) - Dark gray
+        {{ 0.5f, -0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {0.3f, 0.3f, 0.3f}},
+        {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {0.3f, 0.3f, 0.3f}},
+        {{-0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {0.4f, 0.4f, 0.4f}},
+        {{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {0.4f, 0.4f, 0.4f}},
+        
+        // Left face (X-) - Medium gray
+        {{-0.5f, -0.5f, -0.5f}, {-1.0f, 0.0f, 0.0f}, {0.5f, 0.5f, 0.5f}},
+        {{-0.5f, -0.5f,  0.5f}, {-1.0f, 0.0f, 0.0f}, {0.5f, 0.5f, 0.5f}},
+        {{-0.5f,  0.5f,  0.5f}, {-1.0f, 0.0f, 0.0f}, {0.6f, 0.6f, 0.6f}},
+        {{-0.5f,  0.5f, -0.5f}, {-1.0f, 0.0f, 0.0f}, {0.6f, 0.6f, 0.6f}},
+        
+        // Right face (X+) - Light gray
+        {{ 0.5f, -0.5f,  0.5f}, {1.0f, 0.0f, 0.0f}, {0.6f, 0.6f, 0.6f}},
+        {{ 0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.6f, 0.6f, 0.6f}},
+        {{ 0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.7f, 0.7f, 0.7f}},
+        {{ 0.5f,  0.5f,  0.5f}, {1.0f, 0.0f, 0.0f}, {0.7f, 0.7f, 0.7f}},
+        
+        // Top face (Y+) - Light cyan
+        {{-0.5f,  0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.7f, 0.7f}},
+        {{ 0.5f,  0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.7f, 0.7f}},
+        {{ 0.5f,  0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.8f, 0.8f}},
+        {{-0.5f,  0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.8f, 0.8f}},
+        
+        // Bottom face (Y-) - Dark cyan
+        {{-0.5f, -0.5f, -0.5f}, {0.0f, -1.0f, 0.0f}, {0.0f, 0.5f, 0.5f}},
+        {{ 0.5f, -0.5f, -0.5f}, {0.0f, -1.0f, 0.0f}, {0.0f, 0.5f, 0.5f}},
+        {{ 0.5f, -0.5f,  0.5f}, {0.0f, -1.0f, 0.0f}, {0.0f, 0.6f, 0.6f}},
+        {{-0.5f, -0.5f,  0.5f}, {0.0f, -1.0f, 0.0f}, {0.0f, 0.6f, 0.6f}}
     };
 }
 
 std::vector<uint16_t> CubeRenderer::getCubeIndices() {
     return {
-        // Front
+        // Front face (0-3)
         0, 1, 2, 2, 3, 0,
-        // Back
-        5, 4, 7, 7, 6, 5,
-        // Left
-        4, 0, 3, 3, 7, 4,
-        // Right
-        1, 5, 6, 6, 2, 1,
-        // Top
-        3, 2, 6, 6, 7, 3,
-        // Bottom
-        4, 5, 1, 1, 0, 4
+        // Back face (4-7)
+        4, 5, 6, 6, 7, 4,
+        // Left face (8-11)
+        8, 9, 10, 10, 11, 8,
+        // Right face (12-15)
+        12, 13, 14, 14, 15, 12,
+        // Top face (16-19)
+        16, 17, 18, 18, 19, 16,
+        // Bottom face (20-23)
+        20, 21, 22, 22, 23, 20
     };
 }
 

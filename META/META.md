@@ -1,8 +1,8 @@
 # 📋 META - Stack-GPU-OP Project Overview
 
 **Fecha**: 18 de Diciembre, 2025  
-**Versión**: 0.3.0  
-**Estado**: ✅ **FUNCIONAL - Cubo 3D renderizando a 74-80 FPS**
+**Versión**: 0.3.1  
+**Estado**: ✅ **FUNCIONAL - Cubo 3D con Depth Buffer a 74-75 FPS**
 
 ---
 
@@ -235,9 +235,13 @@ REACTOR (Framework for Vulkan)/
 
 ### Corto Plazo (1-2 semanas)
 1. ✅ **Cubo 3D renderizando** - COMPLETADO
-2. ⏳ Agregar texturas al cubo (como LunarG)
-3. ⏳ Implementar depth buffer
-4. ⏳ Mejorar sincronización (eliminar warnings)
+2. ✅ **Depth buffer implementado** - COMPLETADO
+3. ✅ **Colores mejorados (24 vértices)** - COMPLETADO
+4. ✅ **Phong shading profesional** - COMPLETADO
+5. ✅ **Normales por vértice** - COMPLETADO
+6. ⏳ Agregar texturas al cubo (como LunarG)
+7. ⏳ Mejorar sincronización (eliminar warnings)
+8. ⏳ Múltiples luces y sombras
 
 ### Mediano Plazo (1 mes)
 1. ⏳ Implementar ISR completo (uniforms, descriptors)

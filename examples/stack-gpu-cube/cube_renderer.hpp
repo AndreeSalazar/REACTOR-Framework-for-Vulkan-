@@ -11,6 +11,7 @@ namespace cube {
 
 struct Vertex {
     glm::vec3 pos;
+    glm::vec3 normal;
     glm::vec3 color;
 };
 
@@ -19,7 +20,7 @@ public:
     CubeRenderer(reactor::VulkanContext& ctx, VkRenderPass renderPass, uint32_t width, uint32_t height);
     ~CubeRenderer() = default;
 
-    void render(reactor::CommandBuffer& cmd, const glm::mat4& mvp);
+    void render(reactor::CommandBuffer& cmd, const glm::mat4& mvp, const glm::mat4& model);
 
 private:
     reactor::VulkanContext& context;

@@ -12,6 +12,7 @@
 #include "cube_renderer.hpp"
 #include <iostream>
 #include <chrono>
+#include <array>
 
 /**
  * Stack-GPU-OP Cube Demo
@@ -54,31 +55,85 @@ int main() {
         reactor::Swapchain swapchain(ctx.device(), ctx.physical(), surface, config.width, config.height);
         std::cout << "[✓] Swapchain creado" << std::endl;
         
-        // Crear render pass
-        std::vector<reactor::AttachmentDescription> attachments = {{
-            .format = swapchain.imageFormat(),
-            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-        }};
+        // Crear depth image
+        VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
         
-        reactor::RenderPass renderPass(ctx.device(), attachments, false);
-        std::cout << "[✓] Render pass creado" << std::endl;
+        VkImageCreateInfo depthImageInfo{};
+        depthImageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        depthImageInfo.imageType = VK_IMAGE_TYPE_2D;
+        depthImageInfo.format = depthFormat;
+        depthImageInfo.extent = {static_cast<uint32_t>(config.width), static_cast<uint32_t>(config.height), 1};
+        depthImageInfo.mipLevels = 1;
+        depthImageInfo.arrayLayers = 1;
+        depthImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        depthImageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        depthImageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        
+        VkImage depthImage;
+        vkCreateImage(ctx.device(), &depthImageInfo, nullptr, &depthImage);
+        
+        VkMemoryRequirements memReqs;
+        vkGetImageMemoryRequirements(ctx.device(), depthImage, &memReqs);
+        
+        // Usar el allocator de REACTOR
+        auto depthBlock = ctx.allocator()->allocate(memReqs, reactor::MemoryType::DeviceLocal);
+        vkBindImageMemory(ctx.device(), depthImage, depthBlock.memory, depthBlock.offset);
+        
+        VkImageViewCreateInfo depthViewInfo{};
+        depthViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        depthViewInfo.image = depthImage;
+        depthViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        depthViewInfo.format = depthFormat;
+        depthViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        depthViewInfo.subresourceRange.baseMipLevel = 0;
+        depthViewInfo.subresourceRange.levelCount = 1;
+        depthViewInfo.subresourceRange.baseArrayLayer = 0;
+        depthViewInfo.subresourceRange.layerCount = 1;
+        
+        VkImageView depthView;
+        vkCreateImageView(ctx.device(), &depthViewInfo, nullptr, &depthView);
+        
+        std::cout << "[✓] Depth buffer creado" << std::endl;
+        
+        // Crear render pass con depth
+        std::vector<reactor::AttachmentDescription> attachments = {
+            {
+                .format = swapchain.imageFormat(),
+                .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+            },
+            {
+                .format = depthFormat,
+                .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+            }
+        };
+        
+        reactor::RenderPass renderPass(ctx.device(), attachments, true);
+        std::cout << "[✓] Render pass creado (con depth)" << std::endl;
         
         // Crear cube renderer
         std::cout << "[3/5] Creando cube renderer..." << std::endl;
         cube::CubeRenderer cubeRenderer(ctx, renderPass.handle(), config.width, config.height);
         std::cout << "[✓] Cube renderer creado" << std::endl;
         
-        // Crear framebuffers
+        // Crear framebuffers con depth
         std::vector<VkFramebuffer> framebuffers;
         for (size_t i = 0; i < swapchain.imageCount(); i++) {
+            std::array<VkImageView, 2> attachmentViews = {
+                swapchain.imageViews()[i],
+                depthView
+            };
+            
             VkFramebufferCreateInfo fbInfo{};
             fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
             fbInfo.renderPass = renderPass.handle();
-            fbInfo.attachmentCount = 1;
-            fbInfo.pAttachments = &swapchain.imageViews()[i];
+            fbInfo.attachmentCount = static_cast<uint32_t>(attachmentViews.size());
+            fbInfo.pAttachments = attachmentViews.data();
             fbInfo.width = config.width;
             fbInfo.height = config.height;
             fbInfo.layers = 1;
@@ -168,7 +223,9 @@ int main() {
             cmd.reset();
             cmd.begin();
             
-            VkClearValue clearColor = {{{0.1f, 0.1f, 0.15f, 1.0f}}};
+            std::array<VkClearValue, 2> clearValues{};
+            clearValues[0].color = {{0.1f, 0.1f, 0.15f, 1.0f}};
+            clearValues[1].depthStencil = {1.0f, 0};
             
             VkRenderPassBeginInfo rpInfo{};
             rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -176,8 +233,8 @@ int main() {
             rpInfo.framebuffer = framebuffers[imageIndex];
             rpInfo.renderArea.offset = {0, 0};
             rpInfo.renderArea.extent = swapchain.extent();
-            rpInfo.clearValueCount = 1;
-            rpInfo.pClearValues = &clearColor;
+            rpInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+            rpInfo.pClearValues = clearValues.data();
             
             vkCmdBeginRenderPass(cmd.handle(), &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
             
@@ -185,8 +242,8 @@ int main() {
             glm::mat4 model = cubeTransform.getMatrix();
             glm::mat4 mvp = proj * view * model;
             
-            // Renderizar cubo 3D
-            cubeRenderer.render(cmd, mvp);
+            // Renderizar cubo 3D con Phong shading
+            cubeRenderer.render(cmd, mvp, model);
             
             vkCmdEndRenderPass(cmd.handle());
             cmd.end();
@@ -211,18 +268,19 @@ int main() {
             // Present
             swapchain.present(ctx.graphicsQueue(), imageIndex, renderFinished[currentFrame].handle());
             
-            currentFrame = (currentFrame + 1) % MAX_FRAMES;
+            // FPS counter
             frameCount++;
-            
-            // FPS
-            auto elapsed = std::chrono::duration<double>(currentTime - lastFpsTime).count();
-            if (elapsed >= 1.0) {
-                double fps = frameCount / elapsed;
-                std::cout << "FPS: " << static_cast<int>(fps) 
-                         << " | Rotación: " << glm::degrees(cubeTransform.rotation.y) << "°" << std::endl;
+            auto fpsDuration = std::chrono::duration<float>(currentTime - lastFpsTime).count();
+            if (fpsDuration >= 0.5f) {
+                float fps = frameCount / fpsDuration;
+                std::string title = "Stack-GPU-OP - Cubo 3D | FPS: " + std::to_string(static_cast<int>(fps)) + 
+                                   " | Rotación: " + std::to_string(static_cast<int>(glm::degrees(cubeTransform.rotation.y))) + "°";
+                window.setTitle(title);
                 frameCount = 0;
                 lastFpsTime = currentTime;
             }
+            
+            currentFrame = (currentFrame + 1) % MAX_FRAMES;
         }
         
         // Cleanup

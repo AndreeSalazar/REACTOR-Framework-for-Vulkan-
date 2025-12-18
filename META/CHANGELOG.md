@@ -7,6 +7,50 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [0.4.0] - 2025-12-18 ✅ PHONG SHADING PROFESIONAL
+
+### ✨ Agregado
+- **Phong shading completo** - Ambient + Diffuse + Specular
+- **Normales por vértice** - 24 vértices con normales correctas por cara
+- **Specular highlights** - Reflejos brillantes (shininess 32)
+- **Push constants mejorados** - MVP + Model matrices (128 bytes)
+- **Vertex attributes actualizados** - Position + Normal + Color (36 bytes/vertex)
+
+### 🎨 Iluminación
+- **Ambient**: 30% intensidad base
+- **Diffuse**: Iluminación direccional completa
+- **Specular**: 60% intensidad, exponente 32
+- **Luz**: Posición (5, 5, 5), color blanco
+
+### 📊 Performance
+- **70-75 FPS** constantes
+- **24 vértices, 36 índices**
+- **Vertex shader**: Transformación pos + normal
+- **Fragment shader**: Phong shading (3 componentes)
+
+---
+
+## [0.3.1] - 2025-12-18 ✅ MEJORAS VISUALES
+
+### ✨ Agregado
+- **Depth buffer** implementado (D32_SFLOAT)
+- **24 vértices** con colores por cara (antes 8)
+- **Colores mejorados** - Cyan/teal como LunarG en cara frontal
+- **Render pass con depth attachment**
+- **Framebuffers con depth**
+
+### 🔧 Corregido
+- **Renderizado 3D correcto** - Caras en orden apropiado con depth test
+- **Clear values** - Incluye depth clear (1.0)
+
+### 📊 Performance
+- **74-75 FPS** constantes
+- **24 vértices, 36 índices** (4 vértices por cara)
+- **1 draw call** por frame
+- **Depth buffer**: 1280x720 D32_SFLOAT
+
+---
+
 ## [0.3.0] - 2025-12-18 ✅ CUBO 3D FUNCIONANDO
 
 ### ✨ Agregado
@@ -26,7 +70,7 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### 📊 Performance
 - **74-80 FPS** constantes
-- **8 vértices, 36 índices** (cubo optimizado)
+- **8 vértices, 36 índices** (cubo básico)
 - **1 draw call** por frame
 
 ### 📚 Documentación
