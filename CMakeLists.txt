@@ -7,7 +7,38 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(REACTOR_ENABLE_VALIDATION "Enable Vulkan validation layers" ON)
 
+# Buscar Vulkan SDK
+if(NOT DEFINED ENV{VULKAN_SDK})
+    # Auto-detectar Vulkan SDK en Windows
+    if(WIN32)
+        if(EXISTS "C:/VulkanSDK/1.4.328.1")
+            set(ENV{VULKAN_SDK} "C:/VulkanSDK/1.4.328.1")
+            message(STATUS "Auto-detected Vulkan SDK: C:/VulkanSDK/1.4.328.1")
+        elseif(EXISTS "C:/VulkanSDK/1.3.290.0")
+            set(ENV{VULKAN_SDK} "C:/VulkanSDK/1.3.290.0")
+            message(STATUS "Auto-detected Vulkan SDK: C:/VulkanSDK/1.3.290.0")
+        endif()
+    endif()
+endif()
+
+# Configurar rutas de Vulkan manualmente si es necesario
+if(WIN32 AND EXISTS "C:/VulkanSDK/1.4.328.1")
+    set(Vulkan_INCLUDE_DIR "C:/VulkanSDK/1.4.328.1/Include")
+    set(Vulkan_LIBRARY "C:/VulkanSDK/1.4.328.1/Lib/vulkan-1.lib")
+    set(VULKAN_SDK "C:/VulkanSDK/1.4.328.1")
+endif()
+
 find_package(Vulkan REQUIRED)
+
+# Buscar GLFW (opcional)
+find_package(glfw3 QUIET)
+if(glfw3_FOUND)
+    set(REACTOR_HAS_WINDOW ON)
+    message(STATUS "GLFW3 found - Window support enabled")
+else()
+    set(REACTOR_HAS_WINDOW OFF)
+    message(STATUS "GLFW3 not found - Window support disabled (install with: install-dependencies.bat)")
+endif()
 
 add_library(reactor STATIC
   reactor/src/reactor.cpp
@@ -24,6 +55,13 @@ add_library(reactor STATIC
   reactor/src/swapchain.cpp
 )
 
+# Agregar window.cpp si GLFW está disponible
+if(REACTOR_HAS_WINDOW)
+    target_sources(reactor PRIVATE reactor/src/window.cpp)
+    target_link_libraries(reactor PUBLIC glfw)
+    target_compile_definitions(reactor PUBLIC REACTOR_HAS_WINDOW=1)
+endif()
+
 target_include_directories(reactor PUBLIC
   reactor/include
 )
@@ -36,4 +74,9 @@ target_link_libraries(reactor PUBLIC Vulkan::Vulkan)
 
 add_subdirectory(examples/sandbox)
 add_subdirectory(examples/triangle)
+
+# Agregar ejemplo de rendering solo si GLFW está disponible
+if(REACTOR_HAS_WINDOW)
+    add_subdirectory(examples/rendering)
+endif()
 

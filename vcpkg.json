@@ -6,7 +6,10 @@
   "homepage": "https://github.com/tu-usuario/reactor",
   "license": "MIT",
   "dependencies": [
-    "vulkan"
+    "vulkan",
+    "glfw3",
+    "glm",
+    "stb"
   ],
   "features": {
     "window": {

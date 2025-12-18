@@ -27,15 +27,18 @@ int main() {
             {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
         }};
         
-        auto vertexBuffer = reactor::Buffer::create(ctx.allocator())
-            .size(sizeof(vertices))
-            .usage(reactor::BufferUsage::Vertex)
-            .memoryType(reactor::MemoryType::HostVisible)
-            .build();
+        {
+            auto vertexBuffer = reactor::Buffer::create(ctx.allocator())
+                .size(sizeof(vertices))
+                .usage(reactor::BufferUsage::Vertex)
+                .memoryType(reactor::MemoryType::HostVisible)
+                .build();
+            
+            vertexBuffer.upload(vertices.data(), sizeof(vertices));
+            
+            std::cout << "Created vertex buffer with " << vertices.size() << " vertices" << std::endl;
+        }
         
-        vertexBuffer.upload(vertices.data(), sizeof(vertices));
-        
-        std::cout << "Created vertex buffer with " << vertices.size() << " vertices" << std::endl;
         std::cout << "REACTOR Framework demonstration complete!" << std::endl;
         std::cout << "\nFramework Features Demonstrated:" << std::endl;
         std::cout << "  - Vulkan context initialization" << std::endl;

@@ -8,14 +8,27 @@ Este es el framework más fácil para desarrollar con Vulkan. Sigue estos pasos 
 
 ## ⚡ Setup Automático (Recomendado)
 
-### Un Solo Comando
+### Paso 1: Instalar Dependencias (Solo la primera vez)
+
+```bash
+install-dependencies.bat
+```
+
+Este script instala automáticamente:
+- ✅ GLFW3 (sistema de ventanas)
+- ✅ GLM (matemáticas 3D)
+- ✅ STB (carga de imágenes)
+
+**Nota**: Vulkan SDK debe estar instalado manualmente desde https://vulkan.lunarg.com/
+
+### Paso 2: Compilar Framework
 
 ```bash
 quick-setup.bat
 ```
 
 **¡Eso es todo!** Este script:
-- ✅ Detecta automáticamente tu Vulkan SDK (1.4.328.1 encontrado)
+- ✅ Detecta automáticamente tu Vulkan SDK (1.4.328.1)
 - ✅ Configura el proyecto con CMake
 - ✅ Compila todo el framework
 - ✅ Genera los ejemplos listos para ejecutar
