@@ -12,6 +12,16 @@ find_package(Vulkan REQUIRED)
 add_library(reactor STATIC
   reactor/src/reactor.cpp
   reactor/src/vulkan_context.cpp
+  reactor/src/memory_allocator.cpp
+  reactor/src/buffer.cpp
+  reactor/src/image.cpp
+  reactor/src/sync.cpp
+  reactor/src/command_buffer.cpp
+  reactor/src/shader.cpp
+  reactor/src/pipeline.cpp
+  reactor/src/descriptor.cpp
+  reactor/src/render_pass.cpp
+  reactor/src/swapchain.cpp
 )
 
 target_include_directories(reactor PUBLIC
@@ -25,4 +35,5 @@ target_compile_definitions(reactor PUBLIC
 target_link_libraries(reactor PUBLIC Vulkan::Vulkan)
 
 add_subdirectory(examples/sandbox)
+add_subdirectory(examples/triangle)
 

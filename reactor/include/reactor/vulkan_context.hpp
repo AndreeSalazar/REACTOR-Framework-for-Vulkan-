@@ -2,7 +2,9 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <optional>
+#include <memory>
 namespace reactor {
+class MemoryAllocator;
 struct QueueFamilyIndices {
   std::optional<uint32_t> graphics;
   bool complete() const { return graphics.has_value(); }
@@ -16,6 +18,7 @@ class VulkanContext {
   VkDevice device() const { return dev; }
   VkPhysicalDevice physical() const { return phys; }
   VkQueue graphicsQueue() const { return gfxQueue; }
+  std::shared_ptr<MemoryAllocator> allocator() const { return alloc; }
  private:
   bool validation;
   VkInstance inst{};
@@ -23,6 +26,7 @@ class VulkanContext {
   VkDevice dev{};
   VkQueue gfxQueue{};
   QueueFamilyIndices indices;
+  std::shared_ptr<MemoryAllocator> alloc;
   void createInstance();
   void pickPhysicalDevice();
   void createDevice();

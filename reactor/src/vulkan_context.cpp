@@ -1,4 +1,5 @@
 #include "reactor/vulkan_context.hpp"
+#include "reactor/memory_allocator.hpp"
 #include <stdexcept>
 #include <cstring>
 namespace reactor {
@@ -8,6 +9,7 @@ void VulkanContext::init() {
   createInstance();
   pickPhysicalDevice();
   createDevice();
+  alloc = std::make_shared<MemoryAllocator>(dev, phys);
 }
 void VulkanContext::shutdown() {
   if (dev) vkDeviceWaitIdle(dev);
