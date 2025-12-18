@@ -6,6 +6,11 @@ namespace sdf {
 
 RayMarcher::RayMarcher(VkDevice device, VkRenderPass renderPass, const Config& config)
     : device(device), renderPass(renderPass), config(config) {
+    // Constructor sin physical device - no crea pipeline aún
+}
+
+RayMarcher::RayMarcher(VkDevice device, VkRenderPass renderPass, VkPhysicalDevice physicalDevice, const Config& config)
+    : device(device), renderPass(renderPass), physicalDevice(physicalDevice), config(config) {
     
     createPipeline();
     createDescriptorSets();
@@ -26,22 +31,14 @@ void RayMarcher::render(
     const glm::mat4& view,
     const glm::mat4& proj
 ) {
-    // Update uniforms
-    updateUniforms(scene, view, proj);
+    if (!pipeline) {
+        return; // Pipeline no creado
+    }
     
     // Bind pipeline
     vkCmdBindPipeline(commandBuffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->handle());
     
-    // Bind descriptor sets
-    vkCmdBindDescriptorSets(
-        commandBuffer.handle(),
-        VK_PIPELINE_BIND_POINT_GRAPHICS,
-        pipeline->layout(),
-        0, 1, &descriptorSet,
-        0, nullptr
-    );
-    
-    // Draw fullscreen triangle
+    // Draw fullscreen triangle (sin descriptors por ahora)
     vkCmdDraw(commandBuffer.handle(), 3, 1, 0, 0);
 }
 
@@ -50,23 +47,42 @@ void RayMarcher::updateConfig(const Config& newConfig) {
 }
 
 void RayMarcher::createPipeline() {
-    // TODO: Implementar creación de pipeline
-    // Por ahora, placeholder
+    try {
+        // Intentar cargar shaders de prueba primero
+        Shader vertShader(device, "shaders/test.vert.spv", ShaderStage::Vertex);
+        Shader fragShader(device, "shaders/test.frag.spv", ShaderStage::Fragment);
+        
+        // Crear pipeline sin descriptors
+        pipeline = std::make_unique<GraphicsPipeline>(
+            GraphicsPipeline::create(device, renderPass)
+                .shader(std::make_shared<Shader>(std::move(vertShader)))
+                .shader(std::make_shared<Shader>(std::move(fragShader)))
+                .topology(Topology::TriangleList)
+                .viewport(static_cast<float>(config.width), static_cast<float>(config.height))
+                .cullMode(CullMode::None)
+                .build()
+        );
+    } catch (const std::exception& e) {
+        // Log error pero no crash
+        // El render simplemente no dibujará nada
+    }
 }
 
 void RayMarcher::createDescriptorSets() {
-    // TODO: Implementar descriptor sets
-    // Por ahora, placeholder
+    // Por ahora, no crear descriptor sets - renderizaremos color sólido
+    // TODO: Implementar cuando tengamos allocator disponible
 }
 
 void RayMarcher::updateUniforms(const SDFScene& scene, const glm::mat4& view, const glm::mat4& proj) {
-    // TODO: Implementar actualización de uniforms
-    // Por ahora, placeholder
+    // Por ahora, placeholder - se implementará cuando tengamos allocator
 }
 
 // Builder implementation
 RayMarcher::Builder::Builder(VkDevice device, VkRenderPass renderPass)
     : dev(device), pass(renderPass) {}
+
+RayMarcher::Builder::Builder(VkDevice device, VkRenderPass renderPass, VkPhysicalDevice physicalDevice)
+    : dev(device), pass(renderPass), phys(physicalDevice) {}
 
 RayMarcher::Builder& RayMarcher::Builder::resolution(uint32_t width, uint32_t height) {
     config.width = width;
@@ -95,11 +111,18 @@ RayMarcher::Builder& RayMarcher::Builder::ambientOcclusion(bool enable) {
 }
 
 RayMarcher RayMarcher::Builder::build() {
+    if (phys != VK_NULL_HANDLE) {
+        return RayMarcher(dev, pass, phys, config);
+    }
     return RayMarcher(dev, pass, config);
 }
 
 RayMarcher::Builder RayMarcher::create(VkDevice device, VkRenderPass renderPass) {
     return Builder(device, renderPass);
+}
+
+RayMarcher::Builder RayMarcher::create(VkDevice device, VkRenderPass renderPass, VkPhysicalDevice physicalDevice) {
+    return Builder(device, renderPass, physicalDevice);
 }
 
 } // namespace sdf

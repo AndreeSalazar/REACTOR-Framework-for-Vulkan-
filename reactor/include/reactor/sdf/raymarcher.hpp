@@ -28,6 +28,7 @@ public:
     };
 
     RayMarcher(VkDevice device, VkRenderPass renderPass, const Config& config);
+    RayMarcher(VkDevice device, VkRenderPass renderPass, VkPhysicalDevice physicalDevice, const Config& config);
     ~RayMarcher();
 
     RayMarcher(const RayMarcher&) = delete;
@@ -57,6 +58,7 @@ public:
     class Builder {
     public:
         Builder(VkDevice device, VkRenderPass renderPass);
+        Builder(VkDevice device, VkRenderPass renderPass, VkPhysicalDevice physicalDevice);
         
         Builder& resolution(uint32_t width, uint32_t height);
         Builder& maxSteps(uint32_t steps);
@@ -69,14 +71,17 @@ public:
     private:
         VkDevice dev;
         VkRenderPass pass;
+        VkPhysicalDevice phys{VK_NULL_HANDLE};
         Config config;
     };
 
     static Builder create(VkDevice device, VkRenderPass renderPass);
+    static Builder create(VkDevice device, VkRenderPass renderPass, VkPhysicalDevice physicalDevice);
 
 private:
     VkDevice device;
     VkRenderPass renderPass;
+    VkPhysicalDevice physicalDevice{VK_NULL_HANDLE};
     Config config;
 
     // Pipeline para ray marching (fullscreen quad)

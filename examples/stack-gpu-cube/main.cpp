@@ -9,8 +9,7 @@
 #include "reactor/sync.hpp"
 #include "reactor/shader.hpp"
 #include "reactor/math.hpp"
-#include "reactor/sdf/primitives.hpp"
-#include "reactor/sdf/raymarcher.hpp"
+#include "cube_renderer.hpp"
 #include <iostream>
 #include <chrono>
 
@@ -67,22 +66,10 @@ int main() {
         reactor::RenderPass renderPass(ctx.device(), attachments, false);
         std::cout << "[✓] Render pass creado" << std::endl;
         
-        // Crear escena SDF (cubo simple como en la imagen)
-        auto scene = reactor::sdf::SDFScene::create()
-            .addBox(reactor::sdf::Box(
-                glm::vec3(0.0f, 0.0f, 0.0f),  // Centro
-                glm::vec3(1.0f, 1.0f, 1.0f)   // Tamaño
-            ))
-            .build();
-        std::cout << "[✓] Escena SDF creada (cubo)" << std::endl;
-        
-        // Crear ray marcher (Stack-GPU-OP: SDF rendering)
-        auto raymarcher = reactor::sdf::RayMarcher::create(ctx.device(), renderPass.handle())
-            .resolution(config.width, config.height)
-            .maxSteps(128)
-            .antialiasing(true)  // ADead-AA
-            .build();
-        std::cout << "[✓] Ray marcher creado" << std::endl;
+        // Crear cube renderer
+        std::cout << "[3/5] Creando cube renderer..." << std::endl;
+        cube::CubeRenderer cubeRenderer(ctx, renderPass.handle(), config.width, config.height);
+        std::cout << "[✓] Cube renderer creado" << std::endl;
         
         // Crear framebuffers
         std::vector<VkFramebuffer> framebuffers;
@@ -146,6 +133,8 @@ int main() {
         int frameCount = 0;
         auto lastFpsTime = startTime;
         
+        std::vector<VkFence> imagesInFlight(swapchain.imageCount(), VK_NULL_HANDLE);
+        
         while (!window.shouldClose()) {
             window.pollEvents();
             
@@ -161,6 +150,12 @@ int main() {
             
             // Acquire image
             uint32_t imageIndex = swapchain.acquireNextImage(imageAvailable[currentFrame].handle());
+            
+            // Check if a previous frame is using this image
+            if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
+                vkWaitForFences(ctx.device(), 1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+            }
+            imagesInFlight[imageIndex] = inFlight[currentFrame].handle();
             
             inFlight[currentFrame].reset();
             
@@ -186,8 +181,12 @@ int main() {
             
             vkCmdBeginRenderPass(cmd.handle(), &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
             
-            // Renderizar con ray marcher (Stack-GPU-OP: SDF)
-            raymarcher.render(cmd, scene, view, proj);
+            // Calcular MVP
+            glm::mat4 model = cubeTransform.getMatrix();
+            glm::mat4 mvp = proj * view * model;
+            
+            // Renderizar cubo 3D
+            cubeRenderer.render(cmd, mvp);
             
             vkCmdEndRenderPass(cmd.handle());
             cmd.end();

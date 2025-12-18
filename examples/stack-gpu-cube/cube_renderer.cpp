@@ -1,0 +1,134 @@
+#include "cube_renderer.hpp"
+#include <stdexcept>
+#include <iostream>
+
+namespace cube {
+
+CubeRenderer::CubeRenderer(reactor::VulkanContext& ctx, VkRenderPass renderPass, uint32_t width, uint32_t height)
+    : context(ctx) {
+    createBuffers();
+    createPipeline(renderPass, width, height);
+}
+
+void CubeRenderer::createBuffers() {
+    auto vertices = getCubeVertices();
+    auto indices = getCubeIndices();
+    
+    // Crear vertex buffer
+    vertexBuffer = std::make_unique<reactor::Buffer>(
+        reactor::Buffer::create(context.allocator())
+            .size(sizeof(Vertex) * vertices.size())
+            .usage(reactor::BufferUsage::Vertex)
+            .memoryType(reactor::MemoryType::HostVisible)
+            .build()
+    );
+    vertexBuffer->upload(vertices.data(), sizeof(Vertex) * vertices.size());
+    
+    // Crear index buffer
+    indexBuffer = std::make_unique<reactor::Buffer>(
+        reactor::Buffer::create(context.allocator())
+            .size(sizeof(uint16_t) * indices.size())
+            .usage(reactor::BufferUsage::Index)
+            .memoryType(reactor::MemoryType::HostVisible)
+            .build()
+    );
+    indexBuffer->upload(indices.data(), sizeof(uint16_t) * indices.size());
+    
+    std::cout << "      ✓ Buffers creados (8 vértices, 36 índices)" << std::endl;
+}
+
+void CubeRenderer::createPipeline(VkRenderPass renderPass, uint32_t width, uint32_t height) {
+    // Cargar shaders (usar ruta relativa al ejecutable)
+    reactor::Shader vertShader(context.device(), "shaders/cube.vert.spv", reactor::ShaderStage::Vertex);
+    reactor::Shader fragShader(context.device(), "shaders/cube.frag.spv", reactor::ShaderStage::Fragment);
+    
+    std::cout << "      ✓ Shaders cargados" << std::endl;
+    
+    // Vertex input
+    std::vector<reactor::VertexInputBinding> bindings = {{
+        .binding = 0,
+        .stride = sizeof(Vertex),
+        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+    }};
+    
+    std::vector<reactor::VertexInputAttribute> attributes = {
+        {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = offsetof(Vertex, pos)},
+        {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = offsetof(Vertex, color)}
+    };
+    
+    // Push constant range
+    VkPushConstantRange pushConstant{};
+    pushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    pushConstant.offset = 0;
+    pushConstant.size = sizeof(glm::mat4);
+    
+    // Crear pipeline
+    pipeline = std::make_unique<reactor::GraphicsPipeline>(
+        reactor::GraphicsPipeline::create(context.device(), renderPass)
+            .shader(std::make_shared<reactor::Shader>(std::move(vertShader)))
+            .shader(std::make_shared<reactor::Shader>(std::move(fragShader)))
+            .vertexInput(bindings, attributes)
+            .topology(reactor::Topology::TriangleList)
+            .viewport(static_cast<float>(width), static_cast<float>(height))
+            .cullMode(reactor::CullMode::Back)
+            .depthTest(true)
+            .pushConstantRanges({pushConstant})
+            .build()
+    );
+    
+    std::cout << "      ✓ Pipeline creado" << std::endl;
+}
+
+void CubeRenderer::render(reactor::CommandBuffer& cmd, const glm::mat4& mvp) {
+    // Bind pipeline
+    cmd.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->handle());
+    
+    // Push constants (MVP matrix)
+    cmd.pushConstants(pipeline->layout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &mvp);
+    
+    // Bind vertex buffer
+    std::vector<VkBuffer> buffers = {vertexBuffer->handle()};
+    std::vector<VkDeviceSize> offsets = {0};
+    cmd.bindVertexBuffers(0, buffers, offsets);
+    
+    // Bind index buffer
+    cmd.bindIndexBuffer(indexBuffer->handle(), 0, VK_INDEX_TYPE_UINT16);
+    
+    // Draw
+    cmd.drawIndexed(36, 1, 0, 0, 0);
+}
+
+std::vector<Vertex> CubeRenderer::getCubeVertices() {
+    return {
+        // Front face (cyan/teal - como LunarG)
+        {{-0.5f, -0.5f,  0.5f}, {0.0f, 0.6f, 0.6f}},
+        {{ 0.5f, -0.5f,  0.5f}, {0.0f, 0.6f, 0.6f}},
+        {{ 0.5f,  0.5f,  0.5f}, {0.0f, 0.7f, 0.7f}},
+        {{-0.5f,  0.5f,  0.5f}, {0.0f, 0.7f, 0.7f}},
+        
+        // Back face (gray)
+        {{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}},
+        {{ 0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}},
+        {{ 0.5f,  0.5f, -0.5f}, {0.6f, 0.6f, 0.6f}},
+        {{-0.5f,  0.5f, -0.5f}, {0.6f, 0.6f, 0.6f}}
+    };
+}
+
+std::vector<uint16_t> CubeRenderer::getCubeIndices() {
+    return {
+        // Front
+        0, 1, 2, 2, 3, 0,
+        // Back
+        5, 4, 7, 7, 6, 5,
+        // Left
+        4, 0, 3, 3, 7, 4,
+        // Right
+        1, 5, 6, 6, 2, 1,
+        // Top
+        3, 2, 6, 6, 7, 3,
+        // Bottom
+        4, 5, 1, 1, 0, 4
+    };
+}
+
+} // namespace cube
