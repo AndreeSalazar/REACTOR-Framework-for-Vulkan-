@@ -4,15 +4,11 @@
 
 **Framework moderno para Vulkan que simplifica el desarrollo sin sacrificar control**
 
-[![C++20](https://img.shields.io/badge/C++-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![Vulkan](https://img.shields.io/badge/Vulkan-1.3-red.svg)](https://www.vulkan.org/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Windows-blue.svg)](https://www.microsoft.com/windows)
+[![Status](https://img.shields.io/badge/Status-Functional-green.svg)](https://github.com)
 
-</div>
-
-## 🎯 ¿Qué es REACTOR?
-
-REACTOR es un framework para Vulkan inspirado en el modelo declarativo de React, diseñado para **facilitar enormemente** el desarrollo de aplicaciones gráficas manteniendo el **control total** de Vulkan.
+**REACTOR** es un framework moderno para Vulkan que simplifica el desarrollo de aplicaciones gráficas mediante una API declarativa inspirada en React, combinado con tecnologías revolucionarias de **ADead-GPU** implementadas en Vulkan puro., diseñado para **facilitar enormemente** el desarrollo de aplicaciones gráficas manteniendo el **control total** de Vulkan.
 
 ### Características Principales
 
@@ -273,7 +269,7 @@ Este proyecto está bajo la licencia MIT. Ver `LICENSE` para más detalles.
 
 - Issues: [GitHub Issues](https://github.com/tu-usuario/reactor/issues)
 - Documentación: Ver archivos `.md` en el repositorio
-
+- +51 945 375 729
 ---
 
 <div align="center">
