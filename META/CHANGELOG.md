@@ -1,4 +1,4 @@
-# 📝 CHANGELOG - Stack-GPU-OP
+# CHANGELOG - Stack-GPU-OP
 
 Todos los cambios notables del proyecto serán documentados aquí.
 
@@ -7,6 +7,51 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [0.4.1] - 2024-12-18 ✅ DEBUG VISUALIZER SYSTEM
+
+### ✨ Agregado
+- **Debug Visualizer System** - 7 modos de visualización en tiempo real
+  - Modo 1: Normal - Phong Shading completo
+  - Modo 2: Wireframe - Bordes cyan sobre fondo negro
+  - Modo 3: Normales RGB - Visualización de normales
+  - Modo 4: Depth Buffer - Visualización de profundidad
+  - Modo 5: ISR Importance Map - Simulación de mapa de importancia
+  - Modo 6: ISR Pixel Sizing - Simulación de tamaños adaptativos
+  - Modo 7: ISR Temporal - Simulación de coherencia temporal
+- **Ventana Mejorada**
+  - Resolución Full HD: 1920x1080
+  - Maximizada automáticamente al iniciar
+  - Mejor claridad visual para ver gráficos
+- **Iluminación Mejorada**
+  - Luz más brillante y clara
+  - Ambient: 40% (antes 30%)
+  - Mejor visualización del cubo
+- **Controles de Teclado**
+  - Teclas 1-7: Cambiar entre modos de visualización
+  - ESC: Salir de la aplicación
+- **Terminal en Tiempo Real**
+  - Soporte UTF-8 para español
+  - Display de FPS y modo actual
+  - Feedback inmediato al cambiar modos
+
+### 🔄 Cambiado
+- `main.cpp` - Sistema de input y visualización mejorado
+- `cube_debug.frag` - Shaders con 7 modos distintos
+- Push constants expandidos para incluir `debugMode`
+- Título de ventana dinámico con FPS y modo
+
+### 📊 Performance
+- **74-75 FPS** estables en todos los modos
+- Sin degradación al cambiar entre modos
+- Respuesta inmediata a input de teclado
+
+### 🔧 ISR Architecture (Parcial)
+- Headers C++ completos (importance, adaptive, temporal, isr_system)
+- Compute shaders GLSL completos (3 archivos)
+- Descriptor sets y layouts implementados
+- Arquitectura base lista para implementación completa
+
+---
 ## [0.4.0] - 2025-12-18 ✅ PHONG SHADING PROFESIONAL
 
 ### ✨ Agregado

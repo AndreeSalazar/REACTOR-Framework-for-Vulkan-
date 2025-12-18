@@ -57,11 +57,11 @@ void CubeRenderer::createPipeline(VkRenderPass renderPass, uint32_t width, uint3
         {.location = 2, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = offsetof(Vertex, color)}
     };
     
-    // Push constant range (MVP + Model matrices)
+    // Push constant range (MVP + Model matrices + debug mode)
     VkPushConstantRange pushConstant{};
-    pushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    pushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
     pushConstant.offset = 0;
-    pushConstant.size = sizeof(glm::mat4) * 2;  // MVP + Model
+    pushConstant.size = sizeof(glm::mat4) * 2 + sizeof(int) + sizeof(float) * 3;  // MVP + Model + debugMode + padding
     
     // Crear pipeline
     pipeline = std::make_unique<reactor::GraphicsPipeline>(
@@ -80,17 +80,27 @@ void CubeRenderer::createPipeline(VkRenderPass renderPass, uint32_t width, uint3
     std::cout << "      ✓ Pipeline creado" << std::endl;
 }
 
-void CubeRenderer::render(reactor::CommandBuffer& cmd, const glm::mat4& mvp, const glm::mat4& model) {
+void CubeRenderer::render(reactor::CommandBuffer& cmd, const glm::mat4& mvp, const glm::mat4& model, int debugMode) {
     // Bind pipeline
-    cmd.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->handle());
+    vkCmdBindPipeline(cmd.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->handle());
     
-    // Push constants (MVP + Model matrices)
+    // Push constants (MVP + Model matrices + debug mode)
     struct PushConstants {
         glm::mat4 mvp;
         glm::mat4 model;
-    } pushConstants{mvp, model};
+        int debugMode;
+        float padding[3];
+    } pushConstants;
     
-    cmd.pushConstants(pipeline->layout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants), &pushConstants);
+    pushConstants.mvp = mvp;
+    pushConstants.model = model;
+    pushConstants.debugMode = debugMode;
+    pushConstants.padding[0] = 0.0f;
+    pushConstants.padding[1] = 0.0f;
+    pushConstants.padding[2] = 0.0f;
+    
+    cmd.pushConstants(pipeline->layout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 
+                     0, sizeof(PushConstants), &pushConstants);
     
     // Bind vertex buffer
     std::vector<VkBuffer> buffers = {vertexBuffer->handle()};

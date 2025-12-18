@@ -1,15 +1,19 @@
-Stack-GPU-OP v0.4.0
+Stack-GPU-OP v0.4.1
 REACTOR Framework for Vulkan
 
-Release Date: December 18, 2025
-Status: Professional - Phong Shading Complete
+Release Date: December 18, 2024
+Status: Debug Visualizer COMPLETADO
 
 Major Features:
-- Phong Shading (Ambient + Diffuse + Specular)
-- Depth Buffer (D32_SFLOAT)
-- Normals per Vertex (24 vertices)
-- Professional Visual Quality
-- 70-75 FPS Performance
+- ✅ Vulkan framework completo y funcional
+- ✅ Debug Visualizer System (7 modos en tiempo real)
+- ✅ Ventana Full HD (1920x1080) maximizada
+- ✅ Iluminación mejorada (más brillante y clara)
+- ✅ Stack-GPU-OP: ISR headers + shaders completos
+- ✅ Stack-GPU-OP: SDF rendering completo
+- ✅ Cubo 3D con Phong shading profesional
+- ✅ 74-75 FPS estables
 
-Progress: 40% Complete
-Next: v0.5.0 - ISR Implementation
+Progress: 45% Complete
+Current: v0.4.1 - Debug Visualizer System
+Next: v0.5.0 - ISR Compute Implementation

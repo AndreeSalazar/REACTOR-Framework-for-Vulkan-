@@ -8,13 +8,13 @@
 [![Vulkan](https://img.shields.io/badge/Vulkan-1.3-red.svg)](https://www.vulkan.org/)
 [![Platform](https://img.shields.io/badge/Platform-Cross--Platform-blue.svg)](https://www.vulkan.org/)
 [![Status](https://img.shields.io/badge/Status-Professional-brightgreen.svg)](https://github.com)
-[![Version](https://img.shields.io/badge/Version-0.4.0-blue.svg)](https://github.com)
-[![FPS](https://img.shields.io/badge/FPS-70--75-brightgreen.svg)](https://github.com)
-[![Progress](https://img.shields.io/badge/Progress-40%25-yellow.svg)](https://github.com)
+[![Version](https://img.shields.io/badge/Version-0.4.1-blue.svg)](https://github.com)
+[![FPS](https://img.shields.io/badge/FPS-74--75-brightgreen.svg)](https://github.com)
+[![Progress](https://img.shields.io/badge/Progress-45%25-yellow.svg)](https://github.com)
 
 **Stack-GPU-OP** combina las tecnologías revolucionarias de **ADead-GPU** (DirectX 12) con el framework **REACTOR** (Vulkan), creando el framework GPU más avanzado y accesible.
 
-### 🎯 La Ecuación
+### La Ecuación
 
 ```
 ADead-GPU (DirectX 12 Research) + REACTOR (Vulkan Framework) = Stack-GPU-OP

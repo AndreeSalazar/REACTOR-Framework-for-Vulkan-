@@ -234,19 +234,32 @@ REACTOR (Framework for Vulkan)/
 ## Próximos Pasos
 
 ### Corto Plazo (2-3 semanas) - v0.5.0
-1. ✅ **Cubo 3D renderizando** - COMPLETADO
-2. ✅ **Depth buffer implementado** - COMPLETADO
-3. ✅ **Colores mejorados (24 vértices)** - COMPLETADO
+1. ✅ **Cubo 3D renderizando** - COMPLETADO v0.3.0
+2. ✅ **Depth buffer implementado** - COMPLETADO v0.3.1
+3. ✅ **Colores mejorados (24 vértices)** - COMPLETADO v0.3.1
 4. ✅ **Phong shading profesional** - COMPLETADO v0.4.0
-5. ✅ **Normales por vértice** - COMPLETADO
-6. 🚀 **ISR Implementation** - EN PREPARACIÓN v0.5.0
-   - [ ] `importance.cpp` implementation
-   - [ ] `adaptive.cpp` implementation
-   - [ ] `temporal.cpp` implementation
-   - [ ] `isr_system.cpp` integration
-   - [ ] Example `stack-gpu-isr`
-7. ⏳ Agregar texturas al cubo (v0.5.1)
-8. ⏳ Mejorar sincronización (v0.5.2)
+5. ✅ **Normales por vértice** - COMPLETADO v0.4.0
+6. ✅ **Debug Visualizer System** - COMPLETADO v0.4.1
+   - [x] 7 modos de visualización (teclas 1-7)
+   - [x] Ventana 1920x1080 maximizada
+   - [x] Iluminación mejorada (más brillante y clara)
+   - [x] Soporte UTF-8 para español
+   - [x] Terminal en tiempo real con stats
+   - [x] Wireframe, Normals, Depth, ISR modes (simulados)
+   - [x] 74-75 FPS estables
+7. 🔄 **ISR Architecture** - PARCIALMENTE IMPLEMENTADO v0.5.0-dev
+   - [x] Headers C++ completos (importance, adaptive, temporal, isr_system)
+   - [x] Compute shaders GLSL completos (importance, adaptive, temporal)
+   - [x] Arquitectura y diseño definidos
+   - [x] Biblioteca REACTOR compilando correctamente
+   - [x] Descriptor sets y layouts implementados
+   - [ ] Compute pipelines completos (shader loading pendiente)
+   - [ ] Compute dispatch funcionando
+   - [ ] `isr_system.cpp` - Sistema integrado
+   - [ ] Example `stack-gpu-isr` funcional
+   - [ ] Integración real con cube renderer
+8. ⏳ **Texturas al cubo** (v0.5.1)
+9. ⏳ **Mejorar sincronización** (v0.5.2)
 
 ### Mediano Plazo (1 mes)
 1. ⏳ Implementar ISR completo (uniforms, descriptors)

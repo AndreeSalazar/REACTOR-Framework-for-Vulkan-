@@ -20,7 +20,7 @@ public:
     CubeRenderer(reactor::VulkanContext& ctx, VkRenderPass renderPass, uint32_t width, uint32_t height);
     ~CubeRenderer() = default;
 
-    void render(reactor::CommandBuffer& cmd, const glm::mat4& mvp, const glm::mat4& model);
+    void render(reactor::CommandBuffer& cmd, const glm::mat4& mvp, const glm::mat4& model, int debugMode = 0);
 
 private:
     reactor::VulkanContext& context;

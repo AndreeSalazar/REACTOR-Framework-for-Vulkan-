@@ -2,6 +2,8 @@
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
 #include <memory>
+#include <vector>
+#include <string>
 
 namespace reactor {
 namespace isr {
@@ -59,10 +61,12 @@ public:
 private:
     VkDevice device;
     Config config;
+    uint32_t width{0};
+    uint32_t height{0};
 
     // Compute pipeline para cálculo de importancia
-    VkPipeline computePipeline{VK_NULL_HANDLE};
     VkPipelineLayout pipelineLayout{VK_NULL_HANDLE};
+    VkPipeline computePipeline{VK_NULL_HANDLE};
     VkDescriptorSetLayout descriptorLayout{VK_NULL_HANDLE};
     VkDescriptorPool descriptorPool{VK_NULL_HANDLE};
     VkDescriptorSet descriptorSet{VK_NULL_HANDLE};
@@ -75,6 +79,7 @@ private:
     void createComputePipeline();
     void createDescriptorSets();
     void createImportanceImage(uint32_t width, uint32_t height);
+    std::vector<uint32_t> loadShaderSPIRV(const std::string& filepath);
 };
 
 } // namespace isr
