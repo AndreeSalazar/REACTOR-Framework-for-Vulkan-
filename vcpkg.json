@@ -1,0 +1,46 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "reactor",
+  "version": "0.1.0",
+  "description": "REACTOR Framework - Modern React-style framework for Vulkan",
+  "homepage": "https://github.com/tu-usuario/reactor",
+  "license": "MIT",
+  "dependencies": [
+    "vulkan"
+  ],
+  "features": {
+    "window": {
+      "description": "Window management with GLFW",
+      "dependencies": [
+        "glfw3"
+      ]
+    },
+    "math": {
+      "description": "Mathematics library",
+      "dependencies": [
+        "glm"
+      ]
+    },
+    "imgui": {
+      "description": "Immediate mode GUI",
+      "dependencies": [
+        {
+          "name": "imgui",
+          "features": ["glfw-binding", "vulkan-binding"]
+        }
+      ]
+    },
+    "image-loading": {
+      "description": "Image loading utilities",
+      "dependencies": [
+        "stb"
+      ]
+    },
+    "model-loading": {
+      "description": "3D model loading",
+      "dependencies": [
+        "assimp"
+      ]
+    }
+  }
+}

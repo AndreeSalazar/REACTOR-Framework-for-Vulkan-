@@ -1,0 +1,91 @@
+<svg width="600" height="700" viewBox="0 0 600 700" xmlns="http://www.w3.org/2000/svg">
+  <!-- Fondo oscuro elegante con reflejos metálicos -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f1a12"/>
+      <stop offset="50%" stop-color="#0b140f"/>
+      <stop offset="100%" stop-color="#08120a"/>
+    </linearGradient>
+    
+    <!-- Glow verde nuclear para el reactor -->
+    <filter id="nuclearGlow" x="-200%" y="-200%" width="400%" height="400%">
+      <feGaussianBlur stdDeviation="20" result="blur1"/>
+      <feGaussianBlur stdDeviation="40" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <!-- Brillo metálico para detalles -->
+    <filter id="metal">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="blur"/>
+      <feSpecularLighting result="spec" surfaceScale="5" specularConstant="1" specularExponent="30" lighting-color="#8bc34a">
+        <fePointLight x="-5000" y="-10000" z="20000"/>
+      </feSpecularLighting>
+      <feComposite in="spec" in2="SourceAlpha" operator="in" result="specOut"/>
+      <feComposite in="SourceGraphic" in2="specOut" operator="arithmetic" k1="0" k2="1" k3="1" k4="0"/>
+    </filter>
+  </defs>
+
+  <!-- Fondo -->
+  <rect width="600" height="700" fill="url(#bgGradient)"/>
+
+  <!-- Estructura metálica del reactor (anillos concéntricos y tubos) -->
+  <g transform="translate(300,350)">
+    <!-- Anillo exterior grande -->
+    <circle cx="0" cy="0" r="220" fill="none" stroke="#1e3a24" stroke-width="20"/>
+    <circle cx="0" cy="0" r="210" fill="none" stroke="#2e5036" stroke-width="8"/>
+    
+    <!-- Anillo medio con detalle -->
+    <circle cx="0" cy="0" r="160" fill="none" stroke="#1e3a24" stroke-width="15"/>
+    <circle cx="0" cy="0" r="152" fill="none" stroke="#3a5f42" stroke-width="6"/>
+    
+    <!-- Anillo interior -->
+    <circle cx="0" cy="0" r="110" fill="none" stroke="#2e5036" stroke-width="12"/>
+    
+    <!-- Tubos laterales metálicos -->
+    <rect x="-240" y="-80" width="480" height="160" rx="20" fill="none" stroke="#2e5036" stroke-width="12"/>
+    <rect x="-220" y="-60" width="440" height="120" rx="15" fill="none" stroke="#1e3a24" stroke-width="8"/>
+    
+    <!-- Detalles metálicos en tubos -->
+    <line x1="-200" y1="-80" x2="-200" y2="80" stroke="#3a5f42" stroke-width="6"/>
+    <line x1="200" y1="-80" x2="200" y2="80" stroke="#3a5f42" stroke-width="6"/>
+    <line x1="-150" y1="-80" x2="-150" y2="80" stroke="#2e5036" stroke-width="4"/>
+    <line x1="150" y1="-80" x2="150" y2="80" stroke="#2e5036" stroke-width="4"/>
+    
+    <!-- Núcleo radiactivo con triángulo Vulkan épico -->
+    <g filter="url(#nuclearGlow)">
+      <circle cx="0" cy="0" r="90" fill="#76b900" opacity="0.4"/>
+      <circle cx="0" cy="0" r="70" fill="#8bc34a" opacity="0.6"/>
+      <polygon points="0,-85 -73.6,42.5 73.6,42.5" fill="#aeea00"/>
+      <polygon points="0,-70 -60.6,35 60.6,35" fill="#76b900"/>
+    </g>
+    
+    <!-- Brillo central intenso -->
+    <circle cx="0" cy="0" r="40" fill="#ffffff" opacity="0.3"/>
+    <circle cx="0" cy="0" r="25" fill="#aeea00" opacity="0.8"/>
+  </g>
+
+  <!-- Texto REACTOR ultra elegante con glow nuclear -->
+  <defs>
+    <filter id="textGlow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <text x="300" y="520" font-family="Arial Black, Impact, sans-serif" font-size="90" fill="#aeea00" text-anchor="middle" letter-spacing="8" filter="url(#textGlow)">REACTOR</text>
+  <text x="300" y="520" font-family="Arial Black, Impact, sans-serif" font-size="90" fill="#76b900" text-anchor="middle" letter-spacing="8" opacity="0.8">REACTOR</text>
+
+  <!-- Subtexto sutil -->
+  <text x="300" y="580" font-family="Arial, sans-serif" font-size="24" fill="#8bc34a" text-anchor="middle" opacity="0.9">Powered by Salazar-interactive</text>
+
+  <!-- Reflejos en el suelo para profundidad -->
+  <ellipse cx="300" cy="680" rx="250" ry="40" fill="#0f1a12" opacity="0.6"/>
+  <ellipse cx="300" cy="670" rx="200" ry="30" fill="#1e3a24" opacity="0.4"/>
+</svg>
