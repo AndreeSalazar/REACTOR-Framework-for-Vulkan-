@@ -61,12 +61,17 @@ VkExtent2D Swapchain::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilit
     }
     
     VkExtent2D actualExtent = {width, height};
+    
+    // Clamp al rango permitido por las capacidades del dispositivo
+    // Esto permite soportar desde resoluciones pequeñas (800x600) hasta 8K (7680x4320)
+    // siempre que el hardware lo soporte
     actualExtent.width = std::clamp(actualExtent.width, 
                                     capabilities.minImageExtent.width,
                                     capabilities.maxImageExtent.width);
     actualExtent.height = std::clamp(actualExtent.height,
                                      capabilities.minImageExtent.height,
                                      capabilities.maxImageExtent.height);
+    
     return actualExtent;
 }
 

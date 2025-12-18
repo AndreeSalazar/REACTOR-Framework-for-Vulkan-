@@ -93,12 +93,13 @@ int main() {
         reactor::Window::init();
         debugLog("main.cpp:73", "After Window::init()", "ALL");
         
-        // Crear ventana - Resolución más alta para mejor claridad
+        // Crear ventana - Resolución adaptativa (se ajustará al tamaño real del framebuffer)
         debugLog("main.cpp:76", "Before creating window config", "ALL");
         reactor::WindowConfig config;
         config.title = "Stack-GPU-OP - Cubo 3D (Vulkan + ISR Debug Visualizer)";
-        config.width = 1920;
-        config.height = 1080;
+        // Tamaño inicial, pero se adaptará automáticamente desde 800x600 hasta 8K (7680x4320)
+        config.width = 1280;
+        config.height = 720;
         
         reactor::Window window(config);
         std::cout << "[✓] Ventana creada" << std::endl;
@@ -124,7 +125,7 @@ int main() {
         debugLog("main.cpp:96", "Before creating swapchain", "ALL");
         reactor::Swapchain swapchain(ctx.device(), ctx.physical(), surface, actualWidth, actualHeight);
         debugLog("main.cpp:97", "After creating swapchain", "ALL");
-        std::cout << "[✓] Swapchain creado" << std::endl;
+        std::cout << "[✓] Swapchain creado (" << actualWidth << "x" << actualHeight << ")" << std::endl;
         
         // Variables para depth buffer (necesitan estar fuera del lambda)
         VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
@@ -132,7 +133,8 @@ int main() {
         depthImageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         depthImageInfo.imageType = VK_IMAGE_TYPE_2D;
         depthImageInfo.format = depthFormat;
-        depthImageInfo.extent = {static_cast<uint32_t>(config.width), static_cast<uint32_t>(config.height), 1};
+        // Usar el tamaño real del framebuffer, no el config
+        depthImageInfo.extent = {static_cast<uint32_t>(actualWidth), static_cast<uint32_t>(actualHeight), 1};
         depthImageInfo.mipLevels = 1;
         depthImageInfo.arrayLayers = 1;
         depthImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -187,9 +189,9 @@ int main() {
         reactor::RenderPass renderPass(ctx.device(), attachments, true);
         std::cout << "[✓] Render pass creado (con depth)" << std::endl;
         
-        // Crear cube renderer
+        // Crear cube renderer con el tamaño real del framebuffer
         std::cout << "[3/5] Creando cube renderer..." << std::endl;
-        cube::CubeRenderer cubeRenderer(ctx, renderPass.handle(), config.width, config.height);
+        cube::CubeRenderer cubeRenderer(ctx, renderPass.handle(), actualWidth, actualHeight);
         std::cout << "[✓] Cube renderer creado" << std::endl;
         
         // Obtener dimensiones reales del swapchain (pueden diferir de las solicitadas)
@@ -288,9 +290,23 @@ int main() {
                 return;
             }
             
-            // Validar dimensiones máximas razonables
-            if (width > 16384 || height > 16384) {
-                debugLog("main.cpp:226", "Dimensions too large, skipping recreate", "C");
+            // Validar dimensiones - Permitir desde 800x600 hasta 8K (7680x4320)
+            const uint32_t MIN_WIDTH = 800;
+            const uint32_t MIN_HEIGHT = 600;
+            const uint32_t MAX_WIDTH = 7680;   // 8K width
+            const uint32_t MAX_HEIGHT = 4320;  // 8K height
+            
+            if (width < MIN_WIDTH || height < MIN_HEIGHT) {
+                char errorMsg[256];
+                sprintf_s(errorMsg, sizeof(errorMsg), "Dimensions too small: %ux%u (min: %ux%u)", width, height, MIN_WIDTH, MIN_HEIGHT);
+                debugLog("main.cpp:226", errorMsg, "C");
+                return;
+            }
+            
+            if (width > MAX_WIDTH || height > MAX_HEIGHT) {
+                char errorMsg[256];
+                sprintf_s(errorMsg, sizeof(errorMsg), "Dimensions too large: %ux%u (max: %ux%u)", width, height, MAX_WIDTH, MAX_HEIGHT);
+                debugLog("main.cpp:226", errorMsg, "C");
                 return;
             }
             
@@ -534,8 +550,14 @@ int main() {
                 sprintf_s(msg4, sizeof(msg4), "New framebuffer size: %dx%d", newWidth, newHeight);
                 debugLog("main.cpp:518", msg4, "C");
                 
-                // Validar dimensiones antes de proceder
-                if (newWidth > 0 && newHeight > 0 && 
+                // Validar dimensiones antes de proceder - Adaptativo desde 800x600 hasta 8K
+                const int MIN_WIDTH = 800;
+                const int MIN_HEIGHT = 600;
+                const int MAX_WIDTH = 7680;   // 8K width
+                const int MAX_HEIGHT = 4320;  // 8K height
+                
+                if (newWidth >= MIN_WIDTH && newHeight >= MIN_HEIGHT &&
+                    newWidth <= MAX_WIDTH && newHeight <= MAX_HEIGHT &&
                     (static_cast<uint32_t>(newWidth) != currentSwapchainWidth || 
                      static_cast<uint32_t>(newHeight) != currentSwapchainHeight)) {
                     
@@ -566,14 +588,16 @@ int main() {
                 continue;
             }
             
+            // Calcular tiempo para animación constante
             auto currentTime = std::chrono::high_resolution_clock::now();
             float time = std::chrono::duration<float>(currentTime - startTime).count();
             
-            // Animar cubo (rotación)
-            cubeTransform.rotation.y = time * glm::radians(45.0f);
-            cubeTransform.rotation.x = time * glm::radians(30.0f);
+            // Animar cubo (rotación continua y visible)
+            // Rotación más notoria para que sea claramente visible
+            cubeTransform.rotation.y = time * glm::radians(90.0f);  // 90 grados/segundo en Y (eje vertical)
+            cubeTransform.rotation.x = time * glm::radians(60.0f);  // 60 grados/segundo en X (eje horizontal)
             
-            // Wait for fence
+            // Wait for fence (esperar a que el frame anterior termine)
             // CRÍTICO: Verificar límites antes de acceder a arrays
             if (currentFrame >= inFlight.size()) {
                 debugLog("main.cpp:ERROR", "currentFrame out of bounds, resetting to 0", "A");
@@ -617,7 +641,16 @@ int main() {
                 
                 int newWidth, newHeight;
                 window.getFramebufferSize(&newWidth, &newHeight);
-                if (newWidth > 0 && newHeight > 0 && !recreatingSwapchain) {
+                
+                // Validar dimensiones - Adaptativo desde 800x600 hasta 8K
+                const int MIN_WIDTH = 800;
+                const int MIN_HEIGHT = 600;
+                const int MAX_WIDTH = 7680;   // 8K width
+                const int MAX_HEIGHT = 4320;  // 8K height
+                
+                if (newWidth >= MIN_WIDTH && newHeight >= MIN_HEIGHT &&
+                    newWidth <= MAX_WIDTH && newHeight <= MAX_HEIGHT &&
+                    !recreatingSwapchain) {
                     recreateSwapchain(static_cast<uint32_t>(newWidth), static_cast<uint32_t>(newHeight));
                     // CRÍTICO: Actualizar dimensiones después de recrear
                     currentSwapchainWidth = swapchain.extent().width;
@@ -652,6 +685,11 @@ int main() {
             }
             debugLog("main.cpp:598", "After resetting fence", "ALL");
             
+            // Actualizar aspect ratio de la cámara con las dimensiones actuales del swapchain
+            // Esto asegura que el cubo se mantenga centrado y sin distorsión en cualquier resolución
+            float currentAspect = static_cast<float>(swapchain.extent().width) / static_cast<float>(swapchain.extent().height);
+            camera.aspectRatio = currentAspect;
+            
             // Calcular matrices
             glm::mat4 view = camera.getViewMatrix();
             glm::mat4 proj = camera.getProjectionMatrix();
@@ -660,6 +698,13 @@ int main() {
             auto& cmd = cmdBuffers[imageIndex];
             cmd.reset();
             cmd.begin();
+            
+            // Configurar viewport y scissor dinámicamente para respetar la resolución actual
+            // Esto asegura que el render se ajuste correctamente a cualquier tamaño de ventana
+            float viewportWidth = static_cast<float>(swapchain.extent().width);
+            float viewportHeight = static_cast<float>(swapchain.extent().height);
+            cmd.setViewport(0.0f, 0.0f, viewportWidth, viewportHeight, 0.0f, 1.0f);
+            cmd.setScissor(0, 0, swapchain.extent().width, swapchain.extent().height);
             
             std::array<VkClearValue, 2> clearValues{};
             clearValues[0].color = {{0.1f, 0.1f, 0.15f, 1.0f}};
@@ -676,8 +721,9 @@ int main() {
             
             vkCmdBeginRenderPass(cmd.handle(), &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
             
-            // Calcular MVP
+            // Calcular matriz del modelo (con rotación actualizada)
             glm::mat4 model = cubeTransform.getMatrix();
+            // Calcular MVP: Projection * View * Model
             glm::mat4 mvp = proj * view * model;
             
             // Renderizar con modo debug
@@ -750,7 +796,16 @@ int main() {
                 
                 int newWidth, newHeight;
                 window.getFramebufferSize(&newWidth, &newHeight);
-                if (newWidth > 0 && newHeight > 0 && !recreatingSwapchain) {
+                
+                // Validar dimensiones - Adaptativo desde 800x600 hasta 8K
+                const int MIN_WIDTH = 800;
+                const int MIN_HEIGHT = 600;
+                const int MAX_WIDTH = 7680;   // 8K width
+                const int MAX_HEIGHT = 4320;  // 8K height
+                
+                if (newWidth >= MIN_WIDTH && newHeight >= MIN_HEIGHT &&
+                    newWidth <= MAX_WIDTH && newHeight <= MAX_HEIGHT &&
+                    !recreatingSwapchain) {
                     recreateSwapchain(static_cast<uint32_t>(newWidth), static_cast<uint32_t>(newHeight));
                     // CRÍTICO: Actualizar dimensiones después de recrear
                     currentSwapchainWidth = swapchain.extent().width;
