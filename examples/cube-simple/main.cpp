@@ -65,6 +65,7 @@ int main() {
             
             vertexBuffer.upload(cubeVertices.data(), sizeof(Vertex) * cubeVertices.size());
             std::cout << "      ✓ Buffer de vértices creado (" << cubeVertices.size() << " vértices)" << std::endl;
+        }
         
         // Setup React-style components
         std::cout << "[4/5] Configurando componentes React-style..." << std::endl;
@@ -101,13 +102,17 @@ int main() {
         std::cout << "  ESC - Salir" << std::endl;
         std::cout << std::endl;
         std::cout << "Presiona ESC para salir..." << std::endl;
+        std::cout << "NOTA: Esta es una demo técnica - la ventana mostrará" << std::endl;
+        std::cout << "      las transformaciones calculándose en consola." << std::endl;
+        std::cout << "      Para ver el cubo renderizado, usa: reactor-cube-render.exe" << std::endl;
         std::cout << std::endl;
-            
-            // Render loop
-            auto startTime = std::chrono::high_resolution_clock::now();
-            size_t frameCount = 0;
-            
-            while (!window.shouldClose()) {
+        
+        // Render loop
+        auto startTime = std::chrono::high_resolution_clock::now();
+        size_t frameCount = 0;
+        auto lastFpsTime = startTime;
+        
+        while (!window.shouldClose()) {
             window.pollEvents();
             
             auto currentTime = std::chrono::high_resolution_clock::now();
@@ -121,18 +126,23 @@ int main() {
             reactor::Mat4 model = cubeTransform.getMatrix();
             reactor::Mat4 view = camera.getViewMatrix();
             reactor::Mat4 proj = camera.getProjectionMatrix();
+            reactor::Mat4 mvp = proj * view * model;
             
             frameCount++;
             
-            // Mostrar info cada 60 frames
-            if (frameCount % 60 == 0) {
-                std::cout << "Frame " << frameCount 
-                         << " | Rotación: " << glm::degrees(cubeTransform.rotation.y) << "°" 
-                         << " | Tiempo: " << time << "s" << std::endl;
+            // FPS cada segundo
+            auto elapsed = std::chrono::duration<double>(currentTime - lastFpsTime).count();
+            if (elapsed >= 1.0) {
+                double fps = frameCount / elapsed;
+                std::cout << "FPS: " << static_cast<int>(fps) 
+                         << " | Rotación: " << static_cast<int>(glm::degrees(cubeTransform.rotation.y)) << "°" 
+                         << " | Frames: " << frameCount << std::endl;
+                frameCount = 0;
+                lastFpsTime = currentTime;
             }
-            }
-            
-            std::cout << std::endl;
+        }
+        
+        std::cout << std::endl;
         std::cout << "==========================================" << std::endl;
         std::cout << "  Limpiando recursos..." << std::endl;
         std::cout << "==========================================" << std::endl;

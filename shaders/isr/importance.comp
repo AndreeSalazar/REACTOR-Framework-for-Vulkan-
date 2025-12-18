@@ -1,0 +1,125 @@
+#version 450
+
+// Compute shader para cálculo de importancia
+// Basado en ADead-ISR
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+// Input images
+layout(binding = 0) uniform sampler2D colorBuffer;
+layout(binding = 1) uniform sampler2D normalBuffer;
+layout(binding = 2) uniform sampler2D depthBuffer;
+layout(binding = 3) uniform sampler2D motionBuffer;  // Opcional
+
+// Output image
+layout(binding = 4, r32f) uniform writeonly image2D importanceImage;
+
+// Config
+layout(push_constant) uniform Config {
+    float edgeWeight;
+    float normalWeight;
+    float distanceWeight;
+    float motionWeight;
+    float silhouetteThreshold;
+    uint useMotion;  // 0 o 1
+} config;
+
+// Sobel edge detection
+float detectEdges(vec2 uv, vec2 texelSize) {
+    // Sobel kernel X
+    float sobelX = 0.0;
+    sobelX += texture(colorBuffer, uv + vec2(-1, -1) * texelSize).r * -1.0;
+    sobelX += texture(colorBuffer, uv + vec2( 0, -1) * texelSize).r *  0.0;
+    sobelX += texture(colorBuffer, uv + vec2( 1, -1) * texelSize).r *  1.0;
+    sobelX += texture(colorBuffer, uv + vec2(-1,  0) * texelSize).r * -2.0;
+    sobelX += texture(colorBuffer, uv + vec2( 1,  0) * texelSize).r *  2.0;
+    sobelX += texture(colorBuffer, uv + vec2(-1,  1) * texelSize).r * -1.0;
+    sobelX += texture(colorBuffer, uv + vec2( 0,  1) * texelSize).r *  0.0;
+    sobelX += texture(colorBuffer, uv + vec2( 1,  1) * texelSize).r *  1.0;
+    
+    // Sobel kernel Y
+    float sobelY = 0.0;
+    sobelY += texture(colorBuffer, uv + vec2(-1, -1) * texelSize).r * -1.0;
+    sobelY += texture(colorBuffer, uv + vec2( 0, -1) * texelSize).r * -2.0;
+    sobelY += texture(colorBuffer, uv + vec2( 1, -1) * texelSize).r * -1.0;
+    sobelY += texture(colorBuffer, uv + vec2(-1,  1) * texelSize).r *  1.0;
+    sobelY += texture(colorBuffer, uv + vec2( 0,  1) * texelSize).r *  2.0;
+    sobelY += texture(colorBuffer, uv + vec2( 1,  1) * texelSize).r *  1.0;
+    
+    return sqrt(sobelX * sobelX + sobelY * sobelY);
+}
+
+// Normal variance detection
+float detectNormalVariance(vec2 uv, vec2 texelSize) {
+    vec3 center = texture(normalBuffer, uv).xyz;
+    
+    float variance = 0.0;
+    for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+            if (x == 0 && y == 0) continue;
+            
+            vec3 sample = texture(normalBuffer, uv + vec2(x, y) * texelSize).xyz;
+            variance += 1.0 - dot(center, sample);
+        }
+    }
+    
+    return variance / 8.0;  // 8 samples
+}
+
+// Distance-based importance
+float calculateDistanceImportance(float depth) {
+    // Objetos cercanos = alta importancia
+    // Objetos lejanos = baja importancia
+    return 1.0 - smoothstep(0.0, 1.0, depth);
+}
+
+// Motion-based importance
+float calculateMotionImportance(vec2 uv) {
+    if (config.useMotion == 0) return 0.0;
+    
+    vec2 motion = texture(motionBuffer, uv).xy;
+    float motionMagnitude = length(motion);
+    
+    // Más movimiento = más importancia
+    return smoothstep(0.0, 0.1, motionMagnitude);
+}
+
+void main() {
+    ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 imageSize = imageSize(importanceImage);
+    
+    if (pixelCoord.x >= imageSize.x || pixelCoord.y >= imageSize.y) {
+        return;
+    }
+    
+    vec2 uv = (vec2(pixelCoord) + 0.5) / vec2(imageSize);
+    vec2 texelSize = 1.0 / vec2(imageSize);
+    
+    // Calcular componentes de importancia
+    float edgeImportance = detectEdges(uv, texelSize);
+    float normalImportance = detectNormalVariance(uv, texelSize);
+    
+    float depth = texture(depthBuffer, uv).r;
+    float distanceImportance = calculateDistanceImportance(depth);
+    
+    float motionImportance = calculateMotionImportance(uv);
+    
+    // Combinar con pesos
+    float importance = 
+        edgeImportance * config.edgeWeight +
+        normalImportance * config.normalWeight +
+        distanceImportance * config.distanceWeight +
+        motionImportance * config.motionWeight;
+    
+    // Normalizar a [0, 1]
+    importance = clamp(importance, 0.0, 1.0);
+    
+    // Detectar siluetas (bordes + cambio de normal)
+    if (edgeImportance > config.silhouetteThreshold && 
+        normalImportance > config.silhouetteThreshold) {
+        importance = 1.0;  // Máxima importancia en siluetas
+    }
+    
+    // Escribir resultado
+    imageStore(importanceImage, pixelCoord, vec4(importance, 0.0, 0.0, 0.0));
+}

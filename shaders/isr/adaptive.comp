@@ -1,0 +1,80 @@
+#version 450
+
+// Compute shader para adaptive pixel sizing
+// Basado en ADead-ISR - convierte importancia a shading rate
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+// Input: Importance image
+layout(binding = 0, r32f) uniform readonly image2D importanceImage;
+
+// Output: Shading rate image (VK_EXT_fragment_shading_rate)
+layout(binding = 1, r8ui) uniform writeonly uimage2D shadingRateImage;
+
+// Config
+layout(push_constant) uniform Config {
+    float threshold1x1;  // >= 0.8 → 1x1
+    float threshold2x2;  // >= 0.5 → 2x2
+    float threshold4x4;  // >= 0.3 → 4x4
+    // < 0.3 → 8x8
+    uint enableHierarchical;
+} config;
+
+// Shading rate values (VK_EXT_fragment_shading_rate)
+const uint SHADING_RATE_1x1 = 0;  // 0b0000
+const uint SHADING_RATE_2x2 = 5;  // 0b0101
+const uint SHADING_RATE_4x4 = 10; // 0b1010
+const uint SHADING_RATE_8x8 = 15; // 0b1111
+
+// Hierarchical analysis - analiza tile 8x8 y usa máxima importancia
+float analyzeHierarchical(ivec2 baseCoord) {
+    float maxImportance = 0.0;
+    
+    for (int y = 0; y < 8; y++) {
+        for (int x = 0; x < 8; x++) {
+            ivec2 coord = baseCoord + ivec2(x, y);
+            float importance = imageLoad(importanceImage, coord).r;
+            maxImportance = max(maxImportance, importance);
+        }
+    }
+    
+    return maxImportance;
+}
+
+uint importanceToShadingRate(float importance) {
+    if (importance >= config.threshold1x1) {
+        return SHADING_RATE_1x1;  // Máxima calidad
+    } else if (importance >= config.threshold2x2) {
+        return SHADING_RATE_2x2;
+    } else if (importance >= config.threshold4x4) {
+        return SHADING_RATE_4x4;
+    } else {
+        return SHADING_RATE_8x8;  // Mínima calidad, máximo performance
+    }
+}
+
+void main() {
+    ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 imageSize = imageSize(shadingRateImage);
+    
+    if (pixelCoord.x >= imageSize.x || pixelCoord.y >= imageSize.y) {
+        return;
+    }
+    
+    float importance;
+    
+    if (config.enableHierarchical != 0) {
+        // Análisis jerárquico - cada pixel de shading rate representa tile 8x8
+        ivec2 baseCoord = pixelCoord * 8;
+        importance = analyzeHierarchical(baseCoord);
+    } else {
+        // Análisis directo
+        importance = imageLoad(importanceImage, pixelCoord).r;
+    }
+    
+    // Convertir importancia a shading rate
+    uint shadingRate = importanceToShadingRate(importance);
+    
+    // Escribir resultado
+    imageStore(shadingRateImage, pixelCoord, uvec4(shadingRate, 0, 0, 0));
+}

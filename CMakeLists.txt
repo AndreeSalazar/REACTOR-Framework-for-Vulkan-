@@ -77,8 +77,9 @@ add_subdirectory(examples/triangle)
 
 # Agregar ejemplos con ventanas solo si GLFW está disponible
 if(REACTOR_HAS_WINDOW)
-    add_subdirectory(examples/cube-simple)
+    add_subdirectory(examples/cube-render)   # Cubo 3D COMPLETO con renderizado
+    add_subdirectory(examples/cube-simple)   # Demo simple sin renderizado
     # add_subdirectory(examples/rendering)  # Requiere más APIs
-    # add_subdirectory(examples/cube)       # Requiere shaders compilados
+    # add_subdirectory(examples/cube)       # Versión alternativa
 endif()
 

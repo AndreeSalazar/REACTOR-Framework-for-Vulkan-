@@ -1,0 +1,96 @@
+#version 450
+
+// Compute shader para temporal coherence
+// Basado en ADead-ISR - blend 90% anterior + 10% actual
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+// Input images
+layout(binding = 0, r32f) uniform readonly image2D currentImportance;
+layout(binding = 1, r32f) uniform readonly image2D previousImportance;
+layout(binding = 2) uniform sampler2D motionVectors;  // Opcional
+
+// Output image
+layout(binding = 3, r32f) uniform writeonly image2D outputImportance;
+
+// Config
+layout(push_constant) uniform Config {
+    float blendFactor;           // 0.9 = 90% anterior
+    float motionThreshold;       // 0.1 = umbral de invalidación
+    uint useMotionVectors;       // 0 o 1
+    uint historyValid;           // 0 o 1
+} config;
+
+// Reprojection usando motion vectors
+float sampleReprojected(vec2 uv, vec2 motion) {
+    vec2 prevUV = uv - motion;
+    
+    // Verificar si está dentro de bounds
+    if (prevUV.x < 0.0 || prevUV.x > 1.0 || 
+        prevUV.y < 0.0 || prevUV.y > 1.0) {
+        return -1.0;  // Inválido
+    }
+    
+    ivec2 imageSize = imageSize(previousImportance);
+    ivec2 prevCoord = ivec2(prevUV * vec2(imageSize));
+    
+    return imageLoad(previousImportance, prevCoord).r;
+}
+
+void main() {
+    ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 imageSize = imageSize(outputImportance);
+    
+    if (pixelCoord.x >= imageSize.x || pixelCoord.y >= imageSize.y) {
+        return;
+    }
+    
+    vec2 uv = (vec2(pixelCoord) + 0.5) / vec2(imageSize);
+    
+    // Importancia actual
+    float current = imageLoad(currentImportance, pixelCoord).r;
+    
+    // Si no hay history válido, usar solo actual
+    if (config.historyValid == 0) {
+        imageStore(outputImportance, pixelCoord, vec4(current, 0.0, 0.0, 0.0));
+        return;
+    }
+    
+    float previous;
+    bool validReprojection = true;
+    
+    if (config.useMotionVectors != 0) {
+        // Usar motion vectors para reprojection
+        vec2 motion = texture(motionVectors, uv).xy;
+        float motionMagnitude = length(motion);
+        
+        // Si hay mucho movimiento, invalidar history
+        if (motionMagnitude > config.motionThreshold) {
+            validReprojection = false;
+        } else {
+            previous = sampleReprojected(uv, motion);
+            if (previous < 0.0) {
+                validReprojection = false;
+            }
+        }
+    } else {
+        // Sin motion vectors, asumir sin movimiento
+        previous = imageLoad(previousImportance, pixelCoord).r;
+    }
+    
+    float result;
+    
+    if (validReprojection) {
+        // Blend temporal: 90% anterior + 10% actual
+        result = previous * config.blendFactor + current * (1.0 - config.blendFactor);
+    } else {
+        // History inválido, usar solo actual
+        result = current;
+    }
+    
+    // Clamp a [0, 1]
+    result = clamp(result, 0.0, 1.0);
+    
+    // Escribir resultado
+    imageStore(outputImportance, pixelCoord, vec4(result, 0.0, 0.0, 0.0));
+}
