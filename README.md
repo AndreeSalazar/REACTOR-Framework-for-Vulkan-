@@ -1,14 +1,30 @@
-# REACTOR Framework para Vulkan
+# 🚀 Stack-GPU-OP
 
 <div align="center">
 
-**Framework moderno para Vulkan que simplifica el desarrollo sin sacrificar control**
+**ADead-GPU Technologies Reimplemented in Pure Vulkan**
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Vulkan](https://img.shields.io/badge/Vulkan-1.3-red.svg)](https://www.vulkan.org/)
-[![Platform](https://img.shields.io/badge/Platform-Windows-blue.svg)](https://www.microsoft.com/windows)
+[![Platform](https://img.shields.io/badge/Platform-Cross--Platform-blue.svg)](https://www.vulkan.org/)
 [![Status](https://img.shields.io/badge/Status-Functional-green.svg)](https://github.com)
+[![FPS](https://img.shields.io/badge/FPS-74--80-brightgreen.svg)](https://github.com)
 
-**REACTOR** es un framework moderno para Vulkan que simplifica el desarrollo de aplicaciones gráficas mediante una API declarativa inspirada en React, combinado con tecnologías revolucionarias de **ADead-GPU** implementadas en Vulkan puro., diseñado para **facilitar enormemente** el desarrollo de aplicaciones gráficas manteniendo el **control total** de Vulkan.
+**Stack-GPU-OP** combina las tecnologías revolucionarias de **ADead-GPU** (DirectX 12) con el framework **REACTOR** (Vulkan), creando el framework GPU más avanzado y accesible.
+
+### 🎯 La Ecuación
+
+```
+ADead-GPU (DirectX 12 Research) + REACTOR (Vulkan Framework) = Stack-GPU-OP
+```
+
+### ⭐ Tecnologías Implementadas
+
+**ISR** (Intelligent Shading Rate) • **SDF** (Vector3D Rendering) • **Advanced Ray Tracing** • **GPU Language**
+
+</div>
+
+---
 
 ### Características Principales
 

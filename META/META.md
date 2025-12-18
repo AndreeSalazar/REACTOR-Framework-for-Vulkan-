@@ -1,19 +1,39 @@
 # 📋 META - Stack-GPU-OP Project Overview
 
 **Fecha**: 18 de Diciembre, 2025  
-**Versión**: 0.1.0  
-**Estado**: ✅ **FUNCIONAL - Cubo 3D renderizando**
+**Versión**: 0.3.0  
+**Estado**: ✅ **FUNCIONAL - Cubo 3D renderizando a 74-80 FPS**
 
 ---
 
-## 🎯 Objetivo del Proyecto
+## 🎯 ¿Qué es Stack-GPU-OP?
 
-**Stack-GPU-OP** es la integración de tecnologías revolucionarias de **ADead-GPU** (DirectX 12) implementadas **100% en Vulkan puro** dentro del framework **REACTOR**.
+**Stack-GPU-OP es ADead-GPU reimplementado completamente en Vulkan.**
 
-### Visión
-Crear el framework GPU más avanzado y fácil de usar, combinando:
-- **REACTOR**: React-Style API, RAII, Type Safety, Cross-platform (Vulkan)
-- **ADead-GPU**: ISR, Vector3D (SDF), Advanced Ray Tracing, GPU Language
+### La Ecuación
+```
+ADead-GPU (DirectX 12 Research)
+         +
+REACTOR (Vulkan Framework)
+         =
+Stack-GPU-OP (Cross-Platform GPU Framework)
+```
+
+### Objetivo Principal
+Tomar **TODAS** las tecnologías revolucionarias de ADead-GPU y reimplementarlas en Vulkan puro, haciéndolas:
+- ✅ **Cross-platform** (Windows, Linux, macOS)
+- ✅ **Open Standard** (Vulkan vs DirectX 12)
+- ✅ **Más accesibles** (React-Style API)
+- ✅ **Mejor documentadas** (Guías completas)
+
+### Las Tecnologías de ADead-GPU
+
+1. **ISR (Intelligent Shading Rate)** - 75% performance boost
+2. **Vector3D (SDF Rendering)** - ~1KB vs ~1MB meshes
+3. **Advanced Ray Tracing** - Sin RT cores
+4. **GPU Language (.gpu)** - Lenguaje declarativo
+
+**Stack-GPU-OP implementa TODO esto en Vulkan.**
 
 ---
 
