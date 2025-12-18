@@ -1,8 +1,8 @@
 # 📋 META - Stack-GPU-OP Project Overview
 
 **Fecha**: 18 de Diciembre, 2025  
-**Versión**: 0.3.1  
-**Estado**: ✅ **FUNCIONAL - Cubo 3D con Depth Buffer a 74-75 FPS**
+**Versión**: 0.4.0 → 0.5.0 (en preparación)  
+**Estado**: ✅ **v0.4.0 COMPLETADO** | 🚀 **v0.5.0 ISR EN PREPARACIÓN**
 
 ---
 
@@ -231,17 +231,22 @@ REACTOR (Framework for Vulkan)/
 
 ---
 
-## 🎯 Próximos Pasos
+## Próximos Pasos
 
-### Corto Plazo (1-2 semanas)
+### Corto Plazo (2-3 semanas) - v0.5.0
 1. ✅ **Cubo 3D renderizando** - COMPLETADO
 2. ✅ **Depth buffer implementado** - COMPLETADO
 3. ✅ **Colores mejorados (24 vértices)** - COMPLETADO
-4. ✅ **Phong shading profesional** - COMPLETADO
+4. ✅ **Phong shading profesional** - COMPLETADO v0.4.0
 5. ✅ **Normales por vértice** - COMPLETADO
-6. ⏳ Agregar texturas al cubo (como LunarG)
-7. ⏳ Mejorar sincronización (eliminar warnings)
-8. ⏳ Múltiples luces y sombras
+6. 🚀 **ISR Implementation** - EN PREPARACIÓN v0.5.0
+   - [ ] `importance.cpp` implementation
+   - [ ] `adaptive.cpp` implementation
+   - [ ] `temporal.cpp` implementation
+   - [ ] `isr_system.cpp` integration
+   - [ ] Example `stack-gpu-isr`
+7. ⏳ Agregar texturas al cubo (v0.5.1)
+8. ⏳ Mejorar sincronización (v0.5.2)
 
 ### Mediano Plazo (1 mes)
 1. ⏳ Implementar ISR completo (uniforms, descriptors)

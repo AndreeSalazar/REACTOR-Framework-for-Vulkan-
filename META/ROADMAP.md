@@ -79,38 +79,81 @@ Transformar REACTOR en el framework GPU más avanzado y fácil de usar, integran
 
 ---
 
-## 🔄 Fase 4: Mejoras Visuales (EN PROGRESO)
+## ✅ Fase 4: Mejoras Visuales del Cubo (COMPLETADA) → v0.4.0
 
-**Objetivo**: Mejorar calidad visual del cubo
+**Objetivo**: Implementar Phong shading profesional y depth buffer
 
-### Tareas
-- [ ] Agregar depth buffer
-- [ ] Implementar texturas (como LunarG cube)
-- [ ] Mejorar iluminación (Phong shading)
-- [ ] Agregar normales correctas por cara
-- [ ] Implementar MSAA (anti-aliasing)
+### Tareas Completadas
+- [x] Implementar depth buffer (D32_SFLOAT)
+- [x] Agregar normales por vértice (24 vértices)
+- [x] Implementar Phong shading completo
+  - [x] Ambient light (30%)
+  - [x] Diffuse light (100%)
+  - [x] Specular highlights (60%, shininess 32)
+- [x] Push constants mejorados (MVP + Model)
+- [x] Mejorar colores (cyan/teal como LunarG)
+- [x] Agregar FPS counter al título
+- [x] Optimizar performance
 
-**Prioridad**: Alta  
-**Tiempo estimado**: 1 semana
+**Estado**: ✅ COMPLETADA  
+**Versión**: v0.4.0  
+**Fecha**: 18 de Diciembre, 2025  
+**Performance**: 70-75 FPS constantes  
+**Calidad Visual**: ⭐⭐⭐⭐⭐ Profesional
 
 ---
 
-## ⏳ Fase 5: ISR Completo (PENDIENTE)
+## 🚀 Fase 5: ISR Completo (EN PREPARACIÓN) → v0.5.0
 
-**Objetivo**: Implementar ISR funcional en Vulkan
+**Objetivo**: Implementar sistema ISR completo con compute shaders
 
-### Tareas
+### Estado Actual
+- ✅ Headers completos (`importance.hpp`, `adaptive.hpp`, `temporal.hpp`, `isr_system.hpp`)
+- ✅ Shaders completos (`importance.comp`, `adaptive.comp`, `temporal.comp`)
+- ✅ Builder API diseñado
+- ⏳ Implementaciones pendientes
+
+### Tareas de Implementación
+
+#### 1. Core ISR Implementation
 - [ ] Implementar `importance.cpp`
+  - [ ] Compute shader dispatch
+  - [ ] Buffer management para importance map
+  - [ ] Cálculo de gradientes y motion vectors
 - [ ] Implementar `adaptive.cpp`
+  - [ ] Pixel sizing basado en importance
+  - [ ] Adaptive resolution logic
+  - [ ] Threshold configuration
 - [ ] Implementar `temporal.cpp`
-- [ ] Implementar `isr_system.cpp`
-- [ ] Crear uniform buffers
-- [ ] Crear descriptor sets
-- [ ] Integrar con pipeline
-- [ ] Ejemplo ISR demo
+  - [ ] Coherencia temporal entre frames
+  - [ ] History buffer management
+  - [ ] Smoothing algorithms
 
-**Prioridad**: Media  
-**Tiempo estimado**: 2-3 semanas
+#### 2. ISR System Integration
+- [ ] Implementar `isr_system.cpp`
+  - [ ] Builder pattern completo
+  - [ ] Descriptor set creation
+  - [ ] Uniform buffer management
+  - [ ] Pipeline integration
+  - [ ] Multi-stage compute dispatch
+
+#### 3. Vulkan Resources
+- [ ] Crear uniform buffers para parámetros ISR
+- [ ] Crear descriptor sets (compute shaders)
+- [ ] Crear storage buffers (importance maps, pixel sizes)
+- [ ] Implementar memory barriers entre stages
+
+#### 4. Example & Testing
+- [ ] Crear ejemplo `stack-gpu-isr`
+- [ ] Visualización de importance map
+- [ ] Comparación con/sin ISR
+- [ ] Performance metrics
+- [ ] Documentación de uso
+
+**Prioridad**: 🔥 Alta (siguiente fase)  
+**Tiempo estimado**: 2-3 semanas  
+**Versión objetivo**: v0.5.0  
+**Fecha estimada**: Enero 2026
 
 ---
 
