@@ -75,8 +75,9 @@ target_link_libraries(reactor PUBLIC Vulkan::Vulkan)
 add_subdirectory(examples/sandbox)
 add_subdirectory(examples/triangle)
 
-# Agregar ejemplo de rendering solo si GLFW está disponible
+# Agregar ejemplos con ventanas solo si GLFW está disponible
 if(REACTOR_HAS_WINDOW)
     add_subdirectory(examples/rendering)
+    add_subdirectory(examples/cube)
 endif()
 

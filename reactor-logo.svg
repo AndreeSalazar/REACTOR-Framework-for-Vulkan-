@@ -1,0 +1,60 @@
+<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="95" fill="#1a1a2e" stroke="#16213e" stroke-width="3"/>
+  
+  <!-- Outer glow -->
+  <circle cx="100" cy="100" r="90" fill="none" stroke="url(#gradient1)" stroke-width="2" opacity="0.5"/>
+  
+  <!-- Gradient definitions -->
+  <defs>
+    <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00d4ff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7b2cbf;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ff006e;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#8338ec;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3a86ff;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- 3D Cube representation (isometric) -->
+  <g transform="translate(100, 80)">
+    <!-- Front face -->
+    <polygon points="0,20 -30,35 -30,65 0,50" fill="#ff006e" opacity="0.9"/>
+    <!-- Top face -->
+    <polygon points="0,20 30,35 0,50 -30,35" fill="#8338ec" opacity="0.9"/>
+    <!-- Right face -->
+    <polygon points="0,20 30,35 30,65 0,50" fill="#3a86ff" opacity="0.9"/>
+    
+    <!-- Edges highlight -->
+    <polyline points="0,20 -30,35 -30,65 0,50 0,20" fill="none" stroke="#ffffff" stroke-width="1.5" opacity="0.3"/>
+    <polyline points="0,20 30,35 30,65 0,50" fill="none" stroke="#ffffff" stroke-width="1.5" opacity="0.3"/>
+    <polyline points="0,20 30,35 0,50 -30,35 0,20" fill="none" stroke="#ffffff" stroke-width="1.5" opacity="0.3"/>
+  </g>
+  
+  <!-- REACTOR text -->
+  <text x="100" y="155" font-family="Arial, sans-serif" font-size="24" font-weight="bold" 
+        text-anchor="middle" fill="url(#gradient2)">REACTOR</text>
+  
+  <!-- Subtitle -->
+  <text x="100" y="175" font-family="Arial, sans-serif" font-size="10" 
+        text-anchor="middle" fill="#00d4ff" opacity="0.8">Vulkan Framework</text>
+  
+  <!-- Animated particles -->
+  <circle cx="60" cy="60" r="2" fill="#00d4ff" opacity="0.6">
+    <animate attributeName="cy" values="60;40;60" dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.6;1;0.6" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  
+  <circle cx="140" cy="70" r="2" fill="#ff006e" opacity="0.6">
+    <animate attributeName="cy" values="70;50;70" dur="2.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.6;1;0.6" dur="2.5s" repeatCount="indefinite"/>
+  </circle>
+  
+  <circle cx="120" cy="40" r="2" fill="#8338ec" opacity="0.6">
+    <animate attributeName="cy" values="40;25;40" dur="3.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.6;1;0.6" dur="3.5s" repeatCount="indefinite"/>
+  </circle>
+</svg>
