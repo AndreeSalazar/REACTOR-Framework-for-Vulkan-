@@ -62,33 +62,22 @@ set VCPKG_ROOT=vcpkg
 
 :vcpkg_ready
 echo.
-echo [4/5] Instalando dependencias...
+echo [4/5] Instalando dependencias desde vcpkg.json...
 echo.
 
-echo Instalando GLFW3...
-"%VCPKG_ROOT%\vcpkg.exe" install glfw3:x64-windows
+REM En manifest mode, vcpkg lee vcpkg.json automáticamente
+echo Instalando todas las dependencias (GLFW3, GLM, STB)...
+"%VCPKG_ROOT%\vcpkg.exe" install --triplet x64-windows
 if %ERRORLEVEL% neq 0 (
-    echo [X] ERROR: No se pudo instalar GLFW3
-    pause
-    exit /b 1
-)
-
-echo.
-echo Instalando GLM...
-"%VCPKG_ROOT%\vcpkg.exe" install glm:x64-windows
-if %ERRORLEVEL% neq 0 (
-    echo [X] ERROR: No se pudo instalar GLM
-    pause
-    exit /b 1
-)
-
-echo.
-echo Instalando STB...
-"%VCPKG_ROOT%\vcpkg.exe" install stb:x64-windows
-if %ERRORLEVEL% neq 0 (
-    echo [X] ERROR: No se pudo instalar STB
-    pause
-    exit /b 1
+    echo [X] ERROR: No se pudieron instalar las dependencias
+    echo.
+    echo Intentando con modo clasico...
+    "%VCPKG_ROOT%\vcpkg.exe" install glfw3:x64-windows glm:x64-windows stb:x64-windows --classic
+    if %ERRORLEVEL% neq 0 (
+        echo [X] ERROR: Instalacion fallida
+        pause
+        exit /b 1
+    )
 )
 
 echo.

@@ -1,15 +1,91 @@
+# Build directories
 build/
-.cache/
-.vs/
+cmake-build-*/
 out/
-*.log
-*.pdb
-*.obj
-*.ilk
+.cache/
+
+# vcpkg
+vcpkg/
+vcpkg_installed/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+!cmake/
+
+# Compiled binaries
 *.exe
 *.dll
+*.so
+*.dylib
+*.a
 *.lib
+*.pdb
+*.ilk
 *.exp
-*.vcxproj*
-cmake-build*/
+*.obj
 
+# Compiled shaders
+*.spv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.bak
+*.old
+
+# Package managers
+node_modules/
+.npm/
+.yarn/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+env/
+venv/
+ENV/
+
+# Rust
+target/
+Cargo.lock
+
+# Documentación generada
+docs/_build/
+site/
+
+# Profiling
+*.prof
+*.trace
+
+# Crash dumps
+*.dmp
+*.mdmp
