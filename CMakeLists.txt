@@ -46,13 +46,16 @@ add_library(reactor STATIC
   reactor/src/memory_allocator.cpp
   reactor/src/buffer.cpp
   reactor/src/image.cpp
-  reactor/src/sync.cpp
-  reactor/src/command_buffer.cpp
   reactor/src/shader.cpp
   reactor/src/pipeline.cpp
   reactor/src/descriptor.cpp
+  reactor/src/command_buffer.cpp
+  reactor/src/sync.cpp
   reactor/src/render_pass.cpp
   reactor/src/swapchain.cpp
+  # Stack-GPU-OP: SDF
+  reactor/src/sdf/primitives.cpp
+  reactor/src/sdf/raymarcher.cpp
 )
 
 # Agregar window.cpp si GLFW está disponible
@@ -77,9 +80,10 @@ add_subdirectory(examples/triangle)
 
 # Agregar ejemplos con ventanas solo si GLFW está disponible
 if(REACTOR_HAS_WINDOW)
-    add_subdirectory(examples/cube-render)   # Cubo 3D COMPLETO con renderizado
-    add_subdirectory(examples/cube-simple)   # Demo simple sin renderizado
-    # add_subdirectory(examples/rendering)  # Requiere más APIs
-    # add_subdirectory(examples/cube)       # Versión alternativa
+    add_subdirectory(examples/stack-gpu-cube)  # Stack-GPU-OP: Cubo con SDF ⭐ NUEVO
+    add_subdirectory(examples/cube-simple)     # Demo simple sin renderizado
+    # add_subdirectory(examples/cube-render)  # Requiere más APIs
+    # add_subdirectory(examples/rendering)    # Requiere más APIs
+    # add_subdirectory(examples/cube)         # Versión alternativa
 endif()
 
