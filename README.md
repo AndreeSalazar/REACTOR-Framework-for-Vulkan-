@@ -25,20 +25,39 @@ REACTOR es un framework para Vulkan inspirado en el modelo declarativo de React,
 
 ## 🚀 Quick Start
 
-### Instalación
+### Setup Automático (5 minutos)
 
 ```bash
-# Clonar repositorio
-git clone https://github.com/tu-usuario/reactor.git
-cd reactor
-
-# Configurar y compilar
-cmake -S . -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release
-cmake --build build
+# Un solo comando - detecta todo automáticamente
+quick-setup.bat
 
 # Ejecutar ejemplo
 build\examples\triangle\reactor-triangle.exe
 ```
+
+### Setup Manual
+
+```bash
+# Configurar (detecta Vulkan SDK automáticamente)
+configure.bat
+
+# Compilar
+build.bat
+
+# Ejecutar ejemplo
+build\examples\triangle\reactor-triangle.exe
+```
+
+### Usar Template Starter
+
+```bash
+cd templates\starter
+setup.bat
+build.bat
+run.bat
+```
+
+> 💡 **Nota**: Los scripts detectan automáticamente tu Vulkan SDK (1.4.328.1) y Visual Studio 2022
 
 ### Ejemplo Básico
 

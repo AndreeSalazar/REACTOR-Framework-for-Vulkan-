@@ -8,11 +8,35 @@ echo.
 
 REM Check for Vulkan SDK
 if not defined VULKAN_SDK (
-    echo ERROR: VULKAN_SDK environment variable not set
-    echo Please install Vulkan SDK from https://vulkan.lunarg.com/
-    exit /b 1
+    echo [INFO] VULKAN_SDK variable no configurada, buscando instalacion...
+    
+    REM Buscar versiones comunes de Vulkan SDK
+    if exist "C:\VulkanSDK\1.4.328.1" (
+        set "VULKAN_SDK=C:\VulkanSDK\1.4.328.1"
+        echo [OK] Vulkan SDK encontrado automaticamente: %VULKAN_SDK%
+    ) else if exist "C:\VulkanSDK\1.3.290.0" (
+        set "VULKAN_SDK=C:\VulkanSDK\1.3.290.0"
+        echo [OK] Vulkan SDK encontrado automaticamente: %VULKAN_SDK%
+    ) else if exist "C:\VulkanSDK\1.3.280.0" (
+        set "VULKAN_SDK=C:\VulkanSDK\1.3.280.0"
+        echo [OK] Vulkan SDK encontrado automaticamente: %VULKAN_SDK%
+    ) else (
+        REM Buscar cualquier version en C:\VulkanSDK
+        for /d %%i in ("C:\VulkanSDK\*") do (
+            if exist "%%i\Include\vulkan\vulkan.h" (
+                set "VULKAN_SDK=%%i"
+                echo [OK] Vulkan SDK encontrado automaticamente: %%i
+                goto :vulkan_found
+            )
+        )
+        
+        echo [X] ERROR: Vulkan SDK no encontrado
+        echo Por favor instala Vulkan SDK desde https://vulkan.lunarg.com/
+        exit /b 1
+    )
 )
-echo [OK] Vulkan SDK found: %VULKAN_SDK%
+:vulkan_found
+echo [OK] Vulkan SDK: %VULKAN_SDK%
 
 REM Check for CMake
 where cmake >nul 2>nul
