@@ -1,6 +1,8 @@
 #include "reactor/isr/importance.hpp"
 #include <stdexcept>
 #include <cstring>
+#include <fstream>
+#include <vector>
 
 namespace reactor {
 namespace isr {
@@ -109,48 +111,44 @@ void ImportanceCalculator::createDescriptorSets() {
 }
 
 void ImportanceCalculator::createComputePipeline() {
-    // Push constants for config
-    VkPushConstantRange pushConstant{};
-    pushConstant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    pushConstant.offset = 0;
-    pushConstant.size = sizeof(Config);
+    // Load compute shader
+    std::vector<char> shaderCode = loadShaderSPIRV("shaders/isr/importance.comp.spv");
     
-    // Pipeline layout
-    VkPipelineLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    VkShaderModuleCreateInfo moduleInfo = {};
+    moduleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    moduleInfo.codeSize = shaderCode.size();
+    moduleInfo.pCode = reinterpret_cast<const uint32_t*>(shaderCode.data());
     
     VkShaderModule shaderModule;
-    if (vkCreateShaderModule(device, &shaderModuleInfo, nullptr, &shaderModule) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create compute shader module");
+    if (vkCreateShaderModule(device, &moduleInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create shader module");
     }
     
-    // Pipeline layout with push constants
-    VkPushConstantRange pushConstantRange{};
-    pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(float) * 5 + sizeof(uint32_t); // 5 floats + 1 uint
+    // Push constant range for config
+    VkPushConstantRange pushConstant = {};
+    pushConstant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    pushConstant.offset = 0;
+    pushConstant.size = sizeof(float) * 5; // edgeWeight, normalWeight, distanceWeight, motionWeight, silhouetteThreshold
     
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = &descriptorLayout;
-    pipelineLayoutInfo.pushConstantRangeCount = 1;
-    pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+    // Pipeline layout
+    VkPipelineLayoutCreateInfo layoutInfo = {};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    layoutInfo.setLayoutCount = 1;
+    layoutInfo.pSetLayouts = &descriptorLayout;
+    layoutInfo.pushConstantRangeCount = 1;
+    layoutInfo.pPushConstantRanges = &pushConstant;
     
-    if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
+    if (vkCreatePipelineLayout(device, &layoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create pipeline layout");
     }
     
     // Compute pipeline
-    VkPipelineShaderStageCreateInfo shaderStageInfo{};
-    shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    shaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-    shaderStageInfo.module = shaderModule;
-    shaderStageInfo.pName = "main";
-    
-    VkComputePipelineCreateInfo pipelineInfo{};
+    VkComputePipelineCreateInfo pipelineInfo = {};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-    pipelineInfo.stage = shaderStageInfo;
+    pipelineInfo.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    pipelineInfo.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    pipelineInfo.stage.module = shaderModule;
+    pipelineInfo.stage.pName = "main";
     pipelineInfo.layout = pipelineLayout;
     
     if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &computePipeline) != VK_SUCCESS) {
@@ -160,18 +158,18 @@ void ImportanceCalculator::createComputePipeline() {
     vkDestroyShaderModule(device, shaderModule, nullptr);
 }
 
-std::vector<uint32_t> ImportanceCalculator::loadShaderSPIRV(const std::string& filepath) {
-    std::ifstream file(filepath, std::ios::ate | std::ios::binary);
+std::vector<char> ImportanceCalculator::loadShaderSPIRV(const std::string& filename) {
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
     
     if (!file.is_open()) {
-        throw std::runtime_error("Failed to open shader file: " + filepath);
+        throw std::runtime_error("Failed to open shader file: " + filename);
     }
     
-    size_t fileSize = (size_t)file.tellg();
-    std::vector<uint32_t> buffer(fileSize / sizeof(uint32_t));
+    size_t fileSize = static_cast<size_t>(file.tellg());
+    std::vector<char> buffer(fileSize);
     
     file.seekg(0);
-    file.read(reinterpret_cast<char*>(buffer.data()), fileSize);
+    file.read(buffer.data(), fileSize);
     file.close();
     
     return buffer;
@@ -230,16 +228,48 @@ void ImportanceCalculator::createImportanceImage(uint32_t width, uint32_t height
 }
 
 VkImage ImportanceCalculator::calculateImportance(
+    VkCommandBuffer cmd,
     VkImage colorBuffer,
     VkImage normalBuffer,
     VkImage depthBuffer,
-    VkImage motionBuffer
-) {
-    // TODO: Implement compute dispatch
-    // 1. Update descriptor set with input/output images
-    // 2. Push constants with config
-    // 3. Dispatch compute shader
-    // 4. Return importance image
+    VkImage motionBuffer) {
+    
+    // Bind compute pipeline
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
+    
+    // Bind descriptor set
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+    
+    // Push constants (config)
+    float pushData[5] = {
+        config.edgeWeight,
+        config.normalWeight,
+        config.distanceWeight,
+        config.motionWeight,
+        config.silhouetteThreshold
+    };
+    vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pushData), pushData);
+    
+    // Dispatch compute shader (8x8 local workgroup)
+    uint32_t groupCountX = (width + 7) / 8;
+    uint32_t groupCountY = (height + 7) / 8;
+    vkCmdDispatch(cmd, groupCountX, groupCountY, 1);
+    
+    // Memory barrier
+    VkMemoryBarrier barrier = {};
+    barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+    barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    
+    vkCmdPipelineBarrier(
+        cmd,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        0,
+        1, &barrier,
+        0, nullptr,
+        0, nullptr
+    );
     
     return importanceImage;
 }

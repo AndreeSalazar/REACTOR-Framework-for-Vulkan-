@@ -1,5 +1,8 @@
 #include "reactor/isr/adaptive.hpp"
 #include <stdexcept>
+#include <cstring>
+#include <fstream>
+#include <vector>
 #include <algorithm>
 
 namespace reactor {
@@ -48,13 +51,13 @@ void AdaptivePixelSizer::createDescriptorSets() {
     bindings[0].descriptorCount = 1;
     bindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     
-    // Binding 1: Shading rate output
+    // Binding 1: Shading rate image (output)
     bindings[1].binding = 1;
     bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     bindings[1].descriptorCount = 1;
     bindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     
-    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    VkDescriptorSetLayoutCreateInfo layoutInfo = {};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutInfo.bindingCount = 2;
     layoutInfo.pBindings = bindings;
@@ -64,11 +67,11 @@ void AdaptivePixelSizer::createDescriptorSets() {
     }
     
     // Descriptor pool
-    VkDescriptorPoolSize poolSize{};
+    VkDescriptorPoolSize poolSize = {};
     poolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     poolSize.descriptorCount = 2;
     
-    VkDescriptorPoolCreateInfo poolInfo{};
+    VkDescriptorPoolCreateInfo poolInfo = {};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = 1;
     poolInfo.pPoolSizes = &poolSize;
@@ -79,7 +82,7 @@ void AdaptivePixelSizer::createDescriptorSets() {
     }
     
     // Allocate descriptor set
-    VkDescriptorSetAllocateInfo allocInfo{};
+    VkDescriptorSetAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = descriptorPool;
     allocInfo.descriptorSetCount = 1;
@@ -104,14 +107,14 @@ void AdaptivePixelSizer::createComputePipeline() {
         throw std::runtime_error("Failed to create shader module");
     }
     
-    // Push constants for config
-    VkPushConstantRange pushConstant{};
+    // Push constant range for thresholds
+    VkPushConstantRange pushConstant = {};
     pushConstant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     pushConstant.offset = 0;
-    pushConstant.size = sizeof(Config);
+    pushConstant.size = sizeof(float) * 3; // threshold1x1, threshold2x2, threshold4x4
     
     // Pipeline layout
-    VkPipelineLayoutCreateInfo layoutInfo{};
+    VkPipelineLayoutCreateInfo layoutInfo = {};
     layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     layoutInfo.setLayoutCount = 1;
     layoutInfo.pSetLayouts = &descriptorLayout;
@@ -119,7 +122,7 @@ void AdaptivePixelSizer::createComputePipeline() {
     layoutInfo.pPushConstantRanges = &pushConstant;
     
     if (vkCreatePipelineLayout(device, &layoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create pipeline layout for adaptive pixel sizer");
+        throw std::runtime_error("Failed to create pipeline layout");
     }
     
     // Compute pipeline
@@ -138,63 +141,64 @@ void AdaptivePixelSizer::createComputePipeline() {
     vkDestroyShaderModule(device, shaderModule, nullptr);
 }
 
-void AdaptivePixelSizer::createShadingRateImage(uint32_t width, uint32_t height) {
-    // Create shading rate image (R8_UINT for rate values 0-7)
-    VkImageCreateInfo imageInfo{};
-    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageInfo.format = VK_FORMAT_R8_UINT;
-    imageInfo.extent = {width, height, 1};
-    imageInfo.mipLevels = 1;
-    imageInfo.arrayLayers = 1;
-    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+std::vector<char> AdaptivePixelSizer::loadShaderSPIRV(const std::string& filename) {
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
     
-    if (vkCreateImage(device, &imageInfo, nullptr, &shadingRateImage) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create shading rate image");
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open shader file: " + filename);
     }
     
-    // Allocate memory
-    VkMemoryRequirements memReqs;
-    vkGetImageMemoryRequirements(device, shadingRateImage, &memReqs);
+    size_t fileSize = static_cast<size_t>(file.tellg());
+    std::vector<char> buffer(fileSize);
     
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memReqs.size;
-    allocInfo.memoryTypeIndex = 0; // Device local
+    file.seekg(0);
+    file.read(buffer.data(), fileSize);
+    file.close();
     
-    if (vkAllocateMemory(device, &allocInfo, nullptr, &shadingRateMemory) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to allocate shading rate image memory");
-    }
-    
-    vkBindImageMemory(device, shadingRateImage, shadingRateMemory, 0);
-    
-    // Create image view
-    VkImageViewCreateInfo viewInfo{};
-    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = shadingRateImage;
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = VK_FORMAT_R8_UINT;
-    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = 1;
-    viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = 1;
-    
-    if (vkCreateImageView(device, &viewInfo, nullptr, &shadingRateView) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create shading rate image view");
-    }
+    return buffer;
 }
 
-VkImage AdaptivePixelSizer::generateShadingRateImage(VkImage importanceMap) {
-    // TODO: Implement compute dispatch
-    // 1. Update descriptor set with importance map and output
-    // 2. Push constants with config
-    // 3. Dispatch compute shader
-    // 4. Return shading rate image
+VkImage AdaptivePixelSizer::generateShadingRateImage(
+    VkCommandBuffer cmd,
+    VkImage importanceMap) {
+    
+    // Bind compute pipeline
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
+    
+    // Bind descriptor set
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+    
+    // Push constants (thresholds)
+    float pushData[3] = {
+        config.threshold1x1,
+        config.threshold2x2,
+        config.threshold4x4
+    };
+    vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pushData), pushData);
+    
+    // Dispatch compute shader (8x8 local workgroup)
+    uint32_t groupCountX = (width + 7) / 8;
+    uint32_t groupCountY = (height + 7) / 8;
+    vkCmdDispatch(cmd, groupCountX, groupCountY, 1);
+    
+    // Memory barrier
+    VkMemoryBarrier barrier = {};
+    barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+    barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    
+    vkCmdPipelineBarrier(
+        cmd,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        0,
+        1, &barrier,
+        0, nullptr,
+        0, nullptr
+    );
+    
+    // Update stats
+    stats.pixelsProcessed = width * height;
     
     return shadingRateImage;
 }
@@ -203,8 +207,8 @@ void AdaptivePixelSizer::updateConfig(const Config& newConfig) {
     config = newConfig;
 }
 
-void AdaptivePixelSizer::updateStats(VkImage shadingRate) {
-    // TODO: Read back shading rate image and calculate stats
+AdaptivePixelSizer::Stats AdaptivePixelSizer::getStats() const {
+    return stats;
 }
 
 } // namespace isr
