@@ -1,0 +1,15 @@
+build/
+.cache/
+.vs/
+out/
+*.log
+*.pdb
+*.obj
+*.ilk
+*.exe
+*.dll
+*.lib
+*.exp
+*.vcxproj*
+cmake-build*/
+
