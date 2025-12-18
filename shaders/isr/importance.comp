@@ -58,8 +58,8 @@ float detectNormalVariance(vec2 uv, vec2 texelSize) {
         for (int x = -1; x <= 1; x++) {
             if (x == 0 && y == 0) continue;
             
-            vec3 sample = texture(normalBuffer, uv + vec2(x, y) * texelSize).xyz;
-            variance += 1.0 - dot(center, sample);
+            vec3 normalSamp = texture(normalBuffer, uv + vec2(x, y) * texelSize).xyz;
+            variance += 1.0 - dot(center, normalSamp);
         }
     }
     

@@ -247,16 +247,19 @@ REACTOR (Framework for Vulkan)/
    - [x] Terminal en tiempo real con stats
    - [x] Wireframe, Normals, Depth, ISR modes (simulados)
    - [x] 74-75 FPS estables
-7. 🔄 **ISR Architecture** - PARCIALMENTE IMPLEMENTADO v0.5.0-dev
+7. ✅ **ISR Compute Shaders** - COMPILADOS v0.5.0-dev
    - [x] Headers C++ completos (importance, adaptive, temporal, isr_system)
    - [x] Compute shaders GLSL completos (importance, adaptive, temporal)
+   - [x] **Shaders compilados a SPIR-V** ⭐ NUEVO
+     - `build/shaders/isr/importance.comp.spv` ✅
+     - `build/shaders/isr/adaptive.comp.spv` ✅
+     - `build/shaders/isr/temporal.comp.spv` ✅
    - [x] Arquitectura y diseño definidos
    - [x] Biblioteca REACTOR compilando correctamente
    - [x] Descriptor sets y layouts implementados
-   - [ ] Compute pipelines completos (shader loading pendiente)
+   - [x] **Ejemplo stack-gpu-isr creado** ⭐ NUEVO
+   - [ ] Integración completa del sistema ISR
    - [ ] Compute dispatch funcionando
-   - [ ] `isr_system.cpp` - Sistema integrado
-   - [ ] Example `stack-gpu-isr` funcional
    - [ ] Integración real con cube renderer
 8. ⏳ **Texturas al cubo** (v0.5.1)
 9. ⏳ **Mejorar sincronización** (v0.5.2)

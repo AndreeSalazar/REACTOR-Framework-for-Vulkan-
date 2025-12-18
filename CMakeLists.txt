@@ -77,15 +77,9 @@ target_compile_definitions(reactor PUBLIC
 
 target_link_libraries(reactor PUBLIC Vulkan::Vulkan)
 
-add_subdirectory(examples/sandbox)
+# Examples
 add_subdirectory(examples/triangle)
-
-# Agregar ejemplos con ventanas solo si GLFW está disponible
-if(REACTOR_HAS_WINDOW)
-    add_subdirectory(examples/stack-gpu-cube)  # Stack-GPU-OP: Cubo con SDF ⭐ NUEVO
-    add_subdirectory(examples/cube-simple)     # Demo simple sin renderizado
-    # add_subdirectory(examples/cube-render)  # Requiere más APIs
-    # add_subdirectory(examples/rendering)    # Requiere más APIs
-    # add_subdirectory(examples/cube)         # Versión alternativa
-endif()
-
+add_subdirectory(examples/cube-simple)
+add_subdirectory(examples/sandbox)
+add_subdirectory(examples/stack-gpu-cube)
+add_subdirectory(examples/stack-gpu-isr)

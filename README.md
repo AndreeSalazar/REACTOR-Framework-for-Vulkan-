@@ -67,6 +67,41 @@ ADead-GPU (DirectX 12 Research) + REACTOR (Vulkan Framework) = Stack-GPU-OP
 
 ## 🚀 Quick Start
 
+### ⚡ Cómo Ejecutar (Sin Depender de Nadie)
+
+**Opción 1: Ejecutar Directamente (Más Rápido)**
+```bash
+# Navegar al ejecutable
+cd build\examples\stack-gpu-cube\Release
+
+# Ejecutar
+.\stack-gpu-cube.exe
+```
+
+**Opción 2: Compilar y Ejecutar**
+```bash
+# 1. Compilar (solo si hiciste cambios)
+cmake --build build --config Release --target stack-gpu-cube
+
+# 2. Ejecutar
+cd build\examples\stack-gpu-cube\Release
+.\stack-gpu-cube.exe
+```
+
+**Opción 3: Desde Cero (Primera Vez)**
+```bash
+# 1. Setup completo (solo primera vez)
+quick-setup.bat
+
+# 2. Ejecutar
+cd build\examples\stack-gpu-cube\Release
+.\stack-gpu-cube.exe
+```
+
+**Controles en el Cubo:**
+- **Teclas 1-7**: Cambiar modos de visualización
+- **ESC**: Salir
+
 ### Ver el Cubo 3D con Phong Shading
 
 ```bash
