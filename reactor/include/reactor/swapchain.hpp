@@ -14,7 +14,7 @@ struct SwapchainSupportDetails {
 class Swapchain {
 public:
     Swapchain(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
-              uint32_t width, uint32_t height, bool vsync = true);
+              uint32_t width, uint32_t height, bool vsync = true, VkSwapchainKHR oldSwapchain = VK_NULL_HANDLE);
     ~Swapchain();
 
     Swapchain(const Swapchain&) = delete;

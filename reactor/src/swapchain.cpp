@@ -71,7 +71,7 @@ VkExtent2D Swapchain::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilit
 }
 
 Swapchain::Swapchain(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
-                     uint32_t width, uint32_t height, bool vsync)
+                     uint32_t width, uint32_t height, bool vsync, VkSwapchainKHR oldSwapchain)
     : device(device) {
     
     SwapchainSupportDetails swapchainSupport = querySupport(physicalDevice, surface);
@@ -100,7 +100,7 @@ Swapchain::Swapchain(VkDevice device, VkPhysicalDevice physicalDevice, VkSurface
     createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     createInfo.presentMode = presentMode;
     createInfo.clipped = VK_TRUE;
-    createInfo.oldSwapchain = VK_NULL_HANDLE;
+    createInfo.oldSwapchain = oldSwapchain;  // Usar oldSwapchain si se proporciona
     
     if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapchain) != VK_SUCCESS) {
         throw std::runtime_error("failed to create swapchain");

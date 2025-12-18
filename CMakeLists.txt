@@ -30,8 +30,78 @@ endif()
 
 find_package(Vulkan REQUIRED)
 
+# Buscar GLM (requerido para matemáticas)
+find_package(glm QUIET)
+if(NOT glm_FOUND)
+    # Intentar encontrar GLM en ubicaciones comunes
+    find_path(GLM_INCLUDE_DIR "glm/glm.hpp"
+        PATHS
+        "C:/vcpkg/installed/x64-windows/include"
+        "C:/vcpkg/installed/x64-windows-static/include"
+        "C:/Program Files/glm"
+        "${CMAKE_SOURCE_DIR}/third_party/glm"
+        "${CMAKE_SOURCE_DIR}/external/glm"
+    )
+    if(GLM_INCLUDE_DIR)
+        set(glm_FOUND TRUE)
+        message(STATUS "GLM found manually at: ${GLM_INCLUDE_DIR}")
+    else()
+        # Usar FetchContent para descargar GLM automáticamente
+        message(STATUS "GLM not found, downloading with FetchContent...")
+        include(FetchContent)
+        FetchContent_Declare(
+            glm
+            GIT_REPOSITORY https://github.com/g-truc/glm.git
+            GIT_TAG        master
+        )
+        FetchContent_GetProperties(glm)
+        if(NOT glm_POPULATED)
+            FetchContent_Populate(glm)
+            set(GLM_INCLUDE_DIR ${glm_SOURCE_DIR})
+            set(glm_FOUND TRUE)
+            message(STATUS "GLM downloaded to: ${GLM_INCLUDE_DIR}")
+        endif()
+    endif()
+endif()
+
 # Buscar GLFW (opcional)
 find_package(glfw3 QUIET)
+if(NOT glfw3_FOUND)
+    # Intentar encontrar GLFW manualmente
+    find_path(GLFW3_INCLUDE_DIR "GLFW/glfw3.h"
+        PATHS
+        "C:/vcpkg/installed/x64-windows/include"
+        "C:/vcpkg/installed/x64-windows-static/include"
+    )
+    find_library(GLFW3_LIBRARY glfw3
+        PATHS
+        "C:/vcpkg/installed/x64-windows/lib"
+        "C:/vcpkg/installed/x64-windows-static/lib"
+    )
+    if(GLFW3_INCLUDE_DIR AND GLFW3_LIBRARY)
+        set(glfw3_FOUND TRUE)
+        message(STATUS "GLFW3 found manually")
+    else()
+        # Usar FetchContent para descargar GLFW automáticamente
+        message(STATUS "GLFW3 not found, downloading with FetchContent...")
+        include(FetchContent)
+        FetchContent_Declare(
+            glfw
+            GIT_REPOSITORY https://github.com/glfw/glfw.git
+            GIT_TAG        3.3.8
+        )
+        FetchContent_GetProperties(glfw)
+        if(NOT glfw_POPULATED)
+            FetchContent_Populate(glfw)
+            add_subdirectory(${glfw_SOURCE_DIR} ${glfw_BINARY_DIR})
+            set(glfw3_FOUND TRUE)
+            set(GLFW3_INCLUDE_DIR ${glfw_SOURCE_DIR}/include)
+            set(GLFW3_LIBRARY glfw)
+            message(STATUS "GLFW3 downloaded to: ${GLFW3_INCLUDE_DIR}")
+        endif()
+    endif()
+endif()
+
 if(glfw3_FOUND)
     set(REACTOR_HAS_WINDOW ON)
     message(STATUS "GLFW3 found - Window support enabled")
@@ -70,6 +140,17 @@ endif()
 target_include_directories(reactor PUBLIC
   reactor/include
 )
+
+# Agregar GLM includes si está disponible
+if(glm_FOUND)
+    if(TARGET glm::glm)
+        target_link_libraries(reactor PUBLIC glm::glm)
+    elseif(TARGET glm)
+        target_link_libraries(reactor PUBLIC glm)
+    elseif(GLM_INCLUDE_DIR)
+        target_include_directories(reactor PUBLIC ${GLM_INCLUDE_DIR})
+    endif()
+endif()
 
 target_compile_definitions(reactor PUBLIC
   $<$<BOOL:${REACTOR_ENABLE_VALIDATION}>:REACTOR_ENABLE_VALIDATION=1>

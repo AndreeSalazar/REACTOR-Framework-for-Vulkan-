@@ -1,6 +1,8 @@
 #include "cube_renderer.hpp"
 #include <stdexcept>
 #include <iostream>
+#include <fstream>
+#include <windows.h>
 
 namespace cube {
 
@@ -38,9 +40,29 @@ void CubeRenderer::createBuffers() {
 }
 
 void CubeRenderer::createPipeline(VkRenderPass renderPass, uint32_t width, uint32_t height) {
-    // Cargar shaders (usar ruta relativa al ejecutable)
-    reactor::Shader vertShader(context.device(), "shaders/cube.vert.spv", reactor::ShaderStage::Vertex);
-    reactor::Shader fragShader(context.device(), "shaders/cube.frag.spv", reactor::ShaderStage::Fragment);
+    // Cargar shaders - intentar rutas relativas y absolutas
+    std::string vertPath = "shaders/cube.vert.spv";
+    std::string fragPath = "shaders/cube.frag.spv";
+    
+    // Si no existen en ruta relativa, intentar ruta absoluta basada en el ejecutable
+    std::ifstream test(vertPath);
+    if (!test.is_open()) {
+        // Obtener ruta del ejecutable
+        char exePath[MAX_PATH];
+        GetModuleFileNameA(nullptr, exePath, MAX_PATH);
+        std::string exeDir = std::string(exePath);
+        size_t lastSlash = exeDir.find_last_of("\\/");
+        if (lastSlash != std::string::npos) {
+            exeDir = exeDir.substr(0, lastSlash + 1);
+            vertPath = exeDir + "shaders/cube.vert.spv";
+            fragPath = exeDir + "shaders/cube.frag.spv";
+        }
+    } else {
+        test.close();
+    }
+    
+    reactor::Shader vertShader(context.device(), vertPath, reactor::ShaderStage::Vertex);
+    reactor::Shader fragShader(context.device(), fragPath, reactor::ShaderStage::Fragment);
     
     std::cout << "      ✓ Shaders cargados" << std::endl;
     

@@ -1,5 +1,5 @@
 add_executable(stack-gpu-cube 
-    main_fixed.cpp
+    main.cpp
     cube_renderer.cpp
 )
 target_link_libraries(stack-gpu-cube PRIVATE reactor)
