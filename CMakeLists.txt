@@ -122,9 +122,14 @@ add_library(reactor STATIC
   reactor/src/sync.cpp
   reactor/src/render_pass.cpp
   reactor/src/swapchain.cpp
-  # REACTOR Base Library - Complete Features
+  # REACTOR Base Library - Complete Vulkan Features
   reactor/src/compute_pipeline.cpp
   reactor/src/descriptor_manager.cpp
+  reactor/src/sampler.cpp
+  reactor/src/framebuffer.cpp
+  reactor/src/query_pool.cpp
+  reactor/src/event.cpp
+  reactor/src/pipeline_cache.cpp
   # Stack-GPU-OP: SDF (Killer Triangle System)
   reactor/src/sdf/primitives.cpp
   reactor/src/sdf/raymarcher.cpp
