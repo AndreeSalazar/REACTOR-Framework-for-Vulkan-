@@ -168,6 +168,15 @@ add_library(reactor STATIC
   reactor/src/tools/profiler.cpp
   reactor/src/tools/serialization.cpp
   reactor/src/tools/ui_system.cpp
+  # FASE 7 - EXTRAS
+  reactor/src/extras/networking.cpp
+  reactor/src/extras/scripting.cpp
+  reactor/src/extras/compute.cpp
+  reactor/src/extras/advanced_effects.cpp
+  # FASE 8 - RENDERING HELPERS
+  reactor/src/rendering/easy_renderer.cpp
+  # GAME LAYER - Final abstraction (A->B->C)
+  reactor/src/game/game.cpp
   # Stack-GPU-OP: SDF (Killer Triangle System)
   reactor/src/sdf/primitives.cpp
   reactor/src/sdf/raymarcher.cpp

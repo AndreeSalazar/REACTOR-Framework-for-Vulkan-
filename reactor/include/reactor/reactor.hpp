@@ -77,6 +77,18 @@
 #include "reactor/tools/profiler.hpp"
 #include "reactor/tools/serialization.hpp"
 
+// FASE 7 - EXTRAS
+#include "reactor/extras/networking.hpp"
+#include "reactor/extras/scripting.hpp"
+#include "reactor/extras/compute.hpp"
+#include "reactor/extras/advanced_effects.hpp"
+
+// FASE 8 - RENDERING HELPERS
+#include "reactor/rendering/easy_renderer.hpp"
+
+// GAME LAYER - Final abstraction (A->B->C)
+#include "reactor/game/game.hpp"
+
 // Window (si disponible)
 #ifdef REACTOR_HAS_WINDOW
 #include "reactor/window.hpp"

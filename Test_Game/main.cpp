@@ -1,4 +1,4 @@
-// REACTOR Framework - FASE 2 + 3 + 4 Demo
+// REACTOR Framework - TODAS LAS FASES (1-7) Demo
 #include "reactor/reactor.hpp"
 #include "reactor/window.hpp"
 #include "reactor/vulkan_context.hpp"
@@ -6,6 +6,7 @@
 #include "reactor/material.hpp"
 #include "reactor/texture.hpp"
 #include "reactor/resource_manager.hpp"
+#include "simple_renderer.hpp"  // Módulo de rendering simple
 #include <iostream>
 #include <chrono>
 #include <cmath>
@@ -274,6 +275,10 @@ int main() {
         // Start scene
         scene.start();
         
+        // [OPCIONAL] SimpleRenderer - Módulo de rendering visual
+        // Fácil de comentar/descomentar para habilitar/deshabilitar
+        test_game::SimpleRenderer renderer(ctx, window);
+        
         while (!window.shouldClose()) {
             window.pollEvents();
             
@@ -314,15 +319,23 @@ int main() {
                 debugRenderer.render(camera.getProjectionMatrix() * camera.getViewMatrix());
             }
             
-            // Render frame - SIMPLE CLEAR COLOR
-            // TODO: Add proper rendering with pipelines
-            // Por ahora, solo mostramos un color de fondo que cambia
-            float r = (std::sin(angle * 0.01f) + 1.0f) * 0.5f;
-            float g = (std::cos(angle * 0.015f) + 1.0f) * 0.5f;
-            float b = (std::sin(angle * 0.02f + 1.0f) + 1.0f) * 0.5f;
-            
-            // Simular rendering (en una implementación real, aquí iría vkCmdClearColorImage, etc.)
-            // Por ahora el color cambia para mostrar que está funcionando
+            // [OPCIONAL] Render visual cube con SimpleRenderer
+            // Fácil de comentar para deshabilitar
+            {
+                renderer.beginFrame();
+                
+                // Color que cambia con el tiempo
+                float r = (std::sin(angle * 0.01f) + 1.0f) * 0.5f;
+                float g = (std::cos(angle * 0.015f) + 1.0f) * 0.5f;
+                float b = (std::sin(angle * 0.02f + 1.0f) + 1.0f) * 0.5f;
+                
+                Mat4 mvp = camera.getProjectionMatrix() * 
+                          camera.getViewMatrix() * 
+                          cubeTransform.getMatrix();
+                
+                renderer.drawCube(mvp, Vec3(r, g, b));
+                renderer.endFrame();
+            }
             
             // Calcular matrices MVP - CÓDIGO MUY CORTO
             Mat4 mvp = camera.getProjectionMatrix() * 
