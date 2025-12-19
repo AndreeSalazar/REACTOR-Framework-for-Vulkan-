@@ -160,21 +160,8 @@ inline float SmoothIntersect(float d1, float d2, float k) {
 
 } // namespace operations
 
-/**
- * @brief SDF Scene - Colección de primitivas con operaciones CSG
- */
-class SDFScene {
-public:
-    struct Primitive {
-        enum class Type {
-            Sphere,
-            Box,
-            Torus,
-            Cylinder,
-            Capsule,
-            Cone
-        };
-        
+// Note: SDFScene is defined in sdf_primitives.hpp
+// Use #include "reactor/sdf/sdf_primitives.hpp" for full SDF scene support
         Type type;
         glm::vec3 center;
         glm::vec3 params;  // radius, size, etc.

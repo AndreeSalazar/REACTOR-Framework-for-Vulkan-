@@ -280,6 +280,17 @@ REACTOR (Framework for Vulkan)/
 1. ⏳ GPU Language (.gpu parser)
 2. ⏳ Hot reload system
 3. ⏳ Profiling tools
+4. ✅ **KILLER TRIANGLE System** ⭐ INTEGRADO
+   - ✅ SDF Core integrado en REACTOR (7 primitivas)
+   - ✅ Ray marching compute shader (8x8 local size)
+   - ✅ Ejemplo killer-triangle con 5 modos
+   - ✅ Wireframe mode 🔥 (sin triángulos)
+   - ✅ CSG operations (union, subtraction, intersection)
+   - ✅ Normal calculation analítico
+   - ✅ Documentación completa
+   - 🔄 Retopología inteligente (próximo)
+   - 🔄 Hybrid rendering (próximo)
+   - Ver KILLER_TRIANGLE.md y KILLER_TRIANGLE_INTEGRATION.md
 4. ⏳ Benchmark suite
 
 ---

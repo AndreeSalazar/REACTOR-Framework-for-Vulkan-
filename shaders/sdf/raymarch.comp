@@ -1,0 +1,259 @@
+#version 450
+
+// Killer Triangle System - Ray Marching Compute Shader
+// Rendering SIN triángulos tradicionales usando SDF matemáticas
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0, rgba8) uniform writeonly image2D outputImage;
+
+layout(push_constant) uniform PushConstants {
+    mat4 invViewProj;
+    vec3 cameraPos;
+    float time;
+    ivec2 resolution;
+    int debugMode;  // 0=normal, 1=wireframe, 2=distance, 3=steps
+} pc;
+
+// ============================================================================
+// SDF Primitives - Funciones matemáticas puras (sin vértices)
+// ============================================================================
+
+float sdSphere(vec3 p, float r) {
+    return length(p) - r;
+}
+
+float sdBox(vec3 p, vec3 b) {
+    vec3 q = abs(p) - b;
+    return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
+}
+
+float sdTorus(vec3 p, vec2 t) {
+    vec2 q = vec2(length(p.xz) - t.x, p.y);
+    return length(q) - t.y;
+}
+
+float sdCapsule(vec3 p, vec3 a, vec3 b, float r) {
+    vec3 pa = p - a, ba = b - a;
+    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    return length(pa - ba * h) - r;
+}
+
+float sdPlane(vec3 p, vec3 n) {
+    return dot(p, n);
+}
+
+// ============================================================================
+// CSG Operations
+// ============================================================================
+
+float opUnion(float d1, float d2) {
+    return min(d1, d2);
+}
+
+float opSubtraction(float d1, float d2) {
+    return max(-d1, d2);
+}
+
+float opIntersection(float d1, float d2) {
+    return max(d1, d2);
+}
+
+float opSmoothUnion(float d1, float d2, float k) {
+    float h = clamp(0.5 + 0.5 * (d2 - d1) / k, 0.0, 1.0);
+    return mix(d2, d1, h) - k * h * (1.0 - h);
+}
+
+// ============================================================================
+// Scene SDF - Define tu escena aquí
+// ============================================================================
+
+float sceneSDF(vec3 p) {
+    // Plano del suelo
+    float ground = sdPlane(p - vec3(0, -2, 0), vec3(0, 1, 0));
+    
+    // Esfera central animada
+    vec3 spherePos = vec3(sin(pc.time) * 2.0, 0, 0);
+    float sphere = sdSphere(p - spherePos, 1.0);
+    
+    // Box rotando
+    vec3 boxPos = vec3(0, 0, 3);
+    float angle = pc.time * 0.5;
+    mat2 rot = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
+    vec3 boxP = p - boxPos;
+    boxP.xz = rot * boxP.xz;
+    float box = sdBox(boxP, vec3(0.8));
+    
+    // Torus
+    vec3 torusPos = vec3(-3, 0, 0);
+    float torus = sdTorus(p - torusPos, vec2(1.0, 0.3));
+    
+    // Cápsula
+    vec3 capsulePos = vec3(3, 0, 0);
+    float capsule = sdCapsule(p - capsulePos, vec3(0, -1, 0), vec3(0, 1, 0), 0.4);
+    
+    // Combinar todo con smooth union
+    float scene = opSmoothUnion(sphere, box, 0.5);
+    scene = opSmoothUnion(scene, torus, 0.5);
+    scene = opSmoothUnion(scene, capsule, 0.5);
+    scene = opUnion(scene, ground);
+    
+    return scene;
+}
+
+// ============================================================================
+// Normal Calculation - Analítico (sin sampling de geometría)
+// ============================================================================
+
+vec3 calculateNormal(vec3 p) {
+    const float h = 0.0001;
+    const vec2 k = vec2(1, -1);
+    return normalize(
+        k.xyy * sceneSDF(p + k.xyy * h) +
+        k.yyx * sceneSDF(p + k.yyx * h) +
+        k.yxy * sceneSDF(p + k.yxy * h) +
+        k.xxx * sceneSDF(p + k.xxx * h)
+    );
+}
+
+// ============================================================================
+// Ray Marching - El corazón del Killer Triangle System
+// ============================================================================
+
+struct RayMarchResult {
+    bool hit;
+    vec3 position;
+    vec3 normal;
+    float distance;
+    int steps;
+};
+
+RayMarchResult rayMarch(vec3 ro, vec3 rd) {
+    RayMarchResult result;
+    result.hit = false;
+    result.distance = 0.0;
+    result.steps = 0;
+    
+    const int MAX_STEPS = 128;
+    const float MAX_DIST = 100.0;
+    const float EPSILON = 0.001;
+    
+    for (int i = 0; i < MAX_STEPS; i++) {
+        result.steps = i;
+        vec3 p = ro + rd * result.distance;
+        
+        float d = sceneSDF(p);
+        
+        if (d < EPSILON) {
+            result.hit = true;
+            result.position = p;
+            result.normal = calculateNormal(p);
+            break;
+        }
+        
+        if (result.distance > MAX_DIST) {
+            break;
+        }
+        
+        result.distance += d;
+    }
+    
+    return result;
+}
+
+// ============================================================================
+// Lighting - Phong shading
+// ============================================================================
+
+vec3 calculateLighting(vec3 pos, vec3 normal, vec3 viewDir) {
+    vec3 lightDir = normalize(vec3(1, 1, 1));
+    vec3 lightColor = vec3(1.0, 0.95, 0.9);
+    
+    // Ambient
+    vec3 ambient = vec3(0.1, 0.1, 0.15);
+    
+    // Diffuse
+    float diff = max(dot(normal, lightDir), 0.0);
+    vec3 diffuse = diff * lightColor;
+    
+    // Specular
+    vec3 reflectDir = reflect(-lightDir, normal);
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
+    vec3 specular = spec * lightColor * 0.5;
+    
+    return ambient + diffuse + specular;
+}
+
+// ============================================================================
+// Wireframe Visualization
+// ============================================================================
+
+vec3 getWireframeColor(vec3 pos, vec3 normal) {
+    // Crear grid 3D para efecto wireframe
+    vec3 grid = abs(fract(pos) - 0.5);
+    float minGrid = min(min(grid.x, grid.y), grid.z);
+    
+    // Líneas más gruesas en los bordes
+    float lineWidth = 0.05;
+    float line = smoothstep(lineWidth - 0.01, lineWidth, minGrid);
+    
+    // Color base según normal
+    vec3 baseColor = normal * 0.5 + 0.5;
+    vec3 lineColor = vec3(0.0, 1.0, 1.0); // Cyan para wireframe
+    
+    return mix(lineColor, baseColor, line);
+}
+
+// ============================================================================
+// Main Compute Shader
+// ============================================================================
+
+void main() {
+    ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
+    
+    if (pixelCoord.x >= pc.resolution.x || pixelCoord.y >= pc.resolution.y) {
+        return;
+    }
+    
+    // Calcular ray direction
+    vec2 uv = (vec2(pixelCoord) + 0.5) / vec2(pc.resolution);
+    uv = uv * 2.0 - 1.0;
+    uv.y = -uv.y;
+    
+    vec4 target = pc.invViewProj * vec4(uv, 1, 1);
+    vec3 rayDir = normalize(target.xyz / target.w - pc.cameraPos);
+    
+    // Ray march la escena
+    RayMarchResult result = rayMarch(pc.cameraPos, rayDir);
+    
+    vec3 color = vec3(0.02, 0.02, 0.03); // Background oscuro
+    
+    if (result.hit) {
+        vec3 viewDir = -rayDir;
+        
+        if (pc.debugMode == 0) {
+            // Normal rendering con lighting
+            color = calculateLighting(result.position, result.normal, viewDir);
+        }
+        else if (pc.debugMode == 1) {
+            // Wireframe mode
+            color = getWireframeColor(result.position, result.normal);
+        }
+        else if (pc.debugMode == 2) {
+            // Distance visualization
+            float t = result.distance / 20.0;
+            color = vec3(t, 1.0 - t, 0.5);
+        }
+        else if (pc.debugMode == 3) {
+            // Steps visualization (performance)
+            float t = float(result.steps) / 128.0;
+            color = vec3(t, 1.0 - t * 0.5, 0.0);
+        }
+        else if (pc.debugMode == 4) {
+            // Normals RGB
+            color = result.normal * 0.5 + 0.5;
+        }
+    }
+    
+    imageStore(outputImage, pixelCoord, vec4(color, 1.0));
+}

@@ -111,7 +111,6 @@ else()
 endif()
 
 add_library(reactor STATIC
-  reactor/src/reactor.cpp
   reactor/src/vulkan_context.cpp
   reactor/src/memory_allocator.cpp
   reactor/src/buffer.cpp
@@ -123,9 +122,13 @@ add_library(reactor STATIC
   reactor/src/sync.cpp
   reactor/src/render_pass.cpp
   reactor/src/swapchain.cpp
-  # Stack-GPU-OP: SDF
+  # REACTOR Base Library - Complete Features
+  reactor/src/compute_pipeline.cpp
+  reactor/src/descriptor_manager.cpp
+  # Stack-GPU-OP: SDF (Killer Triangle System)
   reactor/src/sdf/primitives.cpp
   reactor/src/sdf/raymarcher.cpp
+  reactor/src/sdf/sdf_primitives.cpp
   # Stack-GPU-OP: ISR (Simplified Integration)
   reactor/src/isr/importance_simple.cpp
 )
@@ -164,3 +167,4 @@ add_subdirectory(examples/cube-simple)
 add_subdirectory(examples/sandbox)
 add_subdirectory(examples/stack-gpu-cube)
 add_subdirectory(examples/stack-gpu-isr)
+add_subdirectory(examples/killer-triangle)
