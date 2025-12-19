@@ -16,8 +16,8 @@ using Vec4 = glm::vec4;
 using Mat3 = glm::mat3;
 using Mat4 = glm::mat4;
 
-// Transform component (React-style)
-struct Transform {
+// Simple transform helper (deprecated - use scene/Transform component)
+struct SimpleTransform {
     Vec3 position{0.0f, 0.0f, 0.0f};
     Vec3 rotation{0.0f, 0.0f, 0.0f};  // Euler angles in radians
     Vec3 scale{1.0f, 1.0f, 1.0f};
@@ -33,15 +33,15 @@ struct Transform {
     }
 };
 
-// Camera component (React-style)
-struct Camera {
-    Vec3 position{0.0f, 0.0f, 3.0f};
+// Simple camera helper (deprecated - use scene/Camera component)
+struct SimpleCamera {
+    Vec3 position{0.0f, 2.0f, 5.0f};
     Vec3 target{0.0f, 0.0f, 0.0f};
     Vec3 up{0.0f, 1.0f, 0.0f};
-    float fov = 45.0f;
-    float aspectRatio = 16.0f / 9.0f;
-    float nearPlane = 0.1f;
-    float farPlane = 100.0f;
+    float fov{45.0f};
+    float aspectRatio{16.0f / 9.0f};
+    float nearPlane{0.1f};
+    float farPlane{100.0f};
     
     Mat4 getViewMatrix() const {
         return glm::lookAt(position, target, up);

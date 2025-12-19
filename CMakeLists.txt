@@ -64,6 +64,19 @@ if(NOT glm_FOUND)
     endif()
 endif()
 
+# Descargar ImGui para UI System (FASE 6) - Última versión estable
+message(STATUS "Downloading ImGui latest stable version...")
+include(FetchContent)
+FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG v1.91.5
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(imgui)
+set(IMGUI_DIR "${imgui_SOURCE_DIR}")
+message(STATUS "ImGui v1.91.5 downloaded to: ${IMGUI_DIR}")
+
 # Buscar GLFW (opcional)
 find_package(glfw3 QUIET)
 if(NOT glfw3_FOUND)
@@ -135,6 +148,26 @@ add_library(reactor STATIC
   reactor/src/mesh.cpp
   reactor/src/material.cpp
   reactor/src/resource_manager.cpp
+  # FASE 3 - SCENE & COMPONENTS
+  reactor/src/scene/entity.cpp
+  reactor/src/scene/transform.cpp
+  reactor/src/scene/camera.cpp
+  reactor/src/scene/scene.cpp
+  # FASE 4 - ADVANCED RENDERING
+  reactor/src/rendering/light.cpp
+  reactor/src/rendering/shadow_map.cpp
+  reactor/src/rendering/post_process.cpp
+  reactor/src/rendering/particle_system.cpp
+  # FASE 5 - GAMEPLAY
+  reactor/src/gameplay/physics.cpp
+  reactor/src/gameplay/animation.cpp
+  reactor/src/gameplay/audio.cpp
+  reactor/src/gameplay/input.cpp
+  # FASE 6 - TOOLS & DEBUG
+  reactor/src/tools/debug_renderer.cpp
+  reactor/src/tools/profiler.cpp
+  reactor/src/tools/serialization.cpp
+  reactor/src/tools/ui_system.cpp
   # Stack-GPU-OP: SDF (Killer Triangle System)
   reactor/src/sdf/primitives.cpp
   reactor/src/sdf/raymarcher.cpp
@@ -148,10 +181,23 @@ if(REACTOR_HAS_WINDOW)
     target_sources(reactor PRIVATE reactor/src/window.cpp)
     target_link_libraries(reactor PUBLIC glfw)
     target_compile_definitions(reactor PUBLIC REACTOR_HAS_WINDOW=1)
+    
+    # Agregar ImGui sources cuando GLFW está disponible
+    target_sources(reactor PRIVATE
+        ${IMGUI_DIR}/imgui.cpp
+        ${IMGUI_DIR}/imgui_draw.cpp
+        ${IMGUI_DIR}/imgui_tables.cpp
+        ${IMGUI_DIR}/imgui_widgets.cpp
+        ${IMGUI_DIR}/imgui_demo.cpp
+        ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+        ${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
+    )
 endif()
 
 target_include_directories(reactor PUBLIC
   reactor/include
+  ${IMGUI_DIR}
+  ${IMGUI_DIR}/backends
 )
 
 # Agregar GLM includes si está disponible

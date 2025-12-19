@@ -50,6 +50,33 @@
 #include "reactor/material.hpp"
 #include "reactor/resource_manager.hpp"
 
+// FASE 3 - SCENE & COMPONENTS
+#include "reactor/scene/component.hpp"
+#include "reactor/scene/transform.hpp"
+#include "reactor/scene/camera.hpp"
+#include "reactor/scene/entity.hpp"
+#include "reactor/scene/entity_impl.hpp"
+#include "reactor/scene/scene.hpp"
+
+// FASE 4 - ADVANCED RENDERING
+#include "reactor/rendering/light.hpp"
+#include "reactor/rendering/shadow_map.hpp"
+#include "reactor/rendering/post_process.hpp"
+#include "reactor/rendering/post_process_impl.hpp"
+#include "reactor/rendering/particle_system.hpp"
+
+// FASE 5 - GAMEPLAY
+#include "reactor/gameplay/physics.hpp"
+#include "reactor/gameplay/animation.hpp"
+#include "reactor/gameplay/audio.hpp"
+#include "reactor/gameplay/input.hpp"
+
+// FASE 6 - TOOLS & DEBUG
+#include "reactor/tools/ui_system.hpp"
+#include "reactor/tools/debug_renderer.hpp"
+#include "reactor/tools/profiler.hpp"
+#include "reactor/tools/serialization.hpp"
+
 // Window (si disponible)
 #ifdef REACTOR_HAS_WINDOW
 #include "reactor/window.hpp"
