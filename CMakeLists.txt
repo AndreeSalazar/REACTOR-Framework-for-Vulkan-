@@ -177,6 +177,8 @@ add_library(reactor STATIC
   reactor/src/rendering/easy_renderer.cpp
   # GAME LAYER - Final abstraction (A->B->C)
   reactor/src/game/game.cpp
+  # EDITOR LAYER - Visual Editor (Blender + UE5 style)
+  reactor/src/editor/editor.cpp
   # Stack-GPU-OP: SDF (Killer Triangle System)
   reactor/src/sdf/primitives.cpp
   reactor/src/sdf/raymarcher.cpp

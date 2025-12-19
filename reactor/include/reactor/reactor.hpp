@@ -89,6 +89,9 @@
 // GAME LAYER - Final abstraction (A->B->C)
 #include "reactor/game/game.hpp"
 
+// EDITOR LAYER - Visual Editor (Blender + UE5 style)
+#include "reactor/editor/editor.hpp"
+
 // Window (si disponible)
 #ifdef REACTOR_HAS_WINDOW
 #include "reactor/window.hpp"

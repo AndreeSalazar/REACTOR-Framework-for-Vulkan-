@@ -18,6 +18,7 @@ class VulkanContext {
   VkDevice device() const { return dev; }
   VkPhysicalDevice physical() const { return phys; }
   VkQueue graphicsQueue() const { return gfxQueue; }
+  uint32_t graphicsQueueFamily() const { return indices.graphics.value(); }
   QueueFamilyIndices queueFamilyIndices() const { return indices; }
   std::shared_ptr<MemoryAllocator> allocator() const { return alloc; }
  private:

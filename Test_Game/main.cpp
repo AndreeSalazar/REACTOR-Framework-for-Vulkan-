@@ -279,6 +279,9 @@ int main() {
         // Fácil de comentar/descomentar para habilitar/deshabilitar
         test_game::SimpleRenderer renderer(ctx, window);
         
+        // Establecer color de fondo visible (azul oscuro)
+        renderer.setClearColor(0.1f, 0.2f, 0.4f);
+        
         while (!window.shouldClose()) {
             window.pollEvents();
             

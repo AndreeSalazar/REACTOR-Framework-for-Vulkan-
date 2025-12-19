@@ -3,6 +3,7 @@
 #include "../vulkan_context.hpp"
 #include <memory>
 #include <vector>
+#include <string>
 
 namespace reactor {
 
@@ -47,6 +48,7 @@ private:
     uint32_t currentFrame{0};
     
     // Vulkan objects (encapsulados)
+    VkSurfaceKHR surface{VK_NULL_HANDLE};
     VkSwapchainKHR swapchain{VK_NULL_HANDLE};
     std::vector<VkImage> swapchainImages;
     std::vector<VkImageView> swapchainImageViews;
@@ -90,7 +92,11 @@ private:
     
     // Helpers
     VkShaderModule createShaderModule(const std::vector<char>& code);
+    std::vector<char> readFile(const std::string& filename);
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, 
+                     VkMemoryPropertyFlags properties, VkBuffer& buffer, 
+                     VkDeviceMemory& bufferMemory);
 };
 
 /**

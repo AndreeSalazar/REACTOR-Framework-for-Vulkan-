@@ -26,37 +26,14 @@ public:
 private:
     reactor::VulkanContext& ctx;
     reactor::Window& window;
-    
-    // Vulkan objects (encapsulados - fácil de eliminar)
-    VkSwapchainKHR swapchain{VK_NULL_HANDLE};
-    std::vector<VkImage> swapchainImages;
-    std::vector<VkImageView> swapchainImageViews;
-    VkFormat swapchainFormat;
-    VkExtent2D swapchainExtent;
-    
-    VkRenderPass renderPass{VK_NULL_HANDLE};
-    std::vector<VkFramebuffer> framebuffers;
-    
-    VkPipeline pipeline{VK_NULL_HANDLE};
-    VkPipelineLayout pipelineLayout{VK_NULL_HANDLE};
-    
-    VkCommandPool commandPool{VK_NULL_HANDLE};
-    std::vector<VkCommandBuffer> commandBuffers;
-    
-    VkSemaphore imageAvailableSemaphore{VK_NULL_HANDLE};
-    VkSemaphore renderFinishedSemaphore{VK_NULL_HANDLE};
-    VkFence inFlightFence{VK_NULL_HANDLE};
-    
-    uint32_t currentImageIndex{0};
     reactor::Vec3 clearColor{0.1f, 0.1f, 0.1f};
     
-    // Helper methods
-    void createSwapchain();
-    void createRenderPass();
-    void createFramebuffers();
-    void createPipeline();
-    void createCommandBuffers();
-    void createSyncObjects();
+    // EasyRenderer (FASE 8) hace todo el trabajo
+    reactor::EasyRenderer* easyRenderer{nullptr};
+    
+    // Geometría del cubo
+    std::vector<float> cubeVertices;
+    std::vector<uint16_t> cubeIndices;
     
     void cleanup();
 };
