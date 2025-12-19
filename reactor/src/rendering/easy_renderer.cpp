@@ -207,9 +207,9 @@ void EasyRenderer::createFramebuffers() {
 void EasyRenderer::createPipeline() {
     std::cout << "[EasyRenderer] Creando pipeline real con shaders..." << std::endl;
     
-    // Cargar shaders compilados
-    auto vertShaderCode = readFile("Test_Game/shaders/cube.vert.spv");
-    auto fragShaderCode = readFile("Test_Game/shaders/cube.frag.spv");
+    // Cargar shaders compilados (desde directorio de ejecución)
+    auto vertShaderCode = readFile("cube.vert.spv");
+    auto fragShaderCode = readFile("cube.frag.spv");
     
     VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
     VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
@@ -424,14 +424,26 @@ void EasyRenderer::createBuffers(const void* vertices, size_t vertexSize,
 }
 
 void EasyRenderer::beginFrame() {
-    if (!ready) return;
+    if (!ready) {
+        std::cout << "[EasyRenderer] beginFrame: NOT READY!" << std::endl;
+        return;
+    }
+    
+    static int frameLog = 0;
+    if (frameLog++ % 60 == 0) {
+        std::cout << "[EasyRenderer] Frame " << currentFrame << " - beginFrame()" << std::endl;
+    }
     
     // Wait for fence
     vkWaitForFences(ctx.device(), 1, &inFlightFence, VK_TRUE, UINT64_MAX);
     vkResetFences(ctx.device(), 1, &inFlightFence);
     
     // Acquire next image
-    vkAcquireNextImageKHR(ctx.device(), swapchain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &currentImageIndex);
+    VkResult result = vkAcquireNextImageKHR(ctx.device(), swapchain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &currentImageIndex);
+    if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        std::cout << "[EasyRenderer] ERROR: vkAcquireNextImageKHR failed with code " << result << std::endl;
+        return;
+    }
     
     // Reset command buffer
     vkResetCommandBuffer(commandBuffers[currentImageIndex], 0);
@@ -509,8 +521,14 @@ void EasyRenderer::drawMesh(const void* vertices, size_t vertexCount,
                            const Mat4& mvp, const Vec3& color) {
     if (!ready) return;
     
+    static int drawLog = 0;
+    if (drawLog++ % 60 == 0) {
+        std::cout << "[EasyRenderer] drawMesh: " << vertexCount << " verts, " << indexCount << " indices" << std::endl;
+    }
+    
     // Crear buffers si no existen
     if (vertexBuffer == VK_NULL_HANDLE && vertices && indices) {
+        std::cout << "[EasyRenderer] Creating buffers on first draw..." << std::endl;
         size_t vertexSize = vertexCount * sizeof(float);
         size_t indexSize = indexCount * sizeof(uint16_t);
         createBuffers(vertices, vertexSize, indices, indexSize);

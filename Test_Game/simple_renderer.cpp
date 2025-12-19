@@ -15,12 +15,16 @@ SimpleRenderer::SimpleRenderer(reactor::VulkanContext& ctx, reactor::Window& win
     // Crear EasyRenderer (FASE 8) - hace todo el trabajo pesado
     easyRenderer = new reactor::EasyRenderer(ctx, window);
     
+    // Establecer color de fondo visible (azul oscuro) ANTES de crear geometría
+    easyRenderer->setClearColor(0.1f, 0.2f, 0.4f, 1.0f);
+    
     // Crear geometría del cubo
     reactor::QuickDraw::cube(cubeVertices, cubeIndices);
     
     std::cout << "[SimpleRenderer] ✓ Listo para renderizar con " 
               << cubeVertices.size()/6 << " vertices, " 
               << cubeIndices.size() << " indices" << std::endl;
+    std::cout << "[SimpleRenderer] Clear color: (0.1, 0.2, 0.4)" << std::endl;
 }
 
 SimpleRenderer::~SimpleRenderer() {
