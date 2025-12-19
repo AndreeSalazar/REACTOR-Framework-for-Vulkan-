@@ -4,6 +4,14 @@ add_executable(stack-gpu-cube
 )
 target_link_libraries(stack-gpu-cube PRIVATE reactor)
 
+# ISR Complete Integration Example
+add_executable(stack-gpu-cube-isr
+    main_isr.cpp
+    cube_renderer_isr.cpp
+)
+
+target_link_libraries(stack-gpu-cube-isr PRIVATE reactor)
+
 # Compilar shaders SDF
 find_program(GLSLC glslc HINTS $ENV{VULKAN_SDK}/Bin)
 

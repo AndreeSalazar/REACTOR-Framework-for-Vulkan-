@@ -126,7 +126,7 @@ add_library(reactor STATIC
   # Stack-GPU-OP: SDF
   reactor/src/sdf/primitives.cpp
   reactor/src/sdf/raymarcher.cpp
-  # Stack-GPU-OP: ISR
+  # Stack-GPU-OP: ISR (Simplified Integration)
   reactor/src/isr/importance_simple.cpp
 )
 

@@ -1,19 +1,18 @@
-#include "reactor/reactor.hpp"
-#include "reactor/vulkan_context.hpp"
 #include "reactor/window.hpp"
+#include "reactor/vulkan_context.hpp"
 #include "reactor/swapchain.hpp"
 #include "reactor/render_pass.hpp"
-#include "reactor/pipeline.hpp"
 #include "reactor/buffer.hpp"
 #include "reactor/command_buffer.hpp"
 #include "reactor/sync.hpp"
 #include "reactor/shader.hpp"
 #include "reactor/math.hpp"
-#include "cube_renderer.hpp"
+#include "cube_renderer_isr.hpp"
 #include <iostream>
 #include <chrono>
 #include <array>
 #include <iomanip>
+#include <thread>
 #include <windows.h>
 #include <GLFW/glfw3.h>
 
@@ -23,15 +22,15 @@ int main() {
         setvbuf(stdout, nullptr, _IOFBF, 1000);
         
         std::cout << "==========================================" << std::endl;
-        std::cout << "  Stack-GPU-OP: Debug Visualizer" << std::endl;
-        std::cout << "  Vulkan + ADead-GPU ISR" << std::endl;
+        std::cout << "  Stack-GPU-OP: ISR Complete Integration" << std::endl;
+        std::cout << "  Intelligent Shading Rate + Vulkan" << std::endl;
         std::cout << "==========================================" << std::endl;
         std::cout << std::endl;
         
         reactor::Window::init();
         
         reactor::WindowConfig config;
-        config.title = "Stack-GPU-OP - Cubo 3D (Vulkan + ISR Debug Visualizer)";
+        config.title = "Stack-GPU-OP - ISR Complete (Vulkan + ADead-ISR)";
         config.width = 1920;
         config.height = 1080;
         
@@ -73,9 +72,7 @@ int main() {
         depthViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         depthViewInfo.format = depthFormat;
         depthViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-        depthViewInfo.subresourceRange.baseMipLevel = 0;
         depthViewInfo.subresourceRange.levelCount = 1;
-        depthViewInfo.subresourceRange.baseArrayLayer = 0;
         depthViewInfo.subresourceRange.layerCount = 1;
         
         VkImageView depthView;
@@ -102,9 +99,9 @@ int main() {
         reactor::RenderPass renderPass(ctx.device(), attachments, true);
         std::cout << "[✓] Render pass creado (con depth)" << std::endl;
         
-        std::cout << "[3/5] Creando cube renderer..." << std::endl;
-        cube::CubeRenderer cubeRenderer(ctx, renderPass.handle(), config.width, config.height);
-        std::cout << "[✓] Cube renderer creado" << std::endl;
+        std::cout << "[ISR] Creando ISR Cube Renderer..." << std::endl;
+        cube::CubeRendererISR cubeRenderer(ctx, renderPass.handle(), config.width, config.height);
+        std::cout << "[✓] ISR Cube Renderer creado" << std::endl;
         
         std::vector<VkFramebuffer> framebuffers;
         for (size_t i = 0; i < swapchain.imageCount(); i++) {
@@ -118,8 +115,8 @@ int main() {
             fbInfo.renderPass = renderPass.handle();
             fbInfo.attachmentCount = static_cast<uint32_t>(attachmentViews.size());
             fbInfo.pAttachments = attachmentViews.data();
-            fbInfo.width = config.width;
-            fbInfo.height = config.height;
+            fbInfo.width = static_cast<uint32_t>(config.width);
+            fbInfo.height = static_cast<uint32_t>(config.height);
             fbInfo.layers = 1;
             
             VkFramebuffer fb;
@@ -139,7 +136,6 @@ int main() {
         std::vector<reactor::Semaphore> imageAvailable;
         std::vector<reactor::Semaphore> renderFinished;
         std::vector<reactor::Fence> inFlight;
-        
         for (int i = 0; i < MAX_FRAMES; i++) {
             imageAvailable.emplace_back(ctx.device());
             renderFinished.emplace_back(ctx.device());
@@ -154,25 +150,29 @@ int main() {
         
         reactor::Transform cubeTransform;
         int debugMode = 0;
+        bool enableISR = true;
         
         std::cout << std::endl;
         std::cout << "==========================================" << std::endl;
-        std::cout << "  Stack-GPU-OP Debug Visualizer Listo!" << std::endl;
-        std::cout << "==========================================" << std::endl;
-        std::cout << std::endl;
-        std::cout << "CONTROLES:" << std::endl;
-        std::cout << "  [1] Normal - Phong Shading" << std::endl;
-        std::cout << "  [2] Wireframe" << std::endl;
-        std::cout << "  [3] Normales RGB" << std::endl;
-        std::cout << "  [4] Depth Buffer" << std::endl;
-        std::cout << "  [5] ISR: Importance Map" << std::endl;
-        std::cout << "  [6] ISR: Pixel Sizing" << std::endl;
-        std::cout << "  [7] ISR: Temporal" << std::endl;
+        std::cout << "  CONTROLES:" << std::endl;
+        std::cout << "  [1-7] Cambiar modo de visualización" << std::endl;
+        std::cout << "  [I]   Toggle ISR On/Off" << std::endl;
         std::cout << "  [ESC] Salir" << std::endl;
-        std::cout << std::endl;
-        std::cout << "Modo: [1] Normal" << std::endl;
         std::cout << "==========================================" << std::endl;
         std::cout << std::endl;
+        std::cout << "  MODOS:" << std::endl;
+        std::cout << "  [1] Normal (Phong shading)" << std::endl;
+        std::cout << "  [2] Wireframe" << std::endl;
+        std::cout << "  [3] Normales" << std::endl;
+        std::cout << "  [4] Depth" << std::endl;
+        std::cout << "  [5] ISR: Importance Map" << std::endl;
+        std::cout << "  [6] ISR: Pixel Size" << std::endl;
+        std::cout << "  [7] ISR: Temporal Coherence" << std::endl;
+        std::cout << "==========================================" << std::endl;
+        std::cout << std::endl;
+        
+        const char* modes[] = {"[1] Normal", "[2] Wireframe", "[3] Normales", "[4] Depth", 
+                              "[5] ISR:Importance", "[6] ISR:PixelSize", "[7] ISR:Temporal"};
         
         size_t currentFrame = 0;
         auto startTime = std::chrono::high_resolution_clock::now();
@@ -184,16 +184,15 @@ int main() {
         while (!window.shouldClose()) {
             window.pollEvents();
             
-            // Check if window is minimized
             int width, height;
             glfwGetFramebufferSize(window.handle(), &width, &height);
             if (width == 0 || height == 0) {
-                // Window is minimized, skip rendering
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 continue;
             }
             
             static int lastMode = 0;
+            static bool lastISR = true;
             
             if (glfwGetKey(window.handle(), GLFW_KEY_1) == GLFW_PRESS) debugMode = 0;
             if (glfwGetKey(window.handle(), GLFW_KEY_2) == GLFW_PRESS) debugMode = 1;
@@ -202,14 +201,18 @@ int main() {
             if (glfwGetKey(window.handle(), GLFW_KEY_5) == GLFW_PRESS) debugMode = 4;
             if (glfwGetKey(window.handle(), GLFW_KEY_6) == GLFW_PRESS) debugMode = 5;
             if (glfwGetKey(window.handle(), GLFW_KEY_7) == GLFW_PRESS) debugMode = 6;
+            if (glfwGetKey(window.handle(), GLFW_KEY_I) == GLFW_PRESS) enableISR = !enableISR;
             
-            if (debugMode != lastMode) {
+            if (debugMode != lastMode || enableISR != lastISR) {
                 std::cout << "\n========================================" << std::endl;
                 std::cout << "MODO: ";
-                const char* modes[] = {"[1] Normal", "[2] Wireframe", "[3] Normales", "[4] Depth", "[5] ISR:Importance", "[6] ISR:PixelSize", "[7] ISR:Temporal"};
-                std::cout << modes[debugMode] << std::endl;
+                const char* modes[] = {"[1] Normal", "[2] Wireframe", "[3] Normales", "[4] Depth", 
+                                      "[5] ISR:Importance", "[6] ISR:PixelSize", "[7] ISR:Temporal"};
+                std::cout << modes[debugMode];
+                std::cout << " | ISR: " << (enableISR ? "ON" : "OFF") << std::endl;
                 std::cout << "========================================" << std::endl;
                 lastMode = debugMode;
+                lastISR = enableISR;
             }
             
             auto currentTime = std::chrono::high_resolution_clock::now();
@@ -234,16 +237,15 @@ int main() {
             cmd.reset();
             cmd.begin();
             
-            std::array<VkClearValue, 2> clearValues{};
-            clearValues[0].color = {{0.1f, 0.1f, 0.15f, 1.0f}};
-            clearValues[1].depthStencil = {1.0f, 0};
-            
             VkRenderPassBeginInfo rpInfo{};
             rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
             rpInfo.renderPass = renderPass.handle();
             rpInfo.framebuffer = framebuffers[imageIndex];
-            rpInfo.renderArea.offset = {0, 0};
-            rpInfo.renderArea.extent = swapchain.extent();
+            rpInfo.renderArea.extent.width = static_cast<uint32_t>(config.width);
+            rpInfo.renderArea.extent.height = static_cast<uint32_t>(config.height);
+            std::array<VkClearValue, 2> clearValues{};
+            clearValues[0].color = {{0.02f, 0.02f, 0.02f, 1.0f}};
+            clearValues[1].depthStencil = {1.0f, 0};
             rpInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
             rpInfo.pClearValues = clearValues.data();
             
@@ -252,7 +254,7 @@ int main() {
             glm::mat4 model = cubeTransform.getMatrix();
             glm::mat4 mvp = proj * view * model;
             
-            cubeRenderer.render(cmd, mvp, model, debugMode);
+            cubeRenderer.render(cmd, mvp, model, debugMode, enableISR);
             
             vkCmdEndRenderPass(cmd.handle());
             cmd.end();
@@ -264,9 +266,9 @@ int main() {
             submitInfo.waitSemaphoreCount = 1;
             submitInfo.pWaitSemaphores = waitSems;
             submitInfo.pWaitDstStageMask = waitStages;
-            VkCommandBuffer cmdBuf = cmd.handle();
+            VkCommandBuffer cmdHandle = cmd.handle();
             submitInfo.commandBufferCount = 1;
-            submitInfo.pCommandBuffers = &cmdBuf;
+            submitInfo.pCommandBuffers = &cmdHandle;
             VkSemaphore signalSems[] = {renderFinished[currentFrame].handle()};
             submitInfo.signalSemaphoreCount = 1;
             submitInfo.pSignalSemaphores = signalSems;
@@ -278,10 +280,10 @@ int main() {
             auto fpsDuration = std::chrono::duration<float>(currentTime - lastFpsTime).count();
             if (fpsDuration >= 0.5f) {
                 float fps = frameCount / fpsDuration;
-                const char* modes[] = {"Normal", "Wireframe", "Normales", "Depth", "ISR:Importance", "ISR:PixelSize", "ISR:Temporal"};
-                std::string title = "Stack-GPU-OP | FPS: " + std::to_string(static_cast<int>(fps)) + " | " + modes[debugMode];
-                window.setTitle(title);
-                std::cout << "\rFPS: " << static_cast<int>(fps) << " | Modo: " << modes[debugMode] << "     " << std::flush;
+                std::cout << "\rFPS: " << static_cast<int>(fps) 
+                         << " | Modo: " << modes[debugMode]
+                         << " | ISR: " << (enableISR ? "ON " : "OFF")
+                         << std::flush;
                 frameCount = 0;
                 lastFpsTime = currentTime;
             }
@@ -294,17 +296,16 @@ int main() {
         for (auto fb : framebuffers) {
             vkDestroyFramebuffer(ctx.device(), fb, nullptr);
         }
+        vkDestroyImageView(ctx.device(), depthView, nullptr);
+        vkDestroyImage(ctx.device(), depthImage, nullptr);
         
-        vkDestroySurfaceKHR(ctx.instance(), surface, nullptr);
-        ctx.shutdown();
         reactor::Window::terminate();
         
-        std::cout << std::endl << "[✓] Stack-GPU-OP finalizado" << std::endl;
+        std::cout << std::endl << "[✓] Stack-GPU-OP ISR finalizado" << std::endl;
         return 0;
         
     } catch (const std::exception& e) {
-        std::cerr << "❌ Error: " << e.what() << std::endl;
-        reactor::Window::terminate();
+        std::cerr << "ERROR: " << e.what() << std::endl;
         return 1;
     }
 }
