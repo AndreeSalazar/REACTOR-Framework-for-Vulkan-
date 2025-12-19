@@ -1,9 +1,11 @@
 #include "reactor/rendering/easy_renderer.hpp"
+#include "reactor/vulkan_context.hpp"
 #include "reactor/window.hpp"
 #include <iostream>
 #include <cstring>
 #include <algorithm>
 #include <fstream>
+#include <array>
 
 namespace reactor {
 
@@ -130,7 +132,7 @@ void EasyRenderer::createSwapchain() {
 }
 
 void EasyRenderer::createRenderPass() {
-    std::cout << "[EasyRenderer] Creando render pass real..." << std::endl;
+    std::cout << "[EasyRenderer] Creando render pass con depth buffer..." << std::endl;
     
     // Color attachment
     VkAttachmentDescription colorAttachment{};
@@ -143,30 +145,47 @@ void EasyRenderer::createRenderPass() {
     colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     
+    // Depth attachment
+    VkAttachmentDescription depthAttachment{};
+    depthAttachment.format = depthFormat;
+    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    
     VkAttachmentReference colorAttachmentRef{};
     colorAttachmentRef.attachment = 0;
     colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     
-    // Subpass
+    VkAttachmentReference depthAttachmentRef{};
+    depthAttachmentRef.attachment = 1;
+    depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    
+    // Subpass con depth
     VkSubpassDescription subpass{};
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &colorAttachmentRef;
+    subpass.pDepthStencilAttachment = &depthAttachmentRef;
     
     // Dependency
     VkSubpassDependency dependency{};
     dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
     dependency.dstSubpass = 0;
-    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
     dependency.srcAccessMask = 0;
-    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     
-    // Crear render pass
+    // Crear render pass con ambos attachments
+    std::array<VkAttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
     VkRenderPassCreateInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = 1;
-    renderPassInfo.pAttachments = &colorAttachment;
+    renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+    renderPassInfo.pAttachments = attachments.data();
     renderPassInfo.subpassCount = 1;
     renderPassInfo.pSubpasses = &subpass;
     renderPassInfo.dependencyCount = 1;
@@ -176,22 +195,76 @@ void EasyRenderer::createRenderPass() {
         throw std::runtime_error("Failed to create render pass");
     }
     
-    std::cout << "  ✓ Render pass creado" << std::endl;
+    std::cout << "  ✓ Render pass creado con depth buffer" << std::endl;
 }
 
 void EasyRenderer::createFramebuffers() {
-    std::cout << "[EasyRenderer] Creando framebuffers reales..." << std::endl;
+    std::cout << "[EasyRenderer] Creando depth buffer y framebuffers..." << std::endl;
     
+    // Crear depth image
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.extent.width = swapchainExtent.width;
+    imageInfo.extent.height = swapchainExtent.height;
+    imageInfo.extent.depth = 1;
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.format = depthFormat;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    
+    if (vkCreateImage(ctx.device(), &imageInfo, nullptr, &depthImage) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create depth image");
+    }
+    
+    // Allocate memory for depth image
+    VkMemoryRequirements memRequirements;
+    vkGetImageMemoryRequirements(ctx.device(), depthImage, &memRequirements);
+    
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    
+    if (vkAllocateMemory(ctx.device(), &allocInfo, nullptr, &depthImageMemory) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate depth image memory");
+    }
+    
+    vkBindImageMemory(ctx.device(), depthImage, depthImageMemory, 0);
+    
+    // Create depth image view
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = depthImage;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = depthFormat;
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = 1;
+    
+    if (vkCreateImageView(ctx.device(), &viewInfo, nullptr, &depthImageView) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create depth image view");
+    }
+    
+    std::cout << "  ✓ Depth buffer creado" << std::endl;
+    
+    // Crear framebuffers con color + depth
     framebuffers.resize(swapchainImageViews.size());
     
     for (size_t i = 0; i < swapchainImageViews.size(); i++) {
-        VkImageView attachments[] = {swapchainImageViews[i]};
+        std::array<VkImageView, 2> attachments = {swapchainImageViews[i], depthImageView};
         
         VkFramebufferCreateInfo framebufferInfo{};
         framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         framebufferInfo.renderPass = renderPass;
-        framebufferInfo.attachmentCount = 1;
-        framebufferInfo.pAttachments = attachments;
+        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        framebufferInfo.pAttachments = attachments.data();
         framebufferInfo.width = swapchainExtent.width;
         framebufferInfo.height = swapchainExtent.height;
         framebufferInfo.layers = 1;
@@ -279,14 +352,14 @@ void EasyRenderer::createPipeline() {
     viewportState.scissorCount = 1;
     viewportState.pScissors = &scissor;
     
-    // Rasterizer
+    // Rasterizer - con back-face culling para cubo sólido
     VkPipelineRasterizationStateCreateInfo rasterizer{};
     rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizer.depthClampEnable = VK_FALSE;
     rasterizer.rasterizerDiscardEnable = VK_FALSE;
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizer.lineWidth = 1.0f;
-    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;  // Culling para cubo sólido
     rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.depthBiasEnable = VK_FALSE;
     
@@ -295,6 +368,15 @@ void EasyRenderer::createPipeline() {
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampling.sampleShadingEnable = VK_FALSE;
     multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    
+    // Depth testing - CRÍTICO para 3D correcto
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable = VK_TRUE;
+    depthStencil.depthWriteEnable = VK_TRUE;
+    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+    depthStencil.depthBoundsTestEnable = VK_FALSE;
+    depthStencil.stencilTestEnable = VK_FALSE;
     
     // Color blending
     VkPipelineColorBlendAttachmentState colorBlendAttachment{};
@@ -308,9 +390,16 @@ void EasyRenderer::createPipeline() {
     colorBlending.attachmentCount = 1;
     colorBlending.pAttachments = &colorBlendAttachment;
     
-    // Pipeline layout
+    // Pipeline layout con push constants para MVP
+    VkPushConstantRange pushConstantRange{};
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    pushConstantRange.offset = 0;
+    pushConstantRange.size = sizeof(Mat4); // 64 bytes para matriz 4x4
+    
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+    pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
     
     if (vkCreatePipelineLayout(ctx.device(), &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create pipeline layout");
@@ -453,7 +542,7 @@ void EasyRenderer::beginFrame() {
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     vkBeginCommandBuffer(commandBuffers[currentImageIndex], &beginInfo);
     
-    // Begin render pass
+    // Begin render pass con clear values para color y depth
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderPassInfo.renderPass = renderPass;
@@ -461,10 +550,12 @@ void EasyRenderer::beginFrame() {
     renderPassInfo.renderArea.offset = {0, 0};
     renderPassInfo.renderArea.extent = swapchainExtent;
     
-    VkClearValue clearValue{};
-    clearValue.color = {{this->clearColor.r, this->clearColor.g, this->clearColor.b, this->clearColor.a}};
-    renderPassInfo.clearValueCount = 1;
-    renderPassInfo.pClearValues = &clearValue;
+    // Clear values: color + depth
+    std::array<VkClearValue, 2> clearValues{};
+    clearValues[0].color = {{this->clearColor.r, this->clearColor.g, this->clearColor.b, this->clearColor.a}};
+    clearValues[1].depthStencil = {1.0f, 0};  // Depth = 1.0 (far), Stencil = 0
+    renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+    renderPassInfo.pClearValues = clearValues.data();
     
     vkCmdBeginRenderPass(commandBuffers[currentImageIndex], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 }
@@ -536,6 +627,10 @@ void EasyRenderer::drawMesh(const void* vertices, size_t vertexCount,
     
     // Bind pipeline
     vkCmdBindPipeline(commandBuffers[currentImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    
+    // Push MVP matrix como push constant
+    vkCmdPushConstants(commandBuffers[currentImageIndex], pipelineLayout, 
+                      VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Mat4), &mvp);
     
     // Bind vertex buffer
     VkBuffer vertexBuffers[] = {vertexBuffer};
@@ -672,28 +767,57 @@ void EasyRenderer::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
     vkBindBufferMemory(ctx.device(), buffer, bufferMemory, 0);
 }
 
-// QuickDraw implementation
+// QuickDraw implementation - Cubo completo estilo LunarG
 void QuickDraw::cube(std::vector<float>& vertices, std::vector<uint16_t>& indices) {
-    // Cubo simple con colores
+    // 24 vértices (4 por cara) con colores grises distintos por cara
+    // Formato: X, Y, Z, R, G, B
+    float g1 = 0.6f, g2 = 0.5f, g3 = 0.4f, g4 = 0.45f, g5 = 0.55f, g6 = 0.35f;
+    
     vertices = {
-        // Pos X, Y, Z, Color R, G, B
-        -0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  // 0
-         0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  // 1
-         0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  // 2
-        -0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  // 3
-        -0.5f, -0.5f, -0.5f,  0.0f, 1.0f, 0.0f,  // 4
-         0.5f, -0.5f, -0.5f,  0.0f, 1.0f, 0.0f,  // 5
-         0.5f,  0.5f, -0.5f,  0.0f, 1.0f, 0.0f,  // 6
-        -0.5f,  0.5f, -0.5f,  0.0f, 1.0f, 0.0f,  // 7
+        // Front face (Z+) - gris claro
+        -0.5f, -0.5f,  0.5f,  g1, g1, g1,  // 0
+         0.5f, -0.5f,  0.5f,  g1, g1, g1,  // 1
+         0.5f,  0.5f,  0.5f,  g1, g1, g1,  // 2
+        -0.5f,  0.5f,  0.5f,  g1, g1, g1,  // 3
+        
+        // Back face (Z-) - gris medio
+        -0.5f, -0.5f, -0.5f,  g2, g2, g2,  // 4
+        -0.5f,  0.5f, -0.5f,  g2, g2, g2,  // 5
+         0.5f,  0.5f, -0.5f,  g2, g2, g2,  // 6
+         0.5f, -0.5f, -0.5f,  g2, g2, g2,  // 7
+        
+        // Top face (Y+) - gris más claro
+        -0.5f,  0.5f, -0.5f,  g3, g3, g3,  // 8
+        -0.5f,  0.5f,  0.5f,  g3, g3, g3,  // 9
+         0.5f,  0.5f,  0.5f,  g3, g3, g3,  // 10
+         0.5f,  0.5f, -0.5f,  g3, g3, g3,  // 11
+        
+        // Bottom face (Y-) - gris oscuro
+        -0.5f, -0.5f, -0.5f,  g4, g4, g4,  // 12
+         0.5f, -0.5f, -0.5f,  g4, g4, g4,  // 13
+         0.5f, -0.5f,  0.5f,  g4, g4, g4,  // 14
+        -0.5f, -0.5f,  0.5f,  g4, g4, g4,  // 15
+        
+        // Right face (X+) - gris medio-claro
+         0.5f, -0.5f, -0.5f,  g5, g5, g5,  // 16
+         0.5f,  0.5f, -0.5f,  g5, g5, g5,  // 17
+         0.5f,  0.5f,  0.5f,  g5, g5, g5,  // 18
+         0.5f, -0.5f,  0.5f,  g5, g5, g5,  // 19
+        
+        // Left face (X-) - gris oscuro
+        -0.5f, -0.5f, -0.5f,  g6, g6, g6,  // 20
+        -0.5f, -0.5f,  0.5f,  g6, g6, g6,  // 21
+        -0.5f,  0.5f,  0.5f,  g6, g6, g6,  // 22
+        -0.5f,  0.5f, -0.5f,  g6, g6, g6,  // 23
     };
     
     indices = {
-        0, 1, 2, 2, 3, 0,  // Front
-        4, 5, 6, 6, 7, 4,  // Back
-        0, 4, 7, 7, 3, 0,  // Left
-        1, 5, 6, 6, 2, 1,  // Right
-        3, 2, 6, 6, 7, 3,  // Top
-        0, 1, 5, 5, 4, 0,  // Bottom
+        0,  1,  2,   2,  3,  0,   // Front
+        4,  5,  6,   6,  7,  4,   // Back
+        8,  9,  10,  10, 11, 8,   // Top
+        12, 13, 14,  14, 15, 12,  // Bottom
+        16, 17, 18,  18, 19, 16,  // Right
+        20, 21, 22,  22, 23, 20,  // Left
     };
 }
 

@@ -204,12 +204,18 @@ int main() {
         std::cout << "      ✓ Material Wireframe creado" << std::endl;
         std::cout << "      ✓ Materiales en cache: " << resources.getMaterialCount() << std::endl;
         
+        // Cámara con mejor perspectiva 3D
         SimpleCamera camera;
-        camera.position = Vec3(2.0f, 2.0f, 2.0f);
+        camera.position = Vec3(3.5f, 2.5f, 3.5f);  // Más alejada para mejor vista
         camera.target = Vec3(0.0f, 0.0f, 0.0f);
+        camera.fov = 45.0f;  // Campo de visión para perspectiva
         camera.aspectRatio = 1280.0f / 720.0f;
+        camera.nearPlane = 0.1f;
+        camera.farPlane = 100.0f;
         
         SimpleTransform cubeTransform;
+        cubeTransform.position = Vec3(0.0f, 0.0f, 0.0f);  // Centrado en el origen
+        cubeTransform.scale = Vec3(1.0f, 1.0f, 1.0f);     // Tamaño normal
         std::cout << "      ✓ Escena configurada" << std::endl;
         
         // Input callbacks - CÓDIGO MUY CORTO
@@ -279,8 +285,8 @@ int main() {
         // Fácil de comentar/descomentar para habilitar/deshabilitar
         test_game::SimpleRenderer renderer(ctx, window);
         
-        // Establecer color de fondo visible (azul oscuro)
-        renderer.setClearColor(0.1f, 0.2f, 0.4f);
+        // Establecer color de fondo negro como LunarG example
+        renderer.setClearColor(0.1f, 0.1f, 0.15f);
         
         while (!window.shouldClose()) {
             window.pollEvents();
@@ -290,12 +296,16 @@ int main() {
             float deltaTime = std::chrono::duration<float>(currentTime - lastFpsTime).count();
             
             if (shouldRotate) {
-                angle += deltaTime * rotationSpeed * 50.0f;
-                cubeTransform.rotation.y = glm::radians(angle);
+                angle += deltaTime * rotationSpeed * 15.0f;  // Velocidad lenta como LunarG
+                
+                // Rotación estilo LunarG - principalmente en Y con ligera inclinación
+                cubeTransform.rotation.x = glm::radians(-20.0f);  // Inclinación fija hacia arriba
+                cubeTransform.rotation.y = glm::radians(angle);    // Rotación principal suave
+                cubeTransform.rotation.z = glm::radians(0.0f);
                 
                 // Update scene entities
-                cube1->transform().setRotationDegrees(0, angle, 0);
-                cube2->transform().setRotationDegrees(0, -angle, 0);
+                cube1->transform().setRotationDegrees(-20.0f, angle, 0.0f);
+                cube2->transform().setRotationDegrees(-20.0f, -angle, 0.0f);
             }
             
             // FASE 6: Profiling

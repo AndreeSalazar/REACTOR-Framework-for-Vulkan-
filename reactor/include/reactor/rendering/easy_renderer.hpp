@@ -58,6 +58,12 @@ private:
     VkRenderPass renderPass{VK_NULL_HANDLE};
     std::vector<VkFramebuffer> framebuffers;
     
+    // Depth buffer
+    VkImage depthImage{VK_NULL_HANDLE};
+    VkDeviceMemory depthImageMemory{VK_NULL_HANDLE};
+    VkImageView depthImageView{VK_NULL_HANDLE};
+    VkFormat depthFormat{VK_FORMAT_D32_SFLOAT};
+    
     VkPipelineLayout pipelineLayout{VK_NULL_HANDLE};
     VkPipeline pipeline{VK_NULL_HANDLE};
     
