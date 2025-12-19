@@ -62,7 +62,6 @@
 #include "reactor/rendering/light.hpp"
 #include "reactor/rendering/shadow_map.hpp"
 #include "reactor/rendering/post_process.hpp"
-#include "reactor/rendering/post_process_impl.hpp"
 #include "reactor/rendering/particle_system.hpp"
 
 // FASE 5 - GAMEPLAY

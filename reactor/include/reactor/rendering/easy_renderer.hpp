@@ -64,6 +64,15 @@ private:
     VkImageView depthImageView{VK_NULL_HANDLE};
     VkFormat depthFormat{VK_FORMAT_D32_SFLOAT};
     
+    // MSAA (Anti-Aliasing) - 4x samples para bordes suaves
+    VkSampleCountFlagBits msaaSamples{VK_SAMPLE_COUNT_4_BIT};
+    VkImage msaaColorImage{VK_NULL_HANDLE};
+    VkDeviceMemory msaaColorMemory{VK_NULL_HANDLE};
+    VkImageView msaaColorImageView{VK_NULL_HANDLE};
+    VkImage msaaDepthImage{VK_NULL_HANDLE};
+    VkDeviceMemory msaaDepthMemory{VK_NULL_HANDLE};
+    VkImageView msaaDepthImageView{VK_NULL_HANDLE};
+    
     VkPipelineLayout pipelineLayout{VK_NULL_HANDLE};
     VkPipeline pipeline{VK_NULL_HANDLE};
     

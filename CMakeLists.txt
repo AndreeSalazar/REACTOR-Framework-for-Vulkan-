@@ -185,6 +185,8 @@ add_library(reactor STATIC
   reactor/src/sdf/sdf_primitives.cpp
   # Stack-GPU-OP: ISR (Simplified Integration)
   reactor/src/isr/importance_simple.cpp
+  # Advanced Features (Complemento para EasyRenderer)
+  reactor/src/rendering/advanced_features.cpp
 )
 
 # Agregar window.cpp si GLFW está disponible

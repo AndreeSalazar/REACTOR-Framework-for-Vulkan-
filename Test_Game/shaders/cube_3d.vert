@@ -9,9 +9,13 @@ layout(push_constant) uniform PushConstants {
 
 layout(location = 0) out vec3 fragColor;
 layout(location = 1) out vec3 fragNormal;
+layout(location = 2) out vec3 fragWorldPos;
 
 void main() {
     gl_Position = push.mvp * vec4(inPosition, 1.0);
+    
+    // Pasar posición para SDF anti-aliasing
+    fragWorldPos = inPosition;
     
     // Calcular normal basada en la posición del vértice (para cubo centrado en origen)
     vec3 absPos = abs(inPosition);

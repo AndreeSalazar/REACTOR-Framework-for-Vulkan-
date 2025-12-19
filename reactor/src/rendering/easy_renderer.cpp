@@ -363,10 +363,11 @@ void EasyRenderer::createPipeline() {
     rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.depthBiasEnable = VK_FALSE;
     
-    // Multisampling
+    // Multisampling - Sample shading para mejor anti-aliasing
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampling.sampleShadingEnable = VK_FALSE;
+    multisampling.sampleShadingEnable = VK_TRUE;  // Habilitar sample shading
+    multisampling.minSampleShading = 0.2f;        // Mínimo 20% de samples
     multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
     
     // Depth testing - CRÍTICO para 3D correcto
@@ -657,42 +658,110 @@ void EasyRenderer::setWireframe(bool enabled) {
 void EasyRenderer::cleanup() {
     std::cout << "[EasyRenderer] Limpiando recursos..." << std::endl;
     
-    vkDeviceWaitIdle(ctx.device());
+    // Esperar a que el device termine todas las operaciones
+    if (ctx.device() != VK_NULL_HANDLE) {
+        vkDeviceWaitIdle(ctx.device());
+    }
     
+    // Limpiar sync objects primero
+    if (imageAvailableSemaphore != VK_NULL_HANDLE) {
+        vkDestroySemaphore(ctx.device(), imageAvailableSemaphore, nullptr);
+        imageAvailableSemaphore = VK_NULL_HANDLE;
+    }
+    if (renderFinishedSemaphore != VK_NULL_HANDLE) {
+        vkDestroySemaphore(ctx.device(), renderFinishedSemaphore, nullptr);
+        renderFinishedSemaphore = VK_NULL_HANDLE;
+    }
+    if (inFlightFence != VK_NULL_HANDLE) {
+        vkDestroyFence(ctx.device(), inFlightFence, nullptr);
+        inFlightFence = VK_NULL_HANDLE;
+    }
+    
+    // Limpiar buffers
     if (vertexBuffer != VK_NULL_HANDLE) {
         vkDestroyBuffer(ctx.device(), vertexBuffer, nullptr);
+        vertexBuffer = VK_NULL_HANDLE;
+    }
+    if (vertexBufferMemory != VK_NULL_HANDLE) {
         vkFreeMemory(ctx.device(), vertexBufferMemory, nullptr);
+        vertexBufferMemory = VK_NULL_HANDLE;
     }
     
     if (indexBuffer != VK_NULL_HANDLE) {
         vkDestroyBuffer(ctx.device(), indexBuffer, nullptr);
+        indexBuffer = VK_NULL_HANDLE;
+    }
+    if (indexBufferMemory != VK_NULL_HANDLE) {
         vkFreeMemory(ctx.device(), indexBufferMemory, nullptr);
+        indexBufferMemory = VK_NULL_HANDLE;
     }
     
-    if (pipeline != VK_NULL_HANDLE) vkDestroyPipeline(ctx.device(), pipeline, nullptr);
-    if (pipelineLayout != VK_NULL_HANDLE) vkDestroyPipelineLayout(ctx.device(), pipelineLayout, nullptr);
+    // Limpiar pipeline
+    if (pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(ctx.device(), pipeline, nullptr);
+        pipeline = VK_NULL_HANDLE;
+    }
+    if (pipelineLayout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(ctx.device(), pipelineLayout, nullptr);
+        pipelineLayout = VK_NULL_HANDLE;
+    }
     
-    if (commandPool != VK_NULL_HANDLE) vkDestroyCommandPool(ctx.device(), commandPool, nullptr);
+    // Limpiar command pool (libera command buffers automáticamente)
+    if (commandPool != VK_NULL_HANDLE) {
+        vkDestroyCommandPool(ctx.device(), commandPool, nullptr);
+        commandPool = VK_NULL_HANDLE;
+    }
+    commandBuffers.clear();
     
+    // Limpiar framebuffers
     for (auto framebuffer : framebuffers) {
-        vkDestroyFramebuffer(ctx.device(), framebuffer, nullptr);
+        if (framebuffer != VK_NULL_HANDLE) {
+            vkDestroyFramebuffer(ctx.device(), framebuffer, nullptr);
+        }
+    }
+    framebuffers.clear();
+    
+    // Limpiar depth buffer (CRÍTICO - faltaba antes)
+    if (depthImageView != VK_NULL_HANDLE) {
+        vkDestroyImageView(ctx.device(), depthImageView, nullptr);
+        depthImageView = VK_NULL_HANDLE;
+    }
+    if (depthImage != VK_NULL_HANDLE) {
+        vkDestroyImage(ctx.device(), depthImage, nullptr);
+        depthImage = VK_NULL_HANDLE;
+    }
+    if (depthImageMemory != VK_NULL_HANDLE) {
+        vkFreeMemory(ctx.device(), depthImageMemory, nullptr);
+        depthImageMemory = VK_NULL_HANDLE;
     }
     
-    if (renderPass != VK_NULL_HANDLE) vkDestroyRenderPass(ctx.device(), renderPass, nullptr);
+    // Limpiar render pass
+    if (renderPass != VK_NULL_HANDLE) {
+        vkDestroyRenderPass(ctx.device(), renderPass, nullptr);
+        renderPass = VK_NULL_HANDLE;
+    }
     
+    // Limpiar swapchain image views
     for (auto imageView : swapchainImageViews) {
-        vkDestroyImageView(ctx.device(), imageView, nullptr);
+        if (imageView != VK_NULL_HANDLE) {
+            vkDestroyImageView(ctx.device(), imageView, nullptr);
+        }
+    }
+    swapchainImageViews.clear();
+    
+    // Limpiar swapchain
+    if (swapchain != VK_NULL_HANDLE) {
+        vkDestroySwapchainKHR(ctx.device(), swapchain, nullptr);
+        swapchain = VK_NULL_HANDLE;
     }
     
-    if (swapchain != VK_NULL_HANDLE) vkDestroySwapchainKHR(ctx.device(), swapchain, nullptr);
+    // Limpiar surface (último recurso de instancia)
+    if (surface != VK_NULL_HANDLE) {
+        vkDestroySurfaceKHR(ctx.instance(), surface, nullptr);
+        surface = VK_NULL_HANDLE;
+    }
     
-    if (surface != VK_NULL_HANDLE) vkDestroySurfaceKHR(ctx.instance(), surface, nullptr);
-    
-    if (imageAvailableSemaphore != VK_NULL_HANDLE) vkDestroySemaphore(ctx.device(), imageAvailableSemaphore, nullptr);
-    if (renderFinishedSemaphore != VK_NULL_HANDLE) vkDestroySemaphore(ctx.device(), renderFinishedSemaphore, nullptr);
-    if (inFlightFence != VK_NULL_HANDLE) vkDestroyFence(ctx.device(), inFlightFence, nullptr);
-    
-    std::cout << "[EasyRenderer] ✓ Limpieza completada" << std::endl;
+    std::cout << "[EasyRenderer] ✓ Limpieza completada (todos los recursos liberados)" << std::endl;
 }
 
 VkShaderModule EasyRenderer::createShaderModule(const std::vector<char>& code) {

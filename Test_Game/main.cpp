@@ -120,7 +120,8 @@ int main() {
         
         // [10] Crear shadow maps
         std::cout << "[10/13] Creando shadow maps..." << std::endl;
-        ShadowMap shadowMap(ctx.allocator(), 2048, 2048);
+        ShadowMap shadowMap(ctx, 2048, 2048);
+        shadowMap.setLightDirection(Vec3(0.5f, -1.0f, 0.3f));
         std::cout << "      ✓ Shadow map: " << shadowMap.width() << "x" << shadowMap.height() << std::endl;
         
         // [11] Crear post-processing stack
