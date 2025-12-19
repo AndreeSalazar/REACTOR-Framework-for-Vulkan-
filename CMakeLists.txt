@@ -166,10 +166,25 @@ target_compile_definitions(reactor PUBLIC
 
 target_link_libraries(reactor PUBLIC Vulkan::Vulkan)
 
-# Examples
-add_subdirectory(examples/triangle)
-add_subdirectory(examples/cube-simple)
-add_subdirectory(examples/sandbox)
-add_subdirectory(examples/stack-gpu-cube)
-add_subdirectory(examples/stack-gpu-isr)
-add_subdirectory(examples/killer-triangle)
+# Examples (optional - only add if they exist)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/triangle")
+    add_subdirectory(examples/triangle)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/cube-simple")
+    add_subdirectory(examples/cube-simple)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/sandbox")
+    add_subdirectory(examples/sandbox)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/stack-gpu-cube")
+    add_subdirectory(examples/stack-gpu-cube)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/stack-gpu-isr")
+    add_subdirectory(examples/stack-gpu-isr)
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/killer-triangle")
+    add_subdirectory(examples/killer-triangle)
+endif()
+
+# Test Game - Isolated testing environment
+add_subdirectory(Test_Game)

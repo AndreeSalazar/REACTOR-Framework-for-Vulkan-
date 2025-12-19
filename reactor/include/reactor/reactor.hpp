@@ -33,7 +33,8 @@
 #include "reactor/image.hpp"
 #include "reactor/shader.hpp"
 #include "reactor/pipeline.hpp"
-#include "reactor/compute_pipeline.hpp"
+// Note: compute_pipeline.hpp has ComputePipelineBuilder for advanced users
+// #include "reactor/compute_pipeline.hpp"
 #include "reactor/descriptor.hpp"
 #include "reactor/descriptor_manager.hpp"
 #include "reactor/command_buffer.hpp"
@@ -51,11 +52,12 @@
 
 // SDF System (Killer Triangle)
 #include "reactor/sdf/sdf_primitives.hpp"
-#include "reactor/sdf/primitives.hpp"
-#include "reactor/sdf/raymarcher.hpp"
+// Note: primitives.hpp and raymarcher.hpp for advanced SDF usage
+// #include "reactor/sdf/primitives.hpp"
+// #include "reactor/sdf/raymarcher.hpp"
 
 // ISR System
-#include "reactor/isr/importance.hpp"
+// #include "reactor/isr/importance.hpp"
 
 /**
  * @namespace reactor
