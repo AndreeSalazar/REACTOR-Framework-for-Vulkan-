@@ -1,4 +1,5 @@
 #include "reactor/render_pass.hpp"
+#include "reactor/framebuffer.hpp"
 #include <stdexcept>
 
 namespace reactor {
@@ -125,51 +126,4 @@ RenderPass::Builder RenderPass::create(VkDevice device) {
     return Builder(device);
 }
 
-Framebuffer::Framebuffer(VkDevice device, VkRenderPass renderPass,
-                         const std::vector<VkImageView>& attachments,
-                         uint32_t width, uint32_t height)
-    : device(device), fbWidth(width), fbHeight(height) {
-    
-    VkFramebufferCreateInfo framebufferInfo{};
-    framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    framebufferInfo.renderPass = renderPass;
-    framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-    framebufferInfo.pAttachments = attachments.data();
-    framebufferInfo.width = width;
-    framebufferInfo.height = height;
-    framebufferInfo.layers = 1;
-    
-    if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &framebuffer) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create framebuffer");
-    }
-}
-
-Framebuffer::~Framebuffer() {
-    if (framebuffer != VK_NULL_HANDLE) {
-        vkDestroyFramebuffer(device, framebuffer, nullptr);
-    }
-}
-
-Framebuffer::Framebuffer(Framebuffer&& other) noexcept
-    : device(other.device)
-    , framebuffer(other.framebuffer)
-    , fbWidth(other.fbWidth)
-    , fbHeight(other.fbHeight) {
-    other.framebuffer = VK_NULL_HANDLE;
-}
-
-Framebuffer& Framebuffer::operator=(Framebuffer&& other) noexcept {
-    if (this != &other) {
-        if (framebuffer != VK_NULL_HANDLE) {
-            vkDestroyFramebuffer(device, framebuffer, nullptr);
-        }
-        device = other.device;
-        framebuffer = other.framebuffer;
-        fbWidth = other.fbWidth;
-        fbHeight = other.fbHeight;
-        other.framebuffer = VK_NULL_HANDLE;
-    }
-    return *this;
-}
-
-}
+} // namespace reactor

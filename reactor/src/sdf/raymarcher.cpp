@@ -26,7 +26,7 @@ RayMarcher::~RayMarcher() {
 }
 
 void RayMarcher::render(
-    CommandBuffer& commandBuffer,
+    VkCommandBuffer commandBuffer,
     const SDFScene& scene,
     const glm::mat4& view,
     const glm::mat4& proj
@@ -36,10 +36,10 @@ void RayMarcher::render(
     }
     
     // Bind pipeline
-    vkCmdBindPipeline(commandBuffer.handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->handle());
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->handle());
     
     // Draw fullscreen triangle (sin descriptors por ahora)
-    vkCmdDraw(commandBuffer.handle(), 3, 1, 0, 0);
+    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 }
 
 void RayMarcher::updateConfig(const Config& newConfig) {
@@ -73,7 +73,7 @@ void RayMarcher::createDescriptorSets() {
     // TODO: Implementar cuando tengamos allocator disponible
 }
 
-void RayMarcher::updateUniforms(const SDFScene& scene, const glm::mat4& view, const glm::mat4& proj) {
+void RayMarcher::updateUniforms(const SDFScene* scene, const glm::mat4& view, const glm::mat4& proj) {
     // Por ahora, placeholder - se implementará cuando tengamos allocator
 }
 

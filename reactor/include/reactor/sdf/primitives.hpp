@@ -160,65 +160,8 @@ inline float SmoothIntersect(float d1, float d2, float k) {
 
 } // namespace operations
 
-// Note: SDFScene is defined in sdf_primitives.hpp
-// Use #include "reactor/sdf/sdf_primitives.hpp" for full SDF scene support
-        Type type;
-        glm::vec3 center;
-        glm::vec3 params;  // radius, size, etc.
-        glm::vec3 color;
-    };
-    
-    struct Operation {
-        enum class Type {
-            Union,
-            Subtract,
-            Intersect,
-            SmoothUnion,
-            SmoothSubtract,
-            SmoothIntersect
-        };
-        
-        Type type;
-        float smoothness = 0.0f;  // Para smooth operations
-    };
-    
-    SDFScene() = default;
-    
-    // Builder pattern (React-style)
-    class Builder {
-    public:
-        Builder& addSphere(const Sphere& sphere);
-        Builder& addBox(const Box& box);
-        Builder& addTorus(const Torus& torus);
-        Builder& addCylinder(const Cylinder& cylinder);
-        Builder& addCapsule(const Capsule& capsule);
-        Builder& addCone(const Cone& cone);
-        
-        Builder& unionOp();
-        Builder& subtractOp();
-        Builder& intersectOp();
-        Builder& smoothUnionOp(float k);
-        Builder& smoothSubtractOp(float k);
-        Builder& smoothIntersectOp(float k);
-        
-        SDFScene build();
-        
-    private:
-        std::vector<Primitive> primitives;
-        std::vector<Operation> operations;
-    };
-    
-    static Builder create();
-    
-    const std::vector<Primitive>& getPrimitives() const { return primitives; }
-    const std::vector<Operation>& getOperations() const { return operations; }
-    
-private:
-    std::vector<Primitive> primitives;
-    std::vector<Operation> operations;
-    
-    friend class Builder;
-};
+// Forward declaration - SDFScene is defined in sdf_primitives.hpp
+class SDFScene;
 
 } // namespace sdf
 } // namespace reactor

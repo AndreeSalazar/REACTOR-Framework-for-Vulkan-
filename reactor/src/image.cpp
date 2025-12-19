@@ -1,4 +1,5 @@
 #include "reactor/image.hpp"
+#include "reactor/sampler.hpp"
 #include <stdexcept>
 
 namespace reactor {
@@ -145,76 +146,4 @@ Image::Builder Image::create(std::shared_ptr<MemoryAllocator> allocator) {
     return Builder(allocator);
 }
 
-Sampler::Sampler(VkDevice device, Filter filter, AddressMode addressMode, float maxAnisotropy)
-    : device(device) {
-    
-    VkSamplerCreateInfo samplerInfo{};
-    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = static_cast<VkFilter>(filter);
-    samplerInfo.minFilter = static_cast<VkFilter>(filter);
-    samplerInfo.addressModeU = static_cast<VkSamplerAddressMode>(addressMode);
-    samplerInfo.addressModeV = static_cast<VkSamplerAddressMode>(addressMode);
-    samplerInfo.addressModeW = static_cast<VkSamplerAddressMode>(addressMode);
-    samplerInfo.anisotropyEnable = maxAnisotropy > 1.0f ? VK_TRUE : VK_FALSE;
-    samplerInfo.maxAnisotropy = maxAnisotropy;
-    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-    samplerInfo.unnormalizedCoordinates = VK_FALSE;
-    samplerInfo.compareEnable = VK_FALSE;
-    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    
-    if (vkCreateSampler(device, &samplerInfo, nullptr, &sampler) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create sampler");
-    }
-}
-
-Sampler::~Sampler() {
-    if (sampler != VK_NULL_HANDLE) {
-        vkDestroySampler(device, sampler, nullptr);
-    }
-}
-
-Sampler::Sampler(Sampler&& other) noexcept
-    : device(other.device), sampler(other.sampler) {
-    other.sampler = VK_NULL_HANDLE;
-}
-
-Sampler& Sampler::operator=(Sampler&& other) noexcept {
-    if (this != &other) {
-        if (sampler != VK_NULL_HANDLE) {
-            vkDestroySampler(device, sampler, nullptr);
-        }
-        device = other.device;
-        sampler = other.sampler;
-        other.sampler = VK_NULL_HANDLE;
-    }
-    return *this;
-}
-
-Sampler::Builder::Builder(VkDevice device) : dev(device) {}
-
-Sampler::Builder& Sampler::Builder::filter(Filter minFilter, Filter magFilter) {
-    minFilt = minFilter;
-    magFilt = magFilter;
-    return *this;
-}
-
-Sampler::Builder& Sampler::Builder::addressMode(AddressMode mode) {
-    addrMode = mode;
-    return *this;
-}
-
-Sampler::Builder& Sampler::Builder::anisotropy(float maxAnisotropy) {
-    maxAniso = maxAnisotropy;
-    return *this;
-}
-
-Sampler Sampler::Builder::build() {
-    return Sampler(dev, minFilt, addrMode, maxAniso);
-}
-
-Sampler::Builder Sampler::create(VkDevice device) {
-    return Builder(device);
-}
-
-}
+} // namespace reactor

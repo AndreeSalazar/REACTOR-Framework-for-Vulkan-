@@ -46,27 +46,4 @@ private:
     VkRenderPass renderPass{VK_NULL_HANDLE};
 };
 
-class Framebuffer {
-public:
-    Framebuffer(VkDevice device, VkRenderPass renderPass, 
-                const std::vector<VkImageView>& attachments,
-                uint32_t width, uint32_t height);
-    ~Framebuffer();
-
-    Framebuffer(const Framebuffer&) = delete;
-    Framebuffer& operator=(const Framebuffer&) = delete;
-    Framebuffer(Framebuffer&& other) noexcept;
-    Framebuffer& operator=(Framebuffer&& other) noexcept;
-
-    VkFramebuffer handle() const { return framebuffer; }
-    uint32_t width() const { return fbWidth; }
-    uint32_t height() const { return fbHeight; }
-
-private:
-    VkDevice device;
-    VkFramebuffer framebuffer{VK_NULL_HANDLE};
-    uint32_t fbWidth;
-    uint32_t fbHeight;
-};
-
-}
+} // namespace reactor

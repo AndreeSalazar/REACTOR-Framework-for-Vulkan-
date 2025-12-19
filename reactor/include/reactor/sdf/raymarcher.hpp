@@ -1,4 +1,5 @@
 #pragma once
+#include <vulkan/vulkan.h>
 #include "primitives.hpp"
 #include "../pipeline.hpp"
 #include "../buffer.hpp"
@@ -41,7 +42,7 @@ public:
      * @param camera Cámara (view + projection matrices)
      */
     void render(
-        CommandBuffer& commandBuffer,
+        VkCommandBuffer commandBuffer,
         const SDFScene& scene,
         const glm::mat4& view,
         const glm::mat4& proj
@@ -97,7 +98,7 @@ private:
 
     void createPipeline();
     void createDescriptorSets();
-    void updateUniforms(const SDFScene& scene, const glm::mat4& view, const glm::mat4& proj);
+    void updateUniforms(const SDFScene* scene, const glm::mat4& view, const glm::mat4& proj);
 };
 
 } // namespace sdf

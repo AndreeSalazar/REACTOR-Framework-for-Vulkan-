@@ -41,6 +41,14 @@
 #include "reactor/sync.hpp"
 #include "reactor/render_pass.hpp"
 #include "reactor/swapchain.hpp"
+#include "reactor/framebuffer.hpp"
+#include "reactor/sampler.hpp"
+
+// FASE 2 - ASSETS & RESOURCES
+#include "reactor/texture.hpp"
+#include "reactor/mesh.hpp"
+#include "reactor/material.hpp"
+#include "reactor/resource_manager.hpp"
 
 // Window (si disponible)
 #ifdef REACTOR_HAS_WINDOW

@@ -130,6 +130,11 @@ add_library(reactor STATIC
   reactor/src/query_pool.cpp
   reactor/src/event.cpp
   reactor/src/pipeline_cache.cpp
+  # FASE 2 - ASSETS & RESOURCES
+  reactor/src/texture.cpp
+  reactor/src/mesh.cpp
+  reactor/src/material.cpp
+  reactor/src/resource_manager.cpp
   # Stack-GPU-OP: SDF (Killer Triangle System)
   reactor/src/sdf/primitives.cpp
   reactor/src/sdf/raymarcher.cpp

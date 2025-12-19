@@ -94,39 +94,4 @@ private:
     void createImageView();
 };
 
-class Sampler {
-public:
-    Sampler(VkDevice device, Filter filter, AddressMode addressMode, 
-            float maxAnisotropy = 1.0f);
-    ~Sampler();
-
-    Sampler(const Sampler&) = delete;
-    Sampler& operator=(const Sampler&) = delete;
-    Sampler(Sampler&& other) noexcept;
-    Sampler& operator=(Sampler&& other) noexcept;
-
-    VkSampler handle() const { return sampler; }
-
-    class Builder {
-    public:
-        Builder(VkDevice device);
-        Builder& filter(Filter minFilter, Filter magFilter);
-        Builder& addressMode(AddressMode mode);
-        Builder& anisotropy(float maxAnisotropy);
-        Sampler build();
-    private:
-        VkDevice dev;
-        Filter minFilt{Filter::Linear};
-        Filter magFilt{Filter::Linear};
-        AddressMode addrMode{AddressMode::Repeat};
-        float maxAniso{1.0f};
-    };
-
-    static Builder create(VkDevice device);
-
-private:
-    VkDevice device;
-    VkSampler sampler{VK_NULL_HANDLE};
-};
-
-}
+} // namespace reactor
