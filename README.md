@@ -13,7 +13,7 @@
 ```
 A (Vulkan/Ash) → B (Reactor) → C (Game)
   Unsafe           Safe           Simple
-  Raw bindings     RAII wrappers  ECS / Components
+  Raw bindings     RAII wrappers  ECS / Components  
 ```
 
 - **A (Ash)**: Bindings directos a Vulkan (`unsafe`).
