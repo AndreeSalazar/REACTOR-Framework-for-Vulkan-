@@ -81,6 +81,9 @@ struct AppState {
     reactor: Reactor,
     window: Arc<Window>,
     object_bounds: Vec<AABB>, // Bounds for culling/picking
+    base_object_count: usize, // Number of static objects (before particles)
+    particle_mesh: Arc<reactor::Mesh>,
+    particle_material: Arc<reactor::Material>,
 }
 
 // =============================================================================
@@ -253,11 +256,22 @@ impl ApplicationHandler for EliteApp {
         self.cube_tween = Some(Tween::new(0.0, std::f32::consts::TAU, 4.0)
             .with_easing(EasingFunction::EaseInOutCubic));
 
+        // Store base object count (before dynamic particle objects)
+        let base_object_count = scene.objects.len();
+
+        // Create small particle mesh (tiny cube)
+        let particle_verts = create_particle_vertices();
+        let particle_indices = create_particle_indices();
+        let particle_mesh = Arc::new(reactor.create_mesh(&particle_verts, &particle_indices).unwrap());
+
         self.state = Some(AppState {
             scene,
             reactor,
             window,
             object_bounds,
+            base_object_count,
+            particle_mesh,
+            particle_material: material,
         });
     }
 
@@ -284,6 +298,17 @@ impl ApplicationHandler for EliteApp {
                     let input = &state.reactor.input;
                     let move_speed = CAMERA_SPEED * dt;
 
+                    // Mouse look (hold right mouse button for free look like Blender)
+                    if input.is_mouse_down(winit::event::MouseButton::Right) {
+                        let mouse_delta = input.mouse_delta();
+                        let sensitivity = 0.005;
+                        self.camera_yaw -= mouse_delta.x * sensitivity;
+                        self.camera_pitch -= mouse_delta.y * sensitivity;
+                        // Clamp pitch to avoid gimbal lock
+                        self.camera_pitch = self.camera_pitch.clamp(-1.5, 1.5);
+                        self.camera.set_rotation(self.camera_yaw, self.camera_pitch);
+                    }
+
                     // Movement
                     if input.is_key_down(KeyCode::KeyW) {
                         self.camera.move_forward(move_speed);
@@ -302,6 +327,12 @@ impl ApplicationHandler for EliteApp {
                     }
                     if input.is_key_down(KeyCode::KeyC) {
                         self.camera.move_up(-move_speed);
+                    }
+
+                    // Scroll wheel for zoom
+                    let scroll = input.scroll_delta();
+                    if scroll.abs() > 0.0 {
+                        self.camera.move_forward(scroll * 0.5);
                     }
 
                     // ==========================================================
@@ -340,6 +371,32 @@ impl ApplicationHandler for EliteApp {
                     self.particles.retain(|p| !p.is_finished());
 
                     // ==========================================================
+                    // Render Particles as Scene Objects
+                    // ==========================================================
+                    // Remove old particle objects (keep only base objects)
+                    state.scene.objects.truncate(state.base_object_count);
+                    state.object_bounds.truncate(state.base_object_count);
+
+                    // Add particle objects to scene
+                    for particle_system in &self.particles {
+                        for particle in particle_system.particles() {
+                            if particle.alive {
+                                let scale = particle.size * 0.3;
+                                let transform = Mat4::from_scale_rotation_translation(
+                                    Vec3::splat(scale),
+                                    glam::Quat::IDENTITY,
+                                    particle.position
+                                );
+                                state.scene.add_object(
+                                    state.particle_mesh.clone(),
+                                    state.particle_material.clone(),
+                                    transform
+                                );
+                            }
+                        }
+                    }
+
+                    // ==========================================================
                     // Update Physics
                     // ==========================================================
                     let _physics_steps = self.physics.step(dt);
@@ -360,6 +417,35 @@ impl ApplicationHandler for EliteApp {
                 // ==========================================================
                 self.debug.clear();
                 
+                // Always show selected object highlight (green outline)
+                if let Some(idx) = self.selected_object {
+                    if idx < state.object_bounds.len() {
+                        let bounds = &state.object_bounds[idx];
+                        self.debug.aabb(
+                            &reactor::DebugAABB { min: bounds.min, max: bounds.max },
+                            Vec4::new(0.0, 1.0, 0.0, 1.0)
+                        );
+                    }
+                }
+
+                // Draw particle positions as colored points
+                for particle_system in &self.particles {
+                    for particle in particle_system.particles() {
+                        // Draw small cross at particle position
+                        let size = particle.size * 0.1;
+                        self.debug.line(
+                            particle.position - Vec3::X * size,
+                            particle.position + Vec3::X * size,
+                            particle.color
+                        );
+                        self.debug.line(
+                            particle.position - Vec3::Y * size,
+                            particle.position + Vec3::Y * size,
+                            particle.color
+                        );
+                    }
+                }
+
                 if self.show_debug {
                     // Draw grid
                     self.debug.grid(Vec3::new(0.0, -1.0, 0.0), 20.0, 20, Vec4::new(0.3, 0.3, 0.3, 1.0));
@@ -389,16 +475,13 @@ impl ApplicationHandler for EliteApp {
                         }
                     }
 
-                    // Draw selected object bounds
-                    if let Some(idx) = self.selected_object {
-                        if idx < state.object_bounds.len() {
-                            let bounds = &state.object_bounds[idx];
-                            self.debug.aabb(
-                                &reactor::DebugAABB { min: bounds.min, max: bounds.max },
-                                Vec4::new(0.0, 1.0, 0.0, 1.0)
-                            );
-                        }
-                    }
+                    // Draw camera info
+                    let cam_info = format!(
+                        "Camera: ({:.1}, {:.1}, {:.1}) Yaw: {:.1}° Pitch: {:.1}°",
+                        self.camera.position.x, self.camera.position.y, self.camera.position.z,
+                        self.camera_yaw.to_degrees(), self.camera_pitch.to_degrees()
+                    );
+                    println!("\r{}", cam_info);
                 }
 
                 // ==========================================================
@@ -437,23 +520,29 @@ impl ApplicationHandler for EliteApp {
                             println!("{}", if self.paused { "PAUSED" } else { "RESUMED" });
                         }
                         winit::keyboard::PhysicalKey::Code(KeyCode::Digit1) => {
+                            let spawn_pos = self.camera.position + self.camera.forward() * 3.0;
                             let mut fire = ParticleSystem::fire();
-                            fire.position = self.camera.position + self.camera.forward() * 2.0;
+                            fire.position = spawn_pos;
                             self.particles.push(fire);
-                            println!("Spawned FIRE particles");
+                            println!("🔥 FIRE spawned at ({:.1}, {:.1}, {:.1}) - {} total particle systems", 
+                                spawn_pos.x, spawn_pos.y, spawn_pos.z, self.particles.len());
                         }
                         winit::keyboard::PhysicalKey::Code(KeyCode::Digit2) => {
+                            let spawn_pos = self.camera.position + self.camera.forward() * 3.0;
                             let mut smoke = ParticleSystem::smoke();
-                            smoke.position = self.camera.position + self.camera.forward() * 2.0;
+                            smoke.position = spawn_pos;
                             self.particles.push(smoke);
-                            println!("Spawned SMOKE particles");
+                            println!("💨 SMOKE spawned at ({:.1}, {:.1}, {:.1}) - {} total particle systems", 
+                                spawn_pos.x, spawn_pos.y, spawn_pos.z, self.particles.len());
                         }
                         winit::keyboard::PhysicalKey::Code(KeyCode::Digit3) => {
+                            let spawn_pos = self.camera.position + self.camera.forward() * 4.0;
                             let mut explosion = ParticleSystem::explosion();
-                            explosion.position = self.camera.position + self.camera.forward() * 3.0;
+                            explosion.position = spawn_pos;
                             explosion.play();
                             self.particles.push(explosion);
-                            println!("Spawned EXPLOSION!");
+                            println!("💥 EXPLOSION spawned at ({:.1}, {:.1}, {:.1}) - {} total particle systems", 
+                                spawn_pos.x, spawn_pos.y, spawn_pos.z, self.particles.len());
                         }
                         _ => {}
                     }
@@ -488,11 +577,38 @@ impl ApplicationHandler for EliteApp {
                     }
 
                     if let Some((idx, t)) = closest_hit {
+                        // Deselect previous object (reset scale)
+                        if let Some(prev_idx) = self.selected_object {
+                            if prev_idx < state.scene.objects.len() && prev_idx != idx {
+                                // Reset previous object transform (remove scale boost)
+                                let current = state.scene.objects[prev_idx].transform;
+                                state.scene.objects[prev_idx].transform = 
+                                    Mat4::from_scale(Vec3::splat(1.0 / 1.2)) * current;
+                            }
+                        }
+                        
                         self.selected_object = Some(idx);
                         let hit_point = ray.point_at(t);
-                        println!("Selected object {} at {:?}", idx, hit_point);
+                        
+                        // Scale up selected object to show selection
+                        let current = state.scene.objects[idx].transform;
+                        state.scene.objects[idx].transform = 
+                            Mat4::from_scale(Vec3::splat(1.2)) * current;
+                        
+                        let name = state.scene.objects[idx].name.as_deref().unwrap_or("unnamed");
+                        println!("✓ Selected object {} ({}) at ({:.2}, {:.2}, {:.2})", 
+                            idx, name, hit_point.x, hit_point.y, hit_point.z);
                     } else {
+                        // Deselect current object
+                        if let Some(prev_idx) = self.selected_object {
+                            if prev_idx < state.scene.objects.len() {
+                                let current = state.scene.objects[prev_idx].transform;
+                                state.scene.objects[prev_idx].transform = 
+                                    Mat4::from_scale(Vec3::splat(1.0 / 1.2)) * current;
+                            }
+                        }
                         self.selected_object = None;
+                        println!("✗ No object selected");
                     }
                 }
             }
@@ -591,4 +707,32 @@ fn create_floor_vertices() -> Vec<Vertex> {
 
 fn create_floor_indices() -> Vec<u32> {
     vec![0, 1, 2, 2, 3, 0]
+}
+
+fn create_particle_vertices() -> Vec<Vertex> {
+    // Small bright particle cube
+    let color = Vec3::new(1.0, 0.8, 0.2); // Orange/yellow
+    vec![
+        // Front face
+        Vertex::new(Vec3::new(-0.05, -0.05,  0.05), color, Vec2::ZERO),
+        Vertex::new(Vec3::new( 0.05, -0.05,  0.05), color, Vec2::ZERO),
+        Vertex::new(Vec3::new( 0.05,  0.05,  0.05), color, Vec2::ZERO),
+        Vertex::new(Vec3::new(-0.05,  0.05,  0.05), color, Vec2::ZERO),
+        // Back face
+        Vertex::new(Vec3::new(-0.05, -0.05, -0.05), color, Vec2::ZERO),
+        Vertex::new(Vec3::new( 0.05, -0.05, -0.05), color, Vec2::ZERO),
+        Vertex::new(Vec3::new( 0.05,  0.05, -0.05), color, Vec2::ZERO),
+        Vertex::new(Vec3::new(-0.05,  0.05, -0.05), color, Vec2::ZERO),
+    ]
+}
+
+fn create_particle_indices() -> Vec<u32> {
+    vec![
+        0, 1, 2, 2, 3, 0, // Front
+        1, 5, 6, 6, 2, 1, // Right
+        5, 4, 7, 7, 6, 5, // Back
+        4, 0, 3, 3, 7, 4, // Left
+        3, 2, 6, 6, 7, 3, // Top
+        4, 5, 1, 1, 0, 4, // Bottom
+    ]
 }

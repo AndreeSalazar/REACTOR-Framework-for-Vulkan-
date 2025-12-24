@@ -79,6 +79,23 @@ impl Camera {
         self.rotation = self.rotation * Quat::from_rotation_x(angle);
     }
 
+    /// Set camera rotation from yaw and pitch angles (radians)
+    pub fn set_rotation(&mut self, yaw: f32, pitch: f32) {
+        self.rotation = Quat::from_euler(glam::EulerRot::YXZ, yaw, pitch, 0.0);
+    }
+
+    /// Get current yaw angle in radians
+    pub fn yaw(&self) -> f32 {
+        let (yaw, _, _) = self.rotation.to_euler(glam::EulerRot::YXZ);
+        yaw
+    }
+
+    /// Get current pitch angle in radians
+    pub fn pitch(&self) -> f32 {
+        let (_, pitch, _) = self.rotation.to_euler(glam::EulerRot::YXZ);
+        pitch
+    }
+
     pub fn move_forward(&mut self, distance: f32) {
         self.position += self.forward() * distance;
     }

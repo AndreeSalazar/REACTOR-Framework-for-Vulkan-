@@ -9,6 +9,7 @@ pub struct Input {
     pressed_mouse: HashSet<MouseButton>,
     mouse_pos: Vec2,
     mouse_delta: Vec2,
+    scroll_delta: f32,
 }
 
 impl Input {
@@ -18,11 +19,13 @@ impl Input {
             pressed_mouse: HashSet::new(),
             mouse_pos: Vec2::ZERO,
             mouse_delta: Vec2::ZERO,
+            scroll_delta: 0.0,
         }
     }
 
     pub fn begin_frame(&mut self) {
         self.mouse_delta = Vec2::ZERO;
+        self.scroll_delta = 0.0;
     }
 
     pub fn process_event(&mut self, event: &WindowEvent) {
@@ -51,6 +54,16 @@ impl Input {
                 self.mouse_delta = new_pos - self.mouse_pos;
                 self.mouse_pos = new_pos;
             }
+            WindowEvent::MouseWheel { delta, .. } => {
+                match delta {
+                    winit::event::MouseScrollDelta::LineDelta(_, y) => {
+                        self.scroll_delta = *y;
+                    }
+                    winit::event::MouseScrollDelta::PixelDelta(pos) => {
+                        self.scroll_delta = pos.y as f32 / 100.0;
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -69,5 +82,9 @@ impl Input {
 
     pub fn mouse_delta(&self) -> Vec2 {
         self.mouse_delta
+    }
+
+    pub fn scroll_delta(&self) -> f32 {
+        self.scroll_delta
     }
 }
