@@ -33,6 +33,9 @@ pub mod resources;
 pub mod systems;
 pub mod utils;
 
+// ADead-GPU Integration (ISR, SDF, Ray Marching, AA)
+pub mod adead;
+
 // =============================================================================
 // Legacy Re-exports (backwards compatibility)
 // =============================================================================
@@ -135,6 +138,34 @@ pub use systems::particles::{ParticleSystem, Particle, ParticleSystemConfig, Emi
 
 // Primitives
 pub use resources::primitives::Primitives;
+
+// =============================================================================
+// ADead-GPU Integration (ISR, SDF, Ray Marching, AA)
+// =============================================================================
+
+// ADead-ISR: Intelligent Shading Rate
+pub use adead::isr::{IntelligentShadingRate, ISRConfig, ImportanceLevel, ImportanceMap, ISRStats, ISRBenchmark};
+
+// ADead-SDF: Signed Distance Functions
+pub use adead::sdf::{
+    SDFPrimitive, SDFPrimitiveType,
+    sd_sphere, sd_box, sd_round_box, sd_cylinder, sd_torus, sd_capsule, sd_cone, sd_plane, sd_ellipsoid, sd_pyramid,
+    op_union, op_subtract, op_intersect, op_smooth_union, op_smooth_subtract, op_smooth_intersect,
+    op_translate, op_rotate, op_scale, op_repeat, op_repeat_limited, op_twist, op_bend,
+    calc_normal, calc_ao, calc_soft_shadow,
+};
+
+// ADead-RT: Ray Marching Engine
+pub use adead::raymarching::{RayMarcher, RayMarchConfig, RayMarchHit, SDFScene, RayMarchStats};
+
+// ADead-AA: Anti-Aliasing
+pub use adead::antialiasing::{SDFAntiAliasing, SDFAAConfig, SDFEdgeDetector, AAComparison, smoothstep, smootherstep};
+
+// ADead-Hybrid: Hybrid Rendering
+pub use adead::hybrid::{HybridRenderer, HybridObject, HybridStats, RenderMode, LODLevel, LODThresholds, ADeadBenchmark};
+
+// ADead-Integration: Sistema unificado
+pub use adead::integration::{ADeadSystem, ADeadConfig, ADeadStats, ADeadBenchmarkResult, QualityPreset};
 
 // =============================================================================
 // Prelude - Import everything commonly needed
