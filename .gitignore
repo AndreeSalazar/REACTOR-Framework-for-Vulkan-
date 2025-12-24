@@ -89,3 +89,8 @@ site/
 # Crash dumps
 *.dmp
 *.mdmp
+
+
+# Added by cargo
+
+/target
