@@ -10,17 +10,17 @@
 // =============================================================================
 
 use reactor::{
-    Reactor, Vertex, Scene,
+    Reactor, Scene,
     // ADead-GPU
-    IntelligentShadingRate, ISRConfig, ImportanceLevel, ISRBenchmark,
-    SDFPrimitive, SDFScene, RayMarcher, RayMarchConfig,
+    IntelligentShadingRate, ISRConfig, ISRBenchmark,
+    SDFPrimitive, SDFScene, RayMarcher,
     SDFAntiAliasing, AAComparison,
-    HybridRenderer, ADeadBenchmark, RenderMode,
-    sd_sphere, sd_box, op_smooth_union, calc_normal,
+    HybridRenderer, ADeadBenchmark,
     // Systems
     Camera, Time,
     CPUDetector, ResolutionDetector,
 };
+use reactor::Vertex;
 
 use winit::{
     application::ApplicationHandler,
@@ -151,8 +151,93 @@ impl ApplicationHandler for ADeadDemo {
         println!("║   ESC       - Exit                                               ║");
         println!("╚══════════════════════════════════════════════════════════════════╝");
 
-        // Create scene
-        let scene = Scene::new();
+        // Create scene with visual content
+        let mut scene = Scene::new();
+
+        // Load shaders
+        let vert_code = include_bytes!("../shaders/vert.spv");
+        let frag_code = include_bytes!("../shaders/frag.spv");
+        let vert_decoded = ash::util::read_spv(&mut std::io::Cursor::new(&vert_code[..])).unwrap();
+        let frag_decoded = ash::util::read_spv(&mut std::io::Cursor::new(&frag_code[..])).unwrap();
+        let material = std::sync::Arc::new(reactor.create_material(&vert_decoded, &frag_decoded).unwrap());
+
+        // Create floor
+        let floor_verts = create_floor_vertices();
+        let floor_indices = create_floor_indices();
+        let floor_mesh = std::sync::Arc::new(reactor.create_mesh(&floor_verts, &floor_indices).unwrap());
+        scene.add_object(
+            floor_mesh,
+            material.clone(),
+            glam::Mat4::from_scale_rotation_translation(
+                Vec3::new(20.0, 1.0, 20.0),
+                glam::Quat::IDENTITY,
+                Vec3::new(0.0, -1.0, 0.0)
+            )
+        );
+
+        // Create cubes representing SDF objects visually
+        let (cube_verts, cube_indices) = create_cube();
+        let cube_mesh = std::sync::Arc::new(reactor.create_mesh(&cube_verts, &cube_indices).unwrap());
+
+        // Red sphere representation (cube for now)
+        scene.add_object(
+            cube_mesh.clone(),
+            material.clone(),
+            glam::Mat4::from_scale_rotation_translation(
+                Vec3::splat(1.0),
+                glam::Quat::IDENTITY,
+                Vec3::new(0.0, 1.0, 0.0)
+            )
+        );
+
+        // Green cube
+        scene.add_object(
+            cube_mesh.clone(),
+            material.clone(),
+            glam::Mat4::from_scale_rotation_translation(
+                Vec3::splat(0.7),
+                glam::Quat::IDENTITY,
+                Vec3::new(3.0, 0.5, 0.0)
+            )
+        );
+
+        // Blue cylinder representation
+        scene.add_object(
+            cube_mesh.clone(),
+            material.clone(),
+            glam::Mat4::from_scale_rotation_translation(
+                Vec3::new(0.5, 1.5, 0.5),
+                glam::Quat::IDENTITY,
+                Vec3::new(-3.0, 1.0, 0.0)
+            )
+        );
+
+        // Yellow torus representation
+        scene.add_object(
+            cube_mesh.clone(),
+            material.clone(),
+            glam::Mat4::from_scale_rotation_translation(
+                Vec3::new(1.2, 0.3, 1.2),
+                glam::Quat::IDENTITY,
+                Vec3::new(0.0, 1.0, 3.0)
+            )
+        );
+
+        // Additional objects for visual richness
+        for i in 0..5 {
+            let angle = i as f32 * std::f32::consts::TAU / 5.0;
+            let x = angle.cos() * 6.0;
+            let z = angle.sin() * 6.0;
+            scene.add_object(
+                cube_mesh.clone(),
+                material.clone(),
+                glam::Mat4::from_scale_rotation_translation(
+                    Vec3::splat(0.5),
+                    glam::Quat::from_rotation_y(angle),
+                    Vec3::new(x, 0.5, z)
+                )
+            );
+        }
 
         // Initialize ADead systems
         self.isr = IntelligentShadingRate::new(width as u32, height as u32);
@@ -542,6 +627,49 @@ impl ADeadDemo {
         println!("\n");
         AAComparison::print_comparison();
     }
+}
+
+// =============================================================================
+// Helper Functions for Mesh Creation
+// =============================================================================
+
+fn create_cube() -> (Vec<Vertex>, Vec<u32>) {
+    let color = Vec3::new(0.8, 0.6, 0.4);
+    let vertices = vec![
+        // Front face
+        Vertex::new(Vec3::new(-0.5, -0.5,  0.5), color, Vec2::new(0.0, 0.0)),
+        Vertex::new(Vec3::new( 0.5, -0.5,  0.5), color, Vec2::new(1.0, 0.0)),
+        Vertex::new(Vec3::new( 0.5,  0.5,  0.5), color, Vec2::new(1.0, 1.0)),
+        Vertex::new(Vec3::new(-0.5,  0.5,  0.5), color, Vec2::new(0.0, 1.0)),
+        // Back face
+        Vertex::new(Vec3::new(-0.5, -0.5, -0.5), color, Vec2::new(0.0, 0.0)),
+        Vertex::new(Vec3::new( 0.5, -0.5, -0.5), color, Vec2::new(1.0, 0.0)),
+        Vertex::new(Vec3::new( 0.5,  0.5, -0.5), color, Vec2::new(1.0, 1.0)),
+        Vertex::new(Vec3::new(-0.5,  0.5, -0.5), color, Vec2::new(0.0, 1.0)),
+    ];
+    let indices = vec![
+        0, 1, 2, 2, 3, 0, // Front
+        1, 5, 6, 6, 2, 1, // Right
+        5, 4, 7, 7, 6, 5, // Back
+        4, 0, 3, 3, 7, 4, // Left
+        3, 2, 6, 6, 7, 3, // Top
+        4, 5, 1, 1, 0, 4, // Bottom
+    ];
+    (vertices, indices)
+}
+
+fn create_floor_vertices() -> Vec<Vertex> {
+    let color = Vec3::new(0.4, 0.5, 0.4);
+    vec![
+        Vertex::new(Vec3::new(-0.5, 0.0,  0.5), color, Vec2::new(0.0, 0.0)),
+        Vertex::new(Vec3::new( 0.5, 0.0,  0.5), color, Vec2::new(1.0, 0.0)),
+        Vertex::new(Vec3::new( 0.5, 0.0, -0.5), color, Vec2::new(1.0, 1.0)),
+        Vertex::new(Vec3::new(-0.5, 0.0, -0.5), color, Vec2::new(0.0, 1.0)),
+    ]
+}
+
+fn create_floor_indices() -> Vec<u32> {
+    vec![0, 1, 2, 2, 3, 0]
 }
 
 // =============================================================================

@@ -63,6 +63,13 @@ pub use core::allocator::MemoryAllocator;
 pub use core::command::CommandManager;
 pub use core::device::DeviceInfo;
 
+// FrameGraph (Deterministic Render Graph)
+pub use core::frame_graph::{FrameGraph, PassId, ResourceId, ResourceType, ResourceFormat, PassDesc, Barrier, FrameGraphStats};
+pub use core::frame_graph::{create_deferred_graph, create_forward_graph};
+
+// Importance Map (Universal Importance System)
+pub use core::importance_map::{ImportanceMap, ImportanceMapConfig, ImportanceTileData, ImportanceMapStats, ImportanceType};
+
 // Graphics
 pub use graphics::swapchain::Swapchain as SwapchainNew;
 pub use graphics::pipeline::{Pipeline as PipelineNew, PipelineConfig};
@@ -144,7 +151,7 @@ pub use resources::primitives::Primitives;
 // =============================================================================
 
 // ADead-ISR: Intelligent Shading Rate
-pub use adead::isr::{IntelligentShadingRate, ISRConfig, ImportanceLevel, ImportanceMap, ISRStats, ISRBenchmark};
+pub use adead::isr::{IntelligentShadingRate, ISRConfig, ImportanceLevel, ImportanceMap as ISRImportanceMap, ISRStats, ISRBenchmark};
 
 // ADead-SDF: Signed Distance Functions
 pub use adead::sdf::{

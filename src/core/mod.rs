@@ -6,8 +6,12 @@ pub mod device;
 pub mod surface;
 pub mod allocator;
 pub mod command;
+pub mod frame_graph;
+pub mod importance_map;
 
 pub use context::VulkanContext;
 pub use device::DeviceInfo;
 pub use allocator::MemoryAllocator;
 pub use command::CommandManager;
+pub use frame_graph::{FrameGraph, PassId, ResourceId, ResourceType, ResourceFormat, PassDesc, Barrier, FrameGraphStats};
+pub use importance_map::{ImportanceMap, ImportanceMapConfig, ImportanceTileData, ImportanceMapStats, ImportanceType};
