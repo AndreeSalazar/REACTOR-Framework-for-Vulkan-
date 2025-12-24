@@ -187,6 +187,13 @@ pub use adead::hybrid::{HybridRenderer, HybridObject, HybridStats, RenderMode, L
 // ADead-Integration: Sistema unificado
 pub use adead::integration::{ADeadSystem, ADeadConfig, ADeadStats, ADeadBenchmarkResult, QualityPreset};
 
+// ADead-AA: Sistema de Anti-Aliasing Avanzado (Epic-Liasing)
+pub use adead::adead_aa::{
+    ADeadAA, ADeadAAConfig, ADeadAAQuality, ADeadAAStats,
+    epic_smoothstep, ultra_smoothstep,
+    epic_edge_coverage, epic_blend_colors, epic_edge_alpha,
+};
+
 // =============================================================================
 // Prelude - Import everything commonly needed
 // =============================================================================

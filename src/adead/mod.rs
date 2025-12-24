@@ -25,6 +25,7 @@ pub mod raymarching;
 pub mod antialiasing;
 pub mod hybrid;
 pub mod integration;
+pub mod adead_aa;
 
 pub use isr::*;
 pub use sdf::*;
@@ -32,3 +33,4 @@ pub use raymarching::*;
 pub use antialiasing::*;
 pub use hybrid::*;
 pub use integration::*;
+pub use adead_aa::*;
