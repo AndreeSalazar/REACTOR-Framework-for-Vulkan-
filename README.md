@@ -24,13 +24,13 @@ A (Vulkan/Ash) → B (Reactor) → C (Game)
 
 | Módulo | Características |
 |--------|-----------------|
-| **Core** | VulkanContext, Device, Allocator, CommandManager |
-| **Graphics** | Swapchain, Pipeline, RenderPass, Framebuffer, Buffer, Image, Sampler, Descriptors, DepthBuffer, MSAA |
+| **Core** | VulkanContext, Device, Allocator, CommandManager, Surface |
+| **Graphics** | Swapchain, Pipeline, RenderPass, Framebuffer, Buffer, Image, Sampler, Descriptors, DepthBuffer, MSAA, **UniformBuffers**, **DebugRenderer**, **PostProcessing** |
 | **Ray Tracing** | RayTracingContext, AccelerationStructure, RayTracingPipeline, ShaderBindingTable |
-| **Compute** | ComputePipeline, ComputeDispatch |
-| **Resources** | Mesh, Material, Texture, Vertex, Model |
-| **Systems** | Input, ECS (World/Entity/Component), Scene, Camera, Transform |
-| **Utils** | GPUDetector, CPUDetector, ResolutionDetector, Time |
+| **Compute** | ComputePipeline, ComputeDispatch, Barriers |
+| **Resources** | Mesh, Material, Texture, Vertex, Model, **Primitives** (Cube, Sphere, Plane, Cylinder, Cone, Torus) |
+| **Systems** | Input, ECS, Scene, Camera, Transform, **Lighting**, **Physics**, **FrustumCulling**, **Animation**, **Particles**, **Audio** |
+| **Utils** | GPUDetector, CPUDetector, ResolutionDetector, Time, FixedTimestep |
 
 ## 🚀 Quick Start
 
@@ -129,24 +129,136 @@ src/
 use reactor::prelude::*;
 ```
 
-### Crear Material con Config
+### Sistema de Iluminación
 ```rust
-let material = MaterialBuilder::new(vert_code, frag_code)
-    .no_cull()
-    .blend()
-    .build(&ctx, render_pass, width, height)?;
+let mut lighting = LightingSystem::with_sun();
+
+// Agregar luz puntual
+lighting.add_light(Light::point(
+    Vec3::new(0.0, 5.0, 0.0),  // posición
+    Vec3::new(1.0, 0.8, 0.6),  // color
+    2.0,                        // intensidad
+    20.0,                       // rango
+));
+
+// Agregar spotlight
+lighting.add_light(Light::spot(
+    Vec3::new(0.0, 10.0, 0.0), // posición
+    Vec3::NEG_Y,               // dirección
+    Vec3::ONE,                 // color
+    5.0,                       // intensidad
+    30.0,                      // rango
+    45.0,                      // ángulo
+));
 ```
 
-### Sistema ECS
+### Sistema de Partículas
 ```rust
-let mut world = World::new();
-let entity = world.create_entity();
-world.add_component(entity, Transform::from_position(Vec3::ZERO));
-world.add_component(entity, Velocity { x: 1.0, y: 0.0 });
+// Efecto de fuego predefinido
+let mut fire = ParticleSystem::fire();
+fire.position = Vec3::new(0.0, 0.0, 0.0);
 
-for (entity, transform) in world.query::<Transform>() {
-    // ...
+// Explosión
+let mut explosion = ParticleSystem::explosion();
+explosion.play();
+
+// Sistema personalizado
+let config = ParticleSystemConfig {
+    emission_rate: 100.0,
+    lifetime: RandomRange::new(1.0, 2.0),
+    start_color: Vec4::new(0.0, 0.5, 1.0, 1.0),
+    ..Default::default()
+};
+let custom = ParticleSystem::new(config);
+```
+
+### Animaciones y Tweens
+```rust
+// Tween simple
+let mut tween = Tween::new(0.0, 100.0, 2.0)
+    .with_easing(EasingFunction::EaseOutElastic);
+
+// En el loop
+let value = tween.update(delta_time);
+if tween.is_finished() { /* ... */ }
+
+// Sistema de animación completo
+let mut player = AnimationPlayer::new();
+player.add_clip(walk_animation);
+player.play("walk");
+let sample = player.update(delta_time);
+sample.apply_to_transform(&mut transform);
+```
+
+### Física y Colisiones
+```rust
+// Crear mundo físico
+let mut physics = PhysicsWorld::new();
+physics.gravity = Vec3::new(0.0, -9.81, 0.0);
+
+// Cuerpo rígido
+let mut body = RigidBody::default();
+body.add_force(Vec3::new(100.0, 0.0, 0.0));
+
+// Raycasting
+let ray = Ray::from_screen(mouse_x, mouse_y, width, height, inv_vp);
+if let Some(t) = ray.intersects_aabb(&aabb) {
+    let hit_point = ray.point_at(t);
 }
+
+// Frustum Culling
+let mut culling = CullingSystem::new();
+culling.update_frustum(view_projection);
+for object in &scene.objects {
+    if culling.is_visible_aabb(&object.bounds) {
+        // Renderizar
+    }
+}
+println!("Culled: {:.1}%", culling.cull_percentage());
+```
+
+### Post-Processing
+```rust
+// Preset cinematográfico
+let post = PostProcessPipeline::with_preset(PostProcessPreset::Cinematic);
+
+// Configuración manual
+let mut settings = PostProcessSettings::default();
+settings.enable_effect(PostProcessEffect::Bloom);
+settings.enable_effect(PostProcessEffect::Vignette);
+settings.bloom_intensity = 0.5;
+settings.vignette_intensity = 0.3;
+```
+
+### Debug Renderer
+```rust
+let mut debug = DebugRenderer::new();
+
+// Dibujar líneas
+debug.line(start, end, Vec4::new(1.0, 0.0, 0.0, 1.0));
+
+// Dibujar AABB
+debug.aabb(&DebugAABB { min, max }, Vec4::ONE);
+
+// Dibujar ejes
+debug.axes(origin, 1.0);
+
+// Dibujar grid
+debug.grid(Vec3::ZERO, 10.0, 10, Vec4::new(0.5, 0.5, 0.5, 1.0));
+
+// Dibujar frustum de cámara
+debug.frustum(inv_view_proj, Vec4::new(1.0, 1.0, 0.0, 1.0));
+```
+
+### Primitivas Geométricas
+```rust
+// Generar meshes procedurales
+let (vertices, indices) = Primitives::cube();
+let (vertices, indices) = Primitives::sphere(32, 16);
+let (vertices, indices) = Primitives::plane(10);
+let (vertices, indices) = Primitives::cylinder(32, 2.0, 0.5);
+let (vertices, indices) = Primitives::cone(32, 2.0, 0.5);
+let (vertices, indices) = Primitives::torus(32, 16, 1.0, 0.3);
 ```
 
 ### Cámara 3D
@@ -154,6 +266,11 @@ for (entity, transform) in world.query::<Transform>() {
 let camera = Camera::perspective(45.0, aspect, 0.1, 1000.0)
     .look_at(eye, target, Vec3::Y);
 let vp = camera.view_projection_matrix();
+
+// Controles FPS
+camera.rotate_yaw(mouse_delta.x * sensitivity);
+camera.rotate_pitch(mouse_delta.y * sensitivity);
+camera.move_forward(speed * delta);
 ```
 
 ## 📊 Comparación: Vulkan Puro vs REACTOR

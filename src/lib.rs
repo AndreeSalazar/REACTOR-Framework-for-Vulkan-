@@ -103,20 +103,72 @@ pub use utils::resolution_detector::{ResolutionDetector as ResolutionDetectorNew
 pub use utils::time::{Time, FixedTimestep};
 
 // =============================================================================
+// Elite Features Re-exports
+// =============================================================================
+
+// Uniform Buffers
+pub use graphics::uniform_buffer::{UniformBuffer, GlobalUniformData, LightUniformData, LightData, MaterialUniformData, MAX_LIGHTS};
+
+// Debug Renderer
+pub use graphics::debug_renderer::{DebugRenderer, DebugLine, DebugAABB, DebugSphere, DebugRay};
+
+// Post Processing
+pub use graphics::post_process::{PostProcessPipeline, PostProcessSettings, PostProcessEffect, PostProcessPreset};
+
+// Lighting System
+pub use systems::lighting::{Light, LightType, LightingSystem};
+
+// Physics & Collision
+pub use systems::physics::{RigidBody, AABB, Sphere, Ray, PhysicsWorld};
+
+// Frustum Culling
+pub use systems::frustum::{Frustum, Plane, CullingSystem, FrustumTestResult};
+
+// Animation System
+pub use systems::animation::{AnimationClip, AnimationPlayer, AnimationTrack, Keyframe, LoopMode, Tween, EasingFunction};
+
+// Audio System
+pub use systems::audio::{AudioSystem, AudioSource, AudioListener, AudioClipId, AudioSourceId};
+
+// Particle System
+pub use systems::particles::{ParticleSystem, Particle, ParticleSystemConfig, EmitterShape};
+
+// Primitives
+pub use resources::primitives::Primitives;
+
+// =============================================================================
 // Prelude - Import everything commonly needed
 // =============================================================================
 pub mod prelude {
+    // Core
     pub use crate::Reactor;
+    
+    // Resources
     pub use crate::resources::vertex::Vertex;
     pub use crate::resources::mesh::Mesh;
-    pub use crate::resources::material::Material;
+    pub use crate::resources::material::{Material, MaterialBuilder};
     pub use crate::resources::texture::Texture;
+    pub use crate::resources::primitives::Primitives;
+    
+    // Systems
     pub use crate::systems::scene::Scene;
-    pub use crate::systems::camera::Camera;
+    pub use crate::systems::camera::{Camera, Camera2D};
     pub use crate::systems::input::Input;
     pub use crate::systems::transform::Transform;
+    pub use crate::systems::lighting::{Light, LightType, LightingSystem};
+    pub use crate::systems::physics::{RigidBody, AABB, Sphere, Ray};
+    pub use crate::systems::animation::{AnimationPlayer, Tween, EasingFunction};
+    pub use crate::systems::particles::ParticleSystem;
+    
+    // Graphics
+    pub use crate::graphics::post_process::{PostProcessSettings, PostProcessPreset};
+    pub use crate::graphics::debug_renderer::DebugRenderer;
+    
+    // Utils
     pub use crate::utils::time::Time;
     pub use crate::utils::cpu_detector::CPUDetector;
     pub use crate::utils::resolution_detector::ResolutionDetector;
+    
+    // Math
     pub use glam::{Vec2, Vec3, Vec4, Mat4, Quat};
 }
