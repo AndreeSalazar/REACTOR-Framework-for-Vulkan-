@@ -18,6 +18,18 @@ impl Pipeline {
         width: u32,
         height: u32,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::new_with_msaa(device, render_pass, vert_spv, frag_spv, width, height, vk::SampleCountFlags::TYPE_1)
+    }
+
+    pub fn new_with_msaa(
+        device: &Device,
+        render_pass: vk::RenderPass,
+        vert_spv: &[u32],
+        frag_spv: &[u32],
+        width: u32,
+        height: u32,
+        msaa_samples: vk::SampleCountFlags,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let vert_shader_module = unsafe {
             let create_info = vk::ShaderModuleCreateInfo::default().code(vert_spv);
             device.create_shader_module(&create_info, None)?
@@ -86,7 +98,7 @@ impl Pipeline {
 
         let multisample_state = vk::PipelineMultisampleStateCreateInfo::default()
             .sample_shading_enable(false)
-            .rasterization_samples(vk::SampleCountFlags::TYPE_1);
+            .rasterization_samples(msaa_samples);
 
         let color_blend_attachment = vk::PipelineColorBlendAttachmentState::default()
             .color_write_mask(vk::ColorComponentFlags::RGBA)

@@ -31,6 +31,12 @@ pub struct Reactor {
     pub ray_tracing: Option<RayTracingContext>,
     pub resized: bool,
     pub context: VulkanContext,
+    
+    // MSAA Anti-Aliasing
+    pub msaa_samples: vk::SampleCountFlags,
+    pub msaa_image: Option<vk::Image>,
+    pub msaa_image_view: Option<vk::ImageView>,
+    pub msaa_memory: Option<vk::DeviceMemory>,
 }
 
 const MAX_FRAMES_IN_FLIGHT: usize = 3;
@@ -52,8 +58,26 @@ impl Reactor {
         let inner_size = window.inner_size();
         let swapchain = Swapchain::new(&context, inner_size.width, inner_size.height)?;
         
-        let render_pass = Self::create_render_pass(&context, swapchain.format)?;
-        let framebuffers = Self::create_framebuffers(&context, &swapchain, render_pass)?;
+        // Get MSAA samples (4x for good quality/performance balance)
+        let msaa_samples = Self::get_max_msaa_samples_static(&context);
+        println!("🔷 MSAA: {:?} samples enabled for anti-aliasing", msaa_samples);
+        
+        // Create MSAA resources if supported
+        let (msaa_image, msaa_image_view, msaa_memory) = if msaa_samples != vk::SampleCountFlags::TYPE_1 {
+            let (img, view, mem) = Self::create_msaa_resources(
+                &context, 
+                swapchain.extent.width, 
+                swapchain.extent.height, 
+                swapchain.format,
+                msaa_samples
+            )?;
+            (Some(img), Some(view), Some(mem))
+        } else {
+            (None, None, None)
+        };
+        
+        let render_pass = Self::create_render_pass_with_msaa(&context, swapchain.format, msaa_samples)?;
+        let framebuffers = Self::create_framebuffers_msaa(&context, &swapchain, render_pass, msaa_image_view, msaa_samples)?;
 
         // Command Pool
         let pool_create_info = vk::CommandPoolCreateInfo::default()
@@ -112,7 +136,26 @@ impl Reactor {
             world: World::new(),
             ray_tracing,
             resized: false,
+            // MSAA Anti-Aliasing
+            msaa_samples,
+            msaa_image,
+            msaa_image_view,
+            msaa_memory,
         })
+    }
+
+    /// Get maximum supported MSAA sample count
+    pub fn get_max_msaa_samples(&self) -> vk::SampleCountFlags {
+        let props = unsafe { 
+            self.context.instance.get_physical_device_properties(self.context.physical_device) 
+        };
+        let counts = props.limits.framebuffer_color_sample_counts
+            & props.limits.framebuffer_depth_sample_counts;
+
+        if counts.contains(vk::SampleCountFlags::TYPE_8) { vk::SampleCountFlags::TYPE_8 }
+        else if counts.contains(vk::SampleCountFlags::TYPE_4) { vk::SampleCountFlags::TYPE_4 }
+        else if counts.contains(vk::SampleCountFlags::TYPE_2) { vk::SampleCountFlags::TYPE_2 }
+        else { vk::SampleCountFlags::TYPE_1 }
     }
 
     pub fn handle_event(&mut self, event: &WindowEvent) {
@@ -134,15 +177,50 @@ impl Reactor {
             return Ok(());
         }
 
+        // Destroy old framebuffers
         unsafe {
             for &framebuffer in &self.framebuffers {
                 self.context.device.destroy_framebuffer(framebuffer, None);
             }
         }
+        
+        // Destroy old MSAA resources if they exist
+        if let Some(view) = self.msaa_image_view.take() {
+            unsafe { self.context.device.destroy_image_view(view, None); }
+        }
+        if let Some(image) = self.msaa_image.take() {
+            unsafe { self.context.device.destroy_image(image, None); }
+        }
+        if let Some(memory) = self.msaa_memory.take() {
+            unsafe { self.context.device.free_memory(memory, None); }
+        }
+        
         self.swapchain.destroy(&self.context.device);
 
         self.swapchain = Swapchain::new(&self.context, capabilities.current_extent.width, capabilities.current_extent.height)?;
-        self.framebuffers = Self::create_framebuffers(&self.context, &self.swapchain, self.render_pass)?;
+        
+        // Recreate MSAA resources if MSAA is enabled
+        if self.msaa_samples != vk::SampleCountFlags::TYPE_1 {
+            let (img, view, mem) = Self::create_msaa_resources(
+                &self.context,
+                self.swapchain.extent.width,
+                self.swapchain.extent.height,
+                self.swapchain.format,
+                self.msaa_samples
+            )?;
+            self.msaa_image = Some(img);
+            self.msaa_image_view = Some(view);
+            self.msaa_memory = Some(mem);
+        }
+        
+        // Recreate framebuffers with MSAA support
+        self.framebuffers = Self::create_framebuffers_msaa(
+            &self.context, 
+            &self.swapchain, 
+            self.render_pass,
+            self.msaa_image_view,
+            self.msaa_samples
+        )?;
         
         Ok(())
     }
@@ -152,17 +230,41 @@ impl Reactor {
     }
 
     pub fn create_material(&self, vert_code: &[u32], frag_code: &[u32]) -> Result<Material, Box<dyn Error>> {
-        Material::new(
+        Material::new_with_msaa(
             &self.context, 
             self.render_pass, 
             vert_code, 
             frag_code, 
             self.swapchain.extent.width, 
-            self.swapchain.extent.height
+            self.swapchain.extent.height,
+            self.msaa_samples
         )
     }
 
     fn create_render_pass(context: &VulkanContext, format: vk::Format) -> Result<vk::RenderPass, Box<dyn Error>> {
+        // TODO: MSAA requires creating MSAA image buffers and modifying framebuffers
+        // For now, use simple render pass. MSAA can be enabled by:
+        // 1. Creating MSAA color buffer with MsaaTarget
+        // 2. Using create_render_pass_msaa
+        // 3. Modifying framebuffers to include MSAA attachment
+        // 4. Modifying pipeline to use MSAA samples
+        Self::create_render_pass_simple(context, format)
+    }
+
+    fn get_max_msaa_samples_static(context: &VulkanContext) -> vk::SampleCountFlags {
+        let props = unsafe { 
+            context.instance.get_physical_device_properties(context.physical_device) 
+        };
+        let counts = props.limits.framebuffer_color_sample_counts
+            & props.limits.framebuffer_depth_sample_counts;
+
+        // Use 4x MSAA as default (good balance of quality/performance)
+        if counts.contains(vk::SampleCountFlags::TYPE_4) { vk::SampleCountFlags::TYPE_4 }
+        else if counts.contains(vk::SampleCountFlags::TYPE_2) { vk::SampleCountFlags::TYPE_2 }
+        else { vk::SampleCountFlags::TYPE_1 }
+    }
+
+    fn create_render_pass_simple(context: &VulkanContext, format: vk::Format) -> Result<vk::RenderPass, Box<dyn Error>> {
         let color_attachment = vk::AttachmentDescription::default()
             .format(format)
             .samples(vk::SampleCountFlags::TYPE_1)
@@ -202,6 +304,68 @@ impl Reactor {
         Ok(render_pass)
     }
 
+    fn create_render_pass_msaa(context: &VulkanContext, format: vk::Format, samples: vk::SampleCountFlags) -> Result<vk::RenderPass, Box<dyn Error>> {
+        println!("🔷 Enabling MSAA {:?} for anti-aliasing", samples);
+        
+        // MSAA color attachment (multisampled)
+        let msaa_attachment = vk::AttachmentDescription::default()
+            .format(format)
+            .samples(samples)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::DONT_CARE) // Don't need to store MSAA
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+
+        // Resolve attachment (single sample, for presentation)
+        let resolve_attachment = vk::AttachmentDescription::default()
+            .format(format)
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .store_op(vk::AttachmentStoreOp::STORE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
+
+        let color_attachment_ref = vk::AttachmentReference::default()
+            .attachment(0)
+            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+
+        let resolve_attachment_ref = vk::AttachmentReference::default()
+            .attachment(1)
+            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+
+        let color_attachments = [color_attachment_ref];
+        let resolve_attachments = [resolve_attachment_ref];
+
+        let subpass = vk::SubpassDescription::default()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachments)
+            .resolve_attachments(&resolve_attachments);
+
+        let dependency = vk::SubpassDependency::default()
+            .src_subpass(vk::SUBPASS_EXTERNAL)
+            .dst_subpass(0)
+            .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+            .src_access_mask(vk::AccessFlags::empty())
+            .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+            .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE);
+
+        let attachments = [msaa_attachment, resolve_attachment];
+        let subpasses = [subpass];
+        let dependencies = [dependency];
+
+        let render_pass_info = vk::RenderPassCreateInfo::default()
+            .attachments(&attachments)
+            .subpasses(&subpasses)
+            .dependencies(&dependencies);
+
+        let render_pass = unsafe { context.device.create_render_pass(&render_pass_info, None)? };
+        Ok(render_pass)
+    }
+
     fn create_framebuffers(
         context: &VulkanContext, 
         swapchain: &Swapchain, 
@@ -211,6 +375,178 @@ impl Reactor {
             .iter()
             .map(|&view| {
                 let attachments = [view];
+                let framebuffer_info = vk::FramebufferCreateInfo::default()
+                    .render_pass(render_pass)
+                    .attachments(&attachments)
+                    .width(swapchain.extent.width)
+                    .height(swapchain.extent.height)
+                    .layers(1);
+                unsafe { context.device.create_framebuffer(&framebuffer_info, None).map_err(|e| e.into()) }
+            })
+            .collect()
+    }
+
+    /// Create MSAA color buffer resources
+    fn create_msaa_resources(
+        context: &VulkanContext,
+        width: u32,
+        height: u32,
+        format: vk::Format,
+        samples: vk::SampleCountFlags,
+    ) -> Result<(vk::Image, vk::ImageView, vk::DeviceMemory), Box<dyn Error>> {
+        // Create MSAA image
+        let image_info = vk::ImageCreateInfo::default()
+            .image_type(vk::ImageType::TYPE_2D)
+            .extent(vk::Extent3D { width, height, depth: 1 })
+            .mip_levels(1)
+            .array_layers(1)
+            .format(format)
+            .tiling(vk::ImageTiling::OPTIMAL)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .usage(vk::ImageUsageFlags::TRANSIENT_ATTACHMENT | vk::ImageUsageFlags::COLOR_ATTACHMENT)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE)
+            .samples(samples);
+
+        let image = unsafe { context.device.create_image(&image_info, None)? };
+        let requirements = unsafe { context.device.get_image_memory_requirements(image) };
+
+        // Find memory type
+        let memory_props = unsafe { context.instance.get_physical_device_memory_properties(context.physical_device) };
+        let memory_type_index = (0..memory_props.memory_type_count)
+            .find(|&i| {
+                let suitable = (requirements.memory_type_bits & (1 << i)) != 0;
+                let memory_type = memory_props.memory_types[i as usize];
+                suitable && memory_type.property_flags.contains(vk::MemoryPropertyFlags::DEVICE_LOCAL)
+            })
+            .ok_or("Failed to find suitable memory type for MSAA")?;
+
+        let alloc_info = vk::MemoryAllocateInfo::default()
+            .allocation_size(requirements.size)
+            .memory_type_index(memory_type_index);
+
+        let memory = unsafe { context.device.allocate_memory(&alloc_info, None)? };
+        unsafe { context.device.bind_image_memory(image, memory, 0)? };
+
+        // Create image view
+        let view_info = vk::ImageViewCreateInfo::default()
+            .image(image)
+            .view_type(vk::ImageViewType::TYPE_2D)
+            .format(format)
+            .subresource_range(
+                vk::ImageSubresourceRange::default()
+                    .aspect_mask(vk::ImageAspectFlags::COLOR)
+                    .base_mip_level(0)
+                    .level_count(1)
+                    .base_array_layer(0)
+                    .layer_count(1),
+            );
+
+        let view = unsafe { context.device.create_image_view(&view_info, None)? };
+
+        Ok((image, view, memory))
+    }
+
+    /// Create render pass with MSAA support
+    fn create_render_pass_with_msaa(
+        context: &VulkanContext, 
+        format: vk::Format,
+        samples: vk::SampleCountFlags,
+    ) -> Result<vk::RenderPass, Box<dyn Error>> {
+        if samples == vk::SampleCountFlags::TYPE_1 {
+            // No MSAA - use simple render pass
+            return Self::create_render_pass_simple(context, format);
+        }
+
+        // MSAA color attachment (multisampled)
+        let msaa_attachment = vk::AttachmentDescription::default()
+            .format(format)
+            .samples(samples)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+
+        // Resolve attachment (single sample, for presentation)
+        let resolve_attachment = vk::AttachmentDescription::default()
+            .format(format)
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .store_op(vk::AttachmentStoreOp::STORE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
+
+        let color_attachment_ref = vk::AttachmentReference::default()
+            .attachment(0)
+            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+
+        let resolve_attachment_ref = vk::AttachmentReference::default()
+            .attachment(1)
+            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+
+        let color_attachments = [color_attachment_ref];
+        let resolve_attachments = [resolve_attachment_ref];
+
+        let subpass = vk::SubpassDescription::default()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachments)
+            .resolve_attachments(&resolve_attachments);
+
+        let dependency = vk::SubpassDependency::default()
+            .src_subpass(vk::SUBPASS_EXTERNAL)
+            .dst_subpass(0)
+            .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+            .src_access_mask(vk::AccessFlags::empty())
+            .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+            .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE);
+
+        let attachments = [msaa_attachment, resolve_attachment];
+        let subpasses = [subpass];
+        let dependencies = [dependency];
+
+        let render_pass_info = vk::RenderPassCreateInfo::default()
+            .attachments(&attachments)
+            .subpasses(&subpasses)
+            .dependencies(&dependencies);
+
+        let render_pass = unsafe { context.device.create_render_pass(&render_pass_info, None)? };
+        Ok(render_pass)
+    }
+
+    /// Create framebuffers with MSAA support
+    fn create_framebuffers_msaa(
+        context: &VulkanContext, 
+        swapchain: &Swapchain, 
+        render_pass: vk::RenderPass,
+        msaa_view: Option<vk::ImageView>,
+        samples: vk::SampleCountFlags,
+    ) -> Result<Vec<vk::Framebuffer>, Box<dyn Error>> {
+        println!("🔷 Creating framebuffers: samples={:?}, msaa_view={:?}", samples, msaa_view.is_some());
+        
+        if samples == vk::SampleCountFlags::TYPE_1 {
+            // No MSAA - use simple framebuffers
+            println!("🔷 Using simple framebuffers (no MSAA)");
+            return Self::create_framebuffers(context, swapchain, render_pass);
+        }
+
+        let msaa_view = match msaa_view {
+            Some(view) => view,
+            None => {
+                println!("⚠️ MSAA requested but no MSAA view available, falling back to simple");
+                return Self::create_framebuffers(context, swapchain, render_pass);
+            }
+        };
+        
+        println!("🔷 Creating MSAA framebuffers with 2 attachments");
+
+        swapchain.image_views
+            .iter()
+            .map(|&resolve_view| {
+                // MSAA framebuffer has 2 attachments: MSAA color + resolve
+                let attachments = [msaa_view, resolve_view];
                 let framebuffer_info = vk::FramebufferCreateInfo::default()
                     .render_pass(render_pass)
                     .attachments(&attachments)

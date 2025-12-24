@@ -17,13 +17,26 @@ impl Material {
         width: u32,
         height: u32,
     ) -> Result<Self, Box<dyn Error>> {
-        let pipeline = Pipeline::new(
+        Self::new_with_msaa(ctx, render_pass, vert_code, frag_code, width, height, vk::SampleCountFlags::TYPE_1)
+    }
+
+    pub fn new_with_msaa(
+        ctx: &VulkanContext,
+        render_pass: vk::RenderPass,
+        vert_code: &[u32],
+        frag_code: &[u32],
+        width: u32,
+        height: u32,
+        msaa_samples: vk::SampleCountFlags,
+    ) -> Result<Self, Box<dyn Error>> {
+        let pipeline = Pipeline::new_with_msaa(
             &ctx.device,
             render_pass,
             vert_code,
             frag_code,
             width,
             height,
+            msaa_samples,
         )?;
 
         Ok(Self {

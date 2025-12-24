@@ -122,8 +122,15 @@ pub use graphics::uniform_buffer::{UniformBuffer, GlobalUniformData, LightUnifor
 // Debug Renderer
 pub use graphics::debug_renderer::{DebugRenderer, DebugLine, DebugAABB, DebugSphere, DebugRay};
 
-// Post Processing
-pub use graphics::post_process::{PostProcessPipeline, PostProcessSettings, PostProcessEffect, PostProcessPreset};
+// Post-processing
+pub use graphics::post_process::{PostProcessEffect, PostProcessSettings, PostProcessPipeline, PostProcessPreset, AAQualityPreset, AASettings};
+
+// AA Global Pipeline (Anti-Aliasing con matemáticas SDF puras)
+pub use graphics::aa_pipeline::{
+    AAGlobalPipeline, AAStats,
+    sdf_edge_coverage, sdf_blend_colors, sdf_edge_alpha, smooth_normal, smooth_fresnel,
+    aa_preset_ui, aa_preset_realtime_3d, aa_preset_offline,
+};
 
 // Lighting System
 pub use systems::lighting::{Light, LightType, LightingSystem};
@@ -165,8 +172,14 @@ pub use adead::sdf::{
 // ADead-RT: Ray Marching Engine
 pub use adead::raymarching::{RayMarcher, RayMarchConfig, RayMarchHit, SDFScene, RayMarchStats};
 
-// ADead-AA: Anti-Aliasing
-pub use adead::antialiasing::{SDFAntiAliasing, SDFAAConfig, SDFEdgeDetector, AAComparison, smoothstep, smootherstep};
+// ADead-AA: Anti-Aliasing Avanzado
+pub use adead::antialiasing::{
+    SDFAntiAliasing, SDFAAConfig, SDFEdgeDetector, AAComparison, AAQuality,
+    smoothstep, smootherstep, smootherstep_ultra, linearstep, exp_smoothstep,
+    fwidth_approx, fwidth_vec2, fwidth_vec3,
+    halton, halton_2d,
+    gamma_to_linear, linear_to_gamma, gamma_to_linear_vec4, linear_to_gamma_vec4,
+};
 
 // ADead-Hybrid: Hybrid Rendering
 pub use adead::hybrid::{HybridRenderer, HybridObject, HybridStats, RenderMode, LODLevel, LODThresholds, ADeadBenchmark};

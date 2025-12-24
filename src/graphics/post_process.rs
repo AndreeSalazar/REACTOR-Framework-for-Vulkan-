@@ -15,6 +15,125 @@ pub enum PostProcessEffect {
     Bloom,
     ToneMapping,
     FXAA,
+    SMAA,
+    TAA,
+}
+
+/// Anti-Aliasing quality presets
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AAQualityPreset {
+    /// Sin AA
+    Off,
+    /// FXAA básico - rápido
+    Low,
+    /// FXAA mejorado
+    Medium,
+    /// SMAA - alta calidad
+    High,
+    /// SMAA + TAA - máxima calidad
+    Ultra,
+    /// Cinematográfico - calidad de película
+    Cinematic,
+}
+
+/// Configuración de Anti-Aliasing
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct AASettings {
+    /// Preset de calidad
+    pub quality: AAQualityPreset,
+    /// Ancho del borde de suavizado (1.0 - 3.0)
+    pub edge_width: f32,
+    /// Intensidad del suavizado (0.0 - 1.0)
+    pub smoothness: f32,
+    /// Umbral de detección de bordes (0.0 - 0.5)
+    pub edge_threshold: f32,
+    /// Umbral mínimo de bordes
+    pub edge_threshold_min: f32,
+    /// Factor de mezcla temporal (para TAA)
+    pub temporal_blend: f32,
+    /// Habilitar corrección de subpixel
+    pub subpixel_aa: bool,
+    /// Habilitar corrección de gamma
+    pub gamma_correct: bool,
+}
+
+impl Default for AASettings {
+    fn default() -> Self {
+        Self {
+            quality: AAQualityPreset::High,
+            edge_width: 1.5,
+            smoothness: 1.0,
+            edge_threshold: 0.125,
+            edge_threshold_min: 0.0625,
+            temporal_blend: 0.15,
+            subpixel_aa: true,
+            gamma_correct: true,
+        }
+    }
+}
+
+impl AASettings {
+    /// Preset de baja calidad (máximo rendimiento)
+    pub fn low() -> Self {
+        Self {
+            quality: AAQualityPreset::Low,
+            edge_width: 1.0,
+            smoothness: 0.8,
+            edge_threshold: 0.166,
+            edge_threshold_min: 0.0833,
+            temporal_blend: 0.0,
+            subpixel_aa: false,
+            gamma_correct: false,
+        }
+    }
+
+    /// Preset de calidad media
+    pub fn medium() -> Self {
+        Self {
+            quality: AAQualityPreset::Medium,
+            edge_width: 1.2,
+            smoothness: 1.0,
+            edge_threshold: 0.125,
+            edge_threshold_min: 0.0625,
+            temporal_blend: 0.0,
+            subpixel_aa: true,
+            gamma_correct: true,
+        }
+    }
+
+    /// Preset de alta calidad
+    pub fn high() -> Self {
+        Self::default()
+    }
+
+    /// Preset ultra (máxima calidad)
+    pub fn ultra() -> Self {
+        Self {
+            quality: AAQualityPreset::Ultra,
+            edge_width: 2.0,
+            smoothness: 1.5,
+            edge_threshold: 0.1,
+            edge_threshold_min: 0.05,
+            temporal_blend: 0.2,
+            subpixel_aa: true,
+            gamma_correct: true,
+        }
+    }
+
+    /// Preset cinematográfico
+    pub fn cinematic() -> Self {
+        Self {
+            quality: AAQualityPreset::Cinematic,
+            edge_width: 2.5,
+            smoothness: 2.0,
+            edge_threshold: 0.08,
+            edge_threshold_min: 0.04,
+            temporal_blend: 0.25,
+            subpixel_aa: true,
+            gamma_correct: true,
+        }
+    }
 }
 
 /// Post-processing settings passed to shaders
