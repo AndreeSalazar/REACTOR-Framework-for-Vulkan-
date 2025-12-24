@@ -24,17 +24,17 @@ impl Mesh {
         let index_size = (indices.len() * std::mem::size_of::<u32>()) as u64;
 
         // Create Staging Buffers
-        let mut staging_vertex = Buffer::new(
+        let staging_vertex = Buffer::new(
             ctx,
-            &mut allocator.lock().unwrap(),
+            allocator.clone(),
             vertex_size,
             vk::BufferUsageFlags::TRANSFER_SRC,
             MemoryLocation::CpuToGpu,
         )?;
         
-        let mut staging_index = Buffer::new(
+        let staging_index = Buffer::new(
             ctx,
-            &mut allocator.lock().unwrap(),
+            allocator.clone(),
             index_size,
             vk::BufferUsageFlags::TRANSFER_SRC,
             MemoryLocation::CpuToGpu,
@@ -42,17 +42,17 @@ impl Mesh {
 
         // Copy data to staging
         unsafe {
-            let data_ptr = staging_vertex.allocation.mapped_ptr().unwrap().as_ptr() as *mut Vertex;
+            let data_ptr = staging_vertex.allocation.as_ref().unwrap().mapped_ptr().unwrap().as_ptr() as *mut Vertex;
             data_ptr.copy_from_nonoverlapping(vertices.as_ptr(), vertices.len());
 
-            let data_ptr = staging_index.allocation.mapped_ptr().unwrap().as_ptr() as *mut u32;
+            let data_ptr = staging_index.allocation.as_ref().unwrap().mapped_ptr().unwrap().as_ptr() as *mut u32;
             data_ptr.copy_from_nonoverlapping(indices.as_ptr(), indices.len());
         }
 
         // Create GPU Buffers
         let vertex_buffer = Buffer::new(
             ctx,
-            &mut allocator.lock().unwrap(),
+            allocator.clone(),
             vertex_size,
             vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
             MemoryLocation::GpuOnly,
@@ -60,7 +60,7 @@ impl Mesh {
 
         let index_buffer = Buffer::new(
             ctx,
-            &mut allocator.lock().unwrap(),
+            allocator.clone(),
             index_size,
             vk::BufferUsageFlags::INDEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
             MemoryLocation::GpuOnly,
@@ -71,9 +71,7 @@ impl Mesh {
         Self::copy_buffer(ctx, staging_vertex.handle, vertex_buffer.handle, vertex_size)?;
         Self::copy_buffer(ctx, staging_index.handle, index_buffer.handle, index_size)?;
 
-        // Cleanup staging
-        staging_vertex.destroy(ctx, &mut allocator.lock().unwrap());
-        staging_index.destroy(ctx, &mut allocator.lock().unwrap());
+        // Staging buffers are dropped here automatically
 
         Ok(Self {
             vertex_buffer,
@@ -122,10 +120,5 @@ impl Mesh {
         }
         
         Ok(())
-    }
-
-    pub fn destroy(&mut self, ctx: &VulkanContext, allocator: &mut Allocator) {
-        self.vertex_buffer.destroy(ctx, allocator);
-        self.index_buffer.destroy(ctx, allocator);
     }
 }

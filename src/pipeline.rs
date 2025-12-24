@@ -6,6 +6,7 @@ use crate::vertex::Vertex;
 pub struct Pipeline {
     pub pipeline: vk::Pipeline,
     pub layout: vk::PipelineLayout,
+    device: ash::Device,
 }
 
 impl Pipeline {
@@ -70,13 +71,17 @@ impl Pipeline {
             .viewports(&viewports)
             .scissors(&scissors);
 
+        let dynamic_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
+        let dynamic_state_info = vk::PipelineDynamicStateCreateInfo::default()
+            .dynamic_states(&dynamic_states);
+
         let rasterization_state = vk::PipelineRasterizationStateCreateInfo::default()
             .depth_clamp_enable(false)
             .rasterizer_discard_enable(false)
             .polygon_mode(vk::PolygonMode::FILL)
             .line_width(1.0)
             .cull_mode(vk::CullModeFlags::BACK)
-            .front_face(vk::FrontFace::CLOCKWISE)
+            .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
             .depth_bias_enable(false);
 
         let multisample_state = vk::PipelineMultisampleStateCreateInfo::default()
@@ -92,7 +97,15 @@ impl Pipeline {
             .logic_op_enable(false)
             .attachments(&attachments);
 
-        let layout_create_info = vk::PipelineLayoutCreateInfo::default();
+        let push_constant_range = vk::PushConstantRange {
+            stage_flags: vk::ShaderStageFlags::VERTEX,
+            offset: 0,
+            size: std::mem::size_of::<glam::Mat4>() as u32,
+        };
+
+        let push_constant_ranges = [push_constant_range];
+        let layout_create_info = vk::PipelineLayoutCreateInfo::default()
+            .push_constant_ranges(&push_constant_ranges);
         let layout = unsafe { device.create_pipeline_layout(&layout_create_info, None)? };
 
         let create_info = vk::GraphicsPipelineCreateInfo::default()
@@ -103,6 +116,7 @@ impl Pipeline {
             .rasterization_state(&rasterization_state)
             .multisample_state(&multisample_state)
             .color_blend_state(&color_blend_state)
+            .dynamic_state(&dynamic_state_info)
             .layout(layout)
             .render_pass(render_pass)
             .subpass(0);
@@ -120,13 +134,16 @@ impl Pipeline {
         Ok(Self {
             pipeline: pipelines[0],
             layout,
+            device: device.clone(),
         })
     }
+}
 
-    pub fn destroy(&mut self, device: &Device) {
+impl Drop for Pipeline {
+    fn drop(&mut self) {
         unsafe {
-            device.destroy_pipeline(self.pipeline, None);
-            device.destroy_pipeline_layout(self.layout, None);
+            self.device.destroy_pipeline(self.pipeline, None);
+            self.device.destroy_pipeline_layout(self.layout, None);
         }
     }
 }

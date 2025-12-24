@@ -15,6 +15,8 @@ pub struct VulkanContext {
     pub queue_family_index: u32,
 }
 
+use crate::gpu_detector::GPUDetector;
+
 impl VulkanContext {
     pub fn new(window: &impl HasWindowHandle) -> Result<Self, Box<dyn Error>> {
         let entry = unsafe { Entry::load()? };
@@ -22,6 +24,7 @@ impl VulkanContext {
         // Layers
         let layer_names = [CStr::from_bytes_with_nul(b"VK_LAYER_KHRONOS_validation\0")?];
         let layers_ptr: Vec<*const i8> = layer_names.iter().map(|raw_name| raw_name.as_ptr()).collect();
+        // let layers_ptr: Vec<*const i8> = Vec::new();
 
         // Extensions
         let extension_names = vec![
@@ -55,30 +58,44 @@ impl VulkanContext {
         };
         let surface_loader = ash::khr::surface::Instance::new(&entry, &instance);
 
-        // Physical Device
-        let pdevices = unsafe { instance.enumerate_physical_devices()? };
-        let (pdevice, queue_family_index) = pdevices.iter().find_map(|pdevice| {
-            let props = unsafe { instance.get_physical_device_queue_family_properties(*pdevice) };
-            props.iter().enumerate().find_map(|(index, info)| {
-                let supports_graphic = info.queue_flags.contains(vk::QueueFlags::GRAPHICS);
-                let supports_surface = unsafe { surface_loader.get_physical_device_surface_support(*pdevice, index as u32, surface).unwrap() };
-                if supports_graphic && supports_surface {
-                    Some((*pdevice, index as u32))
-                } else {
-                    None
-                }
-            })
-        }).ok_or("No suitable GPU found")?;
+        // Physical Device (Smart Selection)
+        let gpu_info = GPUDetector::detect(&instance, &surface_loader, surface)?;
+        let pdevice = gpu_info.device;
+        let queue_family_index = gpu_info.queue_family_index;
 
         // Device
         let queue_priorities = [1.0];
         let queue_info = vk::DeviceQueueCreateInfo::default()
             .queue_family_index(queue_family_index)
             .queue_priorities(&queue_priorities);
-        let device_extension_names = [ash::khr::swapchain::NAME.as_ptr()];
+
+        let device_extension_names = [
+            ash::khr::swapchain::NAME.as_ptr(),
+            ash::khr::ray_tracing_pipeline::NAME.as_ptr(),
+            ash::khr::acceleration_structure::NAME.as_ptr(),
+            ash::khr::deferred_host_operations::NAME.as_ptr(),
+            // Required by RT
+            CStr::from_bytes_with_nul(b"VK_KHR_spirv_1_4\0")?.as_ptr(),
+            CStr::from_bytes_with_nul(b"VK_KHR_shader_float_controls\0")?.as_ptr(),
+            CStr::from_bytes_with_nul(b"VK_KHR_buffer_device_address\0")?.as_ptr(),
+        ];
+
+        // Enable Features
+        let mut buffer_device_address_features = vk::PhysicalDeviceBufferDeviceAddressFeatures::default()
+            .buffer_device_address(true);
+
+        let mut ray_tracing_pipeline_features = vk::PhysicalDeviceRayTracingPipelineFeaturesKHR::default()
+            .ray_tracing_pipeline(true);
+            
+        let mut acceleration_structure_features = vk::PhysicalDeviceAccelerationStructureFeaturesKHR::default()
+            .acceleration_structure(true);
+
         let device_create_info = vk::DeviceCreateInfo::default()
             .queue_create_infos(std::slice::from_ref(&queue_info))
-            .enabled_extension_names(&device_extension_names);
+            .enabled_extension_names(&device_extension_names)
+            .push_next(&mut buffer_device_address_features)
+            .push_next(&mut ray_tracing_pipeline_features)
+            .push_next(&mut acceleration_structure_features);
 
         let device = unsafe { instance.create_device(pdevice, &device_create_info, None)? };
         let graphics_queue = unsafe { device.get_device_queue(queue_family_index, 0) };

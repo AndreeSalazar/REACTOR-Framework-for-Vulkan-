@@ -4,16 +4,20 @@ use gpu_allocator::MemoryLocation;
 use crate::vulkan_context::VulkanContext;
 use std::error::Error;
 
+use std::sync::{Arc, Mutex};
+
 pub struct Buffer {
     pub handle: vk::Buffer,
-    pub allocation: Allocation,
+    pub allocation: Option<Allocation>, // Option to allow taking in Drop
     pub size: u64,
+    device: ash::Device,
+    allocator: Arc<Mutex<Allocator>>,
 }
 
 impl Buffer {
     pub fn new(
         ctx: &VulkanContext,
-        allocator: &mut Allocator,
+        allocator: Arc<Mutex<Allocator>>,
         size: u64,
         usage: vk::BufferUsageFlags,
         location: MemoryLocation,
@@ -27,7 +31,7 @@ impl Buffer {
 
         let requirements = unsafe { ctx.device.get_buffer_memory_requirements(handle) };
 
-        let allocation = allocator.allocate(&AllocationCreateDesc {
+        let allocation = allocator.lock().unwrap().allocate(&AllocationCreateDesc {
             name: "buffer",
             requirements,
             location,
@@ -41,21 +45,31 @@ impl Buffer {
 
         Ok(Self {
             handle,
-            allocation,
+            allocation: Some(allocation),
             size,
+            device: ctx.device.clone(),
+            allocator,
         })
     }
 
-    pub fn destroy(&mut self, ctx: &VulkanContext, allocator: &mut Allocator) {
+    pub fn destroy(&mut self) {
         if self.handle != vk::Buffer::null() {
             unsafe {
-                ctx.device.destroy_buffer(self.handle, None);
+                self.device.destroy_buffer(self.handle, None);
             }
-            if let Err(e) = allocator.free(std::mem::take(&mut self.allocation)) {
-                eprintln!("Failed to free buffer memory: {:?}", e);
+            if let Some(allocation) = self.allocation.take() {
+                if let Err(e) = self.allocator.lock().unwrap().free(allocation) {
+                    eprintln!("Failed to free buffer memory: {:?}", e);
+                }
             }
             self.handle = vk::Buffer::null();
         }
+    }
+}
+
+impl Drop for Buffer {
+    fn drop(&mut self) {
+        self.destroy();
     }
 }
 
