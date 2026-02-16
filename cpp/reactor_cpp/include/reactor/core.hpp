@@ -407,4 +407,29 @@ const char* reactor_get_error_message();
 void reactor_clear_error();
 const char* reactor_error_description(uint32_t code);
 
+// =============================================================================
+// Mesh API
+// =============================================================================
+
+void* reactor_create_cube();
+void reactor_destroy_mesh(void* mesh);
+
+// =============================================================================
+// Material API
+// =============================================================================
+
+void* reactor_create_material_simple(float r, float g, float b);
+void reactor_destroy_material(void* material);
+
+// =============================================================================
+// Scene Object API
+// =============================================================================
+
+int32_t reactor_add_object(void* mesh, void* material, CMat4 transform);
+void reactor_set_object_transform(uint32_t index, CMat4 transform);
+CMat4 reactor_get_object_transform(uint32_t index);
+void reactor_set_object_visible(uint32_t index, bool visible);
+uint32_t reactor_object_count();
+void reactor_clear_scene();
+
 } // extern "C"

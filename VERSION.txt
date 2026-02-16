@@ -1,19 +1,54 @@
-Stack-GPU-OP v0.4.1
+REACTOR Framework v1.0.5
 REACTOR Framework for Vulkan
 
-Release Date: December 18, 2024
-Status: Debug Visualizer COMPLETADO
+Release Date: February 16, 2026
+Status: Framework COMPLETO - C++ SDK Funcional
 
 Major Features:
-- ✅ Vulkan framework completo y funcional
-- ✅ Debug Visualizer System (7 modos en tiempo real)
-- ✅ Ventana Full HD (1920x1080) maximizada
-- ✅ Iluminación mejorada (más brillante y clara)
-- ✅ Stack-GPU-OP: ISR headers + shaders completos
-- ✅ Stack-GPU-OP: SDF rendering completo
-- ✅ Cubo 3D con Phong shading profesional
-- ✅ 74-75 FPS estables
+- Vulkan 1.3 framework completo y funcional
+- C ABI completo para interoperabilidad C/C++
+- C++ SDK con wrappers RAII y ReactorApp()
+- Shaders SPIR-V embebidos (sin archivos externos)
+- Render loop automático con draw_scene()
+- Mesh creation (cubo) y materiales funcionales
+- Sistema de iluminación (directional, point, spot)
+- Sistema de cámara con view/projection
+- Input (teclado y mouse) completo
+- Ray Tracing automático (detecta RTX si disponible)
+- MSAA 4x anti-aliasing por defecto
+- Sistema ADead-GPU integrado (ISR, SDF, AA)
+- Ejemplo C++ funcional con cubo 3D visible
+- Documentación completa (docs/ con guías)
+- 3000+ FPS estable en RTX 3060
+- Soporte para español (ASCII compatible)
+- Pipeline completo: Rust Core → C ABI → C++ SDK → Vulkan
 
-Progress: 45% Complete
-Current: v0.4.1 - Debug Visualizer System
-Next: v0.5.0 - ISR Compute Implementation
+C++ Features:
+- reactor::Application (clase base)
+- reactor::ReactorApp() (API funcional)
+- reactor::Camera, Lighting, Input, Time
+- reactor::Mesh, Material, Scene
+- reactor::GPU, Window, Debug
+- Sistema ECS completo
+- Sistema de animación
+- Sistema de audio
+- Post-processing
+- GPU Info y Error handling
+
+Documentation:
+- docs/README.md (índice)
+- docs/manual.md (manual general)
+- docs/rust-guide.md (guía Rust)
+- docs/cpp-guide.md (guía C++)
+- README.md actualizado con changelog
+
+Examples:
+- cpp/examples/3D/main_basic.cpp (C API directo)
+- cpp/examples/3D/main_class.cpp (SDK de C++)
+- Rust examples (simple_cube, cube, sandbox)
+
+Performance:
+- 3000+ FPS en NVIDIA RTX 3060
+- 0 errores de validación SPIR-V
+- Memory management automático
+- Zero-overhead abstractions

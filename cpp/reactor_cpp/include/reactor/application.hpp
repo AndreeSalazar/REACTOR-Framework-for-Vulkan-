@@ -100,6 +100,91 @@ struct Camera {
 };
 
 // =============================================================================
+// GPU — GPU Information
+// =============================================================================
+
+struct GPU {
+    static const char* name() { return reactor_get_gpu_name(); }
+    static uint32_t msaa_samples() { return reactor_get_msaa_samples(); }
+};
+
+// =============================================================================
+// Lighting — Light management
+// =============================================================================
+
+struct Lighting {
+    static int32_t add_directional(const Vec3& dir, const Vec3& color, float intensity) {
+        return reactor_add_directional_light(dir.x, dir.y, dir.z, color.x, color.y, color.z, intensity);
+    }
+    static int32_t add_point(const Vec3& pos, const Vec3& color, float intensity, float range) {
+        return reactor_add_point_light(pos.x, pos.y, pos.z, color.x, color.y, color.z, intensity, range);
+    }
+    static int32_t add_spot(const Vec3& pos, const Vec3& dir, const Vec3& color, float intensity, float range, float angle) {
+        return reactor_add_spot_light(pos.x, pos.y, pos.z, dir.x, dir.y, dir.z, color.x, color.y, color.z, intensity, range, angle);
+    }
+    static void clear() { reactor_clear_lights(); }
+    static uint32_t count() { return reactor_light_count(); }
+};
+
+// =============================================================================
+// MeshHandle / MaterialHandle — Opaque handles for resources
+// =============================================================================
+
+using MeshHandle = void;
+using MaterialHandle = void;
+
+// =============================================================================
+// Mesh — Mesh creation
+// =============================================================================
+
+struct Mesh {
+    static MeshHandle* create_cube() {
+        return reactor_create_cube();
+    }
+    static void destroy(MeshHandle* mesh) {
+        if (mesh) reactor_destroy_mesh(mesh);
+    }
+};
+
+// =============================================================================
+// Material — Material creation
+// =============================================================================
+
+struct Material {
+    static MaterialHandle* create_simple(float r, float g, float b) {
+        return reactor_create_material_simple(r, g, b);
+    }
+    static void destroy(MaterialHandle* material) {
+        if (material) reactor_destroy_material(material);
+    }
+};
+
+// =============================================================================
+// Scene — Scene management
+// =============================================================================
+
+struct Scene {
+    static int32_t add_object(MeshHandle* mesh, MaterialHandle* material, const Mat4& transform) {
+        return reactor_add_object(mesh, material, transform.to_c());
+    }
+    static void set_transform(uint32_t index, const Mat4& transform) {
+        reactor_set_object_transform(index, transform.to_c());
+    }
+    static Mat4 get_transform(uint32_t index) {
+        return Mat4(reactor_get_object_transform(index));
+    }
+    static void set_visible(uint32_t index, bool visible) {
+        reactor_set_object_visible(index, visible);
+    }
+    static uint32_t object_count() {
+        return reactor_object_count();
+    }
+    static void clear() {
+        reactor_clear_scene();
+    }
+};
+
+// =============================================================================
 // SDF — Signed Distance Functions (ADead-GPU)
 // =============================================================================
 

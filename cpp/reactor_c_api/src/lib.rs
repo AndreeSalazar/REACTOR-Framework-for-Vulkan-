@@ -996,15 +996,57 @@ pub extern "C" fn reactor_destroy_mesh(mesh: *mut MeshHandle) {
 }
 
 // =============================================================================
+// Default Shaders (Embedded SPIR-V from compiled files)
+// =============================================================================
+
+// Load compiled SPIR-V shaders at compile time
+const DEFAULT_VERT_SPV_BYTES: &[u8] = include_bytes!("../../../shaders/vert.spv");
+const DEFAULT_FRAG_SPV_BYTES: &[u8] = include_bytes!("../../../shaders/frag.spv");
+
+// Helper to convert bytes to u32 slice (SPIR-V format)
+fn bytes_to_u32_vec(bytes: &[u8]) -> Vec<u32> {
+    bytes.chunks(4)
+        .map(|chunk| {
+            u32::from_le_bytes([
+                chunk.get(0).copied().unwrap_or(0),
+                chunk.get(1).copied().unwrap_or(0),
+                chunk.get(2).copied().unwrap_or(0),
+                chunk.get(3).copied().unwrap_or(0),
+            ])
+        })
+        .collect()
+}
+
+// =============================================================================
 // Material Creation API
 // =============================================================================
 
-/// Create a simple colored material (placeholder - requires shaders)
+/// Create a simple colored material using default shaders
 #[unsafe(no_mangle)]
 pub extern "C" fn reactor_create_material_simple(_r: f32, _g: f32, _b: f32) -> *mut MaterialHandle {
-    // Material creation requires SPIR-V shaders
-    // This is a placeholder - use reactor_create_material with shader code
-    std::ptr::null_mut()
+    let mut state = REACTOR_STATE.lock().unwrap();
+    let Some(s) = state.as_mut() else { return std::ptr::null_mut(); };
+    let Some(ref reactor) = s.reactor else { return std::ptr::null_mut(); };
+    
+    // Convert embedded bytes to u32 vectors
+    let vert_spv = bytes_to_u32_vec(DEFAULT_VERT_SPV_BYTES);
+    let frag_spv = bytes_to_u32_vec(DEFAULT_FRAG_SPV_BYTES);
+    
+    match Material::new_with_msaa(
+        &reactor.context,
+        reactor.render_pass,
+        &vert_spv,
+        &frag_spv,
+        s.width,
+        s.height,
+        reactor.msaa_samples,
+    ) {
+        Ok(material) => Box::into_raw(Box::new(MaterialHandle { material })),
+        Err(e) => {
+            eprintln!("Failed to create material: {}", e);
+            std::ptr::null_mut()
+        }
+    }
 }
 
 /// Create a basic material from shader code

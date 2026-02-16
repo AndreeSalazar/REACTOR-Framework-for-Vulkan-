@@ -492,7 +492,7 @@ benchmark.compare_with_dlss();
 
 ```
 ╔═══════════════════════════════════════════════════════════════╗
-║                 ADead-GPU Complete Suite                       ║
+║                 ADead-GPU Complete Suite                      ║
 ╠═══════════════════════════════════════════════════════════════╣
 ║  1. ADead-GPU Core    → 3.7x faster command submission        ║
 ║  2. ADead-AA (SDF)    → Perfect edges, zero memory            ║
@@ -509,5 +509,52 @@ benchmark.compare_with_dlss();
 
 ---
 
-## 📄 Licencia
+## � Documentacion
+
+La documentacion completa esta disponible en la carpeta `/docs/`:
+
+| Documento | Descripcion |
+| --------- | ----------- |
+| [Manual General](docs/manual.md) | Manual corto y completo para uso general |
+| [Guia Rust](docs/rust-guide.md) | Desarrollo de juegos con Rust |
+| [Guia C++](docs/cpp-guide.md) | Desarrollo de juegos con C++ |
+
+### Ejemplos
+
+**Rust:**
+```bash
+cargo run --example simple_cube
+cargo run --example cube
+```
+
+**C++:**
+```bash
+cd cpp/examples/3D
+cmake -B build
+cmake --build build --config Release
+./build/Release/reactor_3d.exe
+```
+
+---
+
+## 🔄 Actualizaciones
+
+### v1.0.5 (Actual)
+
+- **C ABI completo** - Todas las funciones expuestas para C/C++
+- **C++ SDK** - Wrappers RAII para uso idiomatico
+- **Shaders embebidos** - Materiales funcionan sin archivos externos
+- **Ray Tracing automatico** - Detecta y usa RTX si disponible
+- **MSAA 4x** - Anti-aliasing por defecto
+- **Documentacion** - Guias completas para Rust y C++
+
+### v0.4.x
+
+- Version inicial en Rust
+- Vulkan 1.3 base
+- Sistema ADead-GPU
+
+---
+
+## �📄 Licencia
 MIT License

@@ -62,6 +62,11 @@ extern "C" {
 // Global state for callbacks
 static float g_rotation = 0.0f;
 
+// Global handles for 3D objects
+static void* g_cube_mesh = nullptr;
+static void* g_cube_material = nullptr;
+static int32_t g_cube_index = -1;
+
 void on_init() {
     printf("+==============================================================+\n");
     printf("|           REACTOR 3D - C++ Vulkan Example                    |\n");
@@ -75,12 +80,38 @@ void on_init() {
     printf("\n");
     
     // Setup camera
-    reactor_set_camera_position(0.0f, 3.0f, 8.0f);
+    reactor_set_camera_position(0.0f, 2.0f, 5.0f);
     reactor_set_camera_target(0.0f, 0.0f, 0.0f);
     
     // Setup lighting
     reactor_add_directional_light(-0.5f, -1.0f, -0.3f, 1.0f, 0.98f, 0.95f, 1.0f);
     
+    // Create a cube mesh
+    g_cube_mesh = reactor_create_cube();
+    if (g_cube_mesh) {
+        printf("Cubo creado correctamente!\n");
+        
+        // Create a simple material
+        g_cube_material = reactor_create_material_simple(1.0f, 0.5f, 0.2f);
+        if (g_cube_material) {
+            printf("Material creado correctamente!\n");
+            
+            // Add cube to scene with identity transform
+            CMat4 transform = {};
+            // Identity matrix
+            transform.cols[0][0] = 1.0f;
+            transform.cols[1][1] = 1.0f;
+            transform.cols[2][2] = 1.0f;
+            transform.cols[3][3] = 1.0f;
+            
+            g_cube_index = reactor_add_object(g_cube_mesh, g_cube_material, transform);
+            if (g_cube_index >= 0) {
+                printf("Cubo agregado a la escena (index: %d)\n", g_cube_index);
+            }
+        }
+    }
+    
+    printf("Objetos en escena: %u\n", reactor_object_count());
     printf("REACTOR inicializado!\n");
 }
 
