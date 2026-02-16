@@ -887,22 +887,47 @@ impl Reactor {
 impl Drop for Reactor {
     fn drop(&mut self) {
         unsafe {
-            self.context.device.device_wait_idle().unwrap();
+            // Wait for all GPU operations to complete
+            let _ = self.context.device.device_wait_idle();
             
+            // Destroy MSAA resources first (they depend on device)
+            if let Some(msaa_view) = self.msaa_image_view.take() {
+                self.context.device.destroy_image_view(msaa_view, None);
+            }
+            if let Some(msaa_image) = self.msaa_image.take() {
+                self.context.device.destroy_image(msaa_image, None);
+            }
+            if let Some(msaa_memory) = self.msaa_memory.take() {
+                self.context.device.free_memory(msaa_memory, None);
+            }
+            
+            // Destroy framebuffers
             for &framebuffer in &self.framebuffers {
                 self.context.device.destroy_framebuffer(framebuffer, None);
             }
+            
+            // Destroy render pass
             self.context.device.destroy_render_pass(self.render_pass, None);
 
+            // Destroy sync objects
             for i in 0..MAX_FRAMES_IN_FLIGHT {
                 self.context.device.destroy_semaphore(self.image_available_semaphores[i], None);
                 self.context.device.destroy_semaphore(self.render_finished_semaphores[i], None);
                 self.context.device.destroy_fence(self.in_flight_fences[i], None);
             }
             
+            // Destroy command pool
             self.context.device.destroy_command_pool(self.command_pool, None);
         }
+        
+        // Destroy swapchain
         self.swapchain.destroy(&self.context.device);
-        // Allocator is dropped automatically by Arc/Mutex
+        
+        // Allocator must be dropped before device
+        // Force drop of allocator by taking ownership
+        if let Ok(allocator) = self.allocator.lock() {
+            // Allocator will be dropped when lock is released
+            drop(allocator);
+        }
     }
 }

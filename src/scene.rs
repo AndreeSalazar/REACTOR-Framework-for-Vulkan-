@@ -51,4 +51,13 @@ impl Scene {
     pub fn len(&self) -> usize {
         self.objects.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.objects.is_empty()
+    }
+
+    /// Clear all objects from the scene (releases Arc references)
+    pub fn clear(&mut self) {
+        self.objects.clear();
+    }
 }

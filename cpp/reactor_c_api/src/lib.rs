@@ -731,6 +731,294 @@ pub extern "C" fn reactor_scene_clear(scene: *mut SceneHandle) {
     scene.scene.objects.clear();
 }
 
+/// Add an object to the scene (takes ownership of mesh/material handles)
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_scene_add_object(
+    scene: *mut SceneHandle,
+    mesh: *mut MeshHandle,
+    material: *mut MaterialHandle,
+    transform: CMat4,
+) -> i32 {
+    if scene.is_null() || mesh.is_null() || material.is_null() { return -1; }
+    
+    let scene = unsafe { &mut *scene };
+    let mesh_handle = unsafe { Box::from_raw(mesh) };
+    let material_handle = unsafe { Box::from_raw(material) };
+    
+    let transform_mat = glam::Mat4::from_cols_array_2d(&transform.cols);
+    
+    let idx = scene.scene.add_object(
+        std::sync::Arc::new(mesh_handle.mesh),
+        std::sync::Arc::new(material_handle.material),
+        transform_mat,
+    );
+    
+    idx as i32
+}
+
+/// Set transform for an object in the scene
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_scene_set_transform(scene: *mut SceneHandle, index: u32, transform: CMat4) {
+    if scene.is_null() { return; }
+    let scene = unsafe { &mut *scene };
+    if (index as usize) < scene.scene.objects.len() {
+        scene.scene.objects[index as usize].transform = glam::Mat4::from_cols_array_2d(&transform.cols);
+    }
+}
+
+/// Get transform for an object in the scene
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_scene_get_transform(scene: *const SceneHandle, index: u32) -> CMat4 {
+    if scene.is_null() { return CMat4::default(); }
+    let scene = unsafe { &*scene };
+    if (index as usize) < scene.scene.objects.len() {
+        CMat4 { cols: scene.scene.objects[index as usize].transform.to_cols_array_2d() }
+    } else {
+        CMat4::default()
+    }
+}
+
+/// Set visibility for an object in the scene
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_scene_set_visible(scene: *mut SceneHandle, index: u32, visible: bool) {
+    if scene.is_null() { return; }
+    let scene = unsafe { &mut *scene };
+    if (index as usize) < scene.scene.objects.len() {
+        scene.scene.objects[index as usize].visible = visible;
+    }
+}
+
+/// Get visibility for an object in the scene
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_scene_is_visible(scene: *const SceneHandle, index: u32) -> bool {
+    if scene.is_null() { return false; }
+    let scene = unsafe { &*scene };
+    if (index as usize) < scene.scene.objects.len() {
+        scene.scene.objects[index as usize].visible
+    } else {
+        false
+    }
+}
+
+/// Remove an object from the scene by index
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_scene_remove_object(scene: *mut SceneHandle, index: u32) -> bool {
+    if scene.is_null() { return false; }
+    let scene = unsafe { &mut *scene };
+    if (index as usize) < scene.scene.objects.len() {
+        scene.scene.objects.remove(index as usize);
+        true
+    } else {
+        false
+    }
+}
+
+// =============================================================================
+// Global Scene API (uses built-in scene from ReactorState)
+// =============================================================================
+
+/// Add object to the global scene
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_add_object(mesh: *mut MeshHandle, material: *mut MaterialHandle, transform: CMat4) -> i32 {
+    if mesh.is_null() || material.is_null() { return -1; }
+    
+    let mesh_handle = unsafe { Box::from_raw(mesh) };
+    let material_handle = unsafe { Box::from_raw(material) };
+    let transform_mat = glam::Mat4::from_cols_array_2d(&transform.cols);
+    
+    if let Some(s) = REACTOR_STATE.lock().unwrap().as_mut() {
+        let idx = s.scene.add_object(
+            std::sync::Arc::new(mesh_handle.mesh),
+            std::sync::Arc::new(material_handle.material),
+            transform_mat,
+        );
+        idx as i32
+    } else {
+        -1
+    }
+}
+
+/// Get object count in global scene
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_object_count() -> u32 {
+    REACTOR_STATE.lock().unwrap()
+        .as_ref()
+        .map(|s| s.scene.objects.len() as u32)
+        .unwrap_or(0)
+}
+
+/// Set transform for object in global scene
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_set_object_transform(index: u32, transform: CMat4) {
+    if let Some(s) = REACTOR_STATE.lock().unwrap().as_mut() {
+        if (index as usize) < s.scene.objects.len() {
+            s.scene.objects[index as usize].transform = glam::Mat4::from_cols_array_2d(&transform.cols);
+        }
+    }
+}
+
+/// Get transform for object in global scene
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_get_object_transform(index: u32) -> CMat4 {
+    REACTOR_STATE.lock().unwrap()
+        .as_ref()
+        .and_then(|s| {
+            if (index as usize) < s.scene.objects.len() {
+                Some(CMat4 { cols: s.scene.objects[index as usize].transform.to_cols_array_2d() })
+            } else {
+                None
+            }
+        })
+        .unwrap_or_default()
+}
+
+/// Set visibility for object in global scene
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_set_object_visible(index: u32, visible: bool) {
+    if let Some(s) = REACTOR_STATE.lock().unwrap().as_mut() {
+        if (index as usize) < s.scene.objects.len() {
+            s.scene.objects[index as usize].visible = visible;
+        }
+    }
+}
+
+/// Clear global scene
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_clear_scene() {
+    if let Some(s) = REACTOR_STATE.lock().unwrap().as_mut() {
+        s.scene.objects.clear();
+    }
+}
+
+// =============================================================================
+// Mesh Creation API
+// =============================================================================
+
+/// Create a cube mesh (built-in primitive)
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_create_cube() -> *mut MeshHandle {
+    // Note: This requires access to VulkanContext which we don't have in C API standalone
+    // For now, return null - full mesh creation requires reactor_run() context
+    std::ptr::null_mut()
+}
+
+/// Create a mesh from vertex data
+/// vertices: array of CVertex, vertex_count: number of vertices
+/// indices: array of u32, index_count: number of indices
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_create_mesh(
+    vertices: *const CVertex,
+    vertex_count: u32,
+    indices: *const u32,
+    index_count: u32,
+) -> *mut MeshHandle {
+    // Note: Mesh creation requires VulkanContext
+    // This is a placeholder - actual mesh creation happens through reactor_run() callbacks
+    if vertices.is_null() || indices.is_null() { return std::ptr::null_mut(); }
+    
+    // We can't create GPU resources without the Vulkan context
+    // Return null - user should create meshes in on_init callback
+    std::ptr::null_mut()
+}
+
+/// Destroy a mesh handle
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_destroy_mesh(mesh: *mut MeshHandle) {
+    if !mesh.is_null() {
+        unsafe { drop(Box::from_raw(mesh)); }
+    }
+}
+
+// =============================================================================
+// Material Creation API
+// =============================================================================
+
+/// Destroy a material handle
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_destroy_material(material: *mut MaterialHandle) {
+    if !material.is_null() {
+        unsafe { drop(Box::from_raw(material)); }
+    }
+}
+
+// =============================================================================
+// Lighting API
+// =============================================================================
+
+/// Add a directional light to the global lighting system
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_add_directional_light(dir_x: f32, dir_y: f32, dir_z: f32, r: f32, g: f32, b: f32, intensity: f32) -> i32 {
+    if let Some(s) = REACTOR_STATE.lock().unwrap().as_mut() {
+        let light = reactor::systems::lighting::Light::directional(
+            glam::Vec3::new(dir_x, dir_y, dir_z).normalize(),
+            glam::Vec3::new(r, g, b),
+            intensity,
+        );
+        s.lighting.add_light(light);
+        (s.lighting.lights.len() - 1) as i32
+    } else {
+        -1
+    }
+}
+
+/// Add a point light to the global lighting system
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_add_point_light(x: f32, y: f32, z: f32, r: f32, g: f32, b: f32, intensity: f32, range: f32) -> i32 {
+    if let Some(s) = REACTOR_STATE.lock().unwrap().as_mut() {
+        let light = reactor::systems::lighting::Light::point(
+            glam::Vec3::new(x, y, z),
+            glam::Vec3::new(r, g, b),
+            intensity,
+            range,
+        );
+        s.lighting.add_light(light);
+        (s.lighting.lights.len() - 1) as i32
+    } else {
+        -1
+    }
+}
+
+/// Add a spot light to the global lighting system
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_add_spot_light(
+    pos_x: f32, pos_y: f32, pos_z: f32,
+    dir_x: f32, dir_y: f32, dir_z: f32,
+    r: f32, g: f32, b: f32,
+    intensity: f32, range: f32, angle_degrees: f32
+) -> i32 {
+    if let Some(s) = REACTOR_STATE.lock().unwrap().as_mut() {
+        let light = reactor::systems::lighting::Light::spot(
+            glam::Vec3::new(pos_x, pos_y, pos_z),
+            glam::Vec3::new(dir_x, dir_y, dir_z).normalize(),
+            glam::Vec3::new(r, g, b),
+            intensity,
+            range,
+            angle_degrees,
+        );
+        s.lighting.add_light(light);
+        (s.lighting.lights.len() - 1) as i32
+    } else {
+        -1
+    }
+}
+
+/// Get light count
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_light_count() -> u32 {
+    REACTOR_STATE.lock().unwrap()
+        .as_ref()
+        .map(|s| s.lighting.lights.len() as u32)
+        .unwrap_or(0)
+}
+
+/// Clear all lights
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_clear_lights() {
+    if let Some(s) = REACTOR_STATE.lock().unwrap().as_mut() {
+        s.lighting.lights.clear();
+    }
+}
+
 // =============================================================================
 // Camera API
 // =============================================================================

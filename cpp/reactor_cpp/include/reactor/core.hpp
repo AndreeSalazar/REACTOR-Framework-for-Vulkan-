@@ -208,4 +208,66 @@ void reactor_log_info(const char* msg);
 void reactor_log_warn(const char* msg);
 void reactor_log_error(const char* msg);
 
+// =============================================================================
+// Scene API — Global scene management
+// =============================================================================
+
+uint32_t reactor_object_count();
+int32_t reactor_add_object(void* mesh, void* material, CMat4 transform);
+void reactor_set_object_transform(uint32_t index, CMat4 transform);
+CMat4 reactor_get_object_transform(uint32_t index);
+void reactor_set_object_visible(uint32_t index, bool visible);
+void reactor_clear_scene();
+
+// =============================================================================
+// Scene Handle API — For custom scenes
+// =============================================================================
+
+void* reactor_scene_create();
+void reactor_scene_destroy(void* scene);
+uint32_t reactor_scene_object_count(const void* scene);
+void reactor_scene_clear(void* scene);
+int32_t reactor_scene_add_object(void* scene, void* mesh, void* material, CMat4 transform);
+void reactor_scene_set_transform(void* scene, uint32_t index, CMat4 transform);
+CMat4 reactor_scene_get_transform(const void* scene, uint32_t index);
+void reactor_scene_set_visible(void* scene, uint32_t index, bool visible);
+bool reactor_scene_is_visible(const void* scene, uint32_t index);
+bool reactor_scene_remove_object(void* scene, uint32_t index);
+
+// =============================================================================
+// Mesh API
+// =============================================================================
+
+void* reactor_create_mesh(const CVertex* vertices, uint32_t vertex_count, const uint32_t* indices, uint32_t index_count);
+void* reactor_create_cube();
+void reactor_destroy_mesh(void* mesh);
+
+// =============================================================================
+// Material API
+// =============================================================================
+
+void reactor_destroy_material(void* material);
+
+// =============================================================================
+// Lighting API
+// =============================================================================
+
+int32_t reactor_add_directional_light(float dir_x, float dir_y, float dir_z, float r, float g, float b, float intensity);
+int32_t reactor_add_point_light(float x, float y, float z, float r, float g, float b, float intensity, float range);
+int32_t reactor_add_spot_light(float pos_x, float pos_y, float pos_z, float dir_x, float dir_y, float dir_z, float r, float g, float b, float intensity, float range, float angle_degrees);
+uint32_t reactor_light_count();
+void reactor_clear_lights();
+
+// =============================================================================
+// Camera Handle API — For custom cameras
+// =============================================================================
+
+void* reactor_camera_create_perspective(float fov, float aspect, float near_plane, float far_plane);
+void reactor_camera_destroy(void* camera);
+void reactor_camera_set_position(void* camera, float x, float y, float z);
+void reactor_camera_set_target(void* camera, float x, float y, float z);
+CMat4 reactor_camera_get_view_projection(const void* camera);
+CMat4 reactor_camera_get_view(const void* camera);
+CMat4 reactor_camera_get_projection(const void* camera);
+
 } // extern "C"

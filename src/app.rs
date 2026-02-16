@@ -168,6 +168,20 @@ pub struct ReactorContext {
     fixed_accumulator: f32,
 }
 
+impl Drop for ReactorContext {
+    fn drop(&mut self) {
+        // CRITICAL: Clear scene BEFORE reactor is dropped
+        // This releases Arc references to Mesh/Material which contain Vulkan resources
+        // that need the allocator (which is inside reactor) to be freed
+        self.scene.clear();
+        
+        // Wait for GPU to finish before cleanup
+        unsafe {
+            let _ = self.reactor.context.device.device_wait_idle();
+        }
+    }
+}
+
 impl ReactorContext {
     // =========================================================================
     // Input

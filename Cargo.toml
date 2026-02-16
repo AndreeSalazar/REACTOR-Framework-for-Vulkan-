@@ -1,7 +1,7 @@
 [package]
 name = "reactor"
-version = "0.1.0"
-edition = "2024"
+version = "0.4.1"
+edition = "2021"
 
 [dependencies]
 ash = "0.38.0"
@@ -12,3 +12,23 @@ gpu-allocator = "0.28.0"
 log = "0.4.29"
 raw-window-handle = "0.6.2"
 winit = "0.30.12"
+
+[[example]]
+name = "cube"
+path = "examples/cube.rs"
+
+[[example]]
+name = "hello_reactor"
+path = "examples/hello_reactor.rs"
+
+[[example]]
+name = "sandbox"
+path = "examples/sandbox.rs"
+
+[[example]]
+name = "sandbox_elite"
+path = "examples/sandbox_elite.rs"
+
+[[example]]
+name = "adead_demo"
+path = "examples/adead_demo.rs"

@@ -1,7 +1,7 @@
 // =============================================================================
 // hello_cpp — Example C++ game using REACTOR
 // =============================================================================
-// This demonstrates the ONE CALL ReactorApp() pattern.
+// This demonstrates the ONE CALL ReactorApp() pattern with Scene API.
 // Ultra-simple, ultra-productive, ultra-powerful.
 //
 // Build:
@@ -13,7 +13,7 @@
 #include <cstdio>
 
 // =============================================================================
-// Example 1: Class-based (recommended for larger games)
+// Example 1: Class-based with Scene API (recommended for larger games)
 // =============================================================================
 
 class HelloReactor : public reactor::Application {
@@ -30,6 +30,20 @@ public:
     void on_init() override {
         reactor::Log::info("HelloReactor initialized!");
         
+        // Setup lighting using Lighting API
+        reactor::Lighting::add_directional(
+            {-0.5f, -1.0f, -0.3f},  // direction
+            {1.0f, 0.98f, 0.95f},   // warm white color
+            1.0f                     // intensity
+        );
+        reactor::Lighting::add_point(
+            {2.0f, 2.0f, 2.0f},     // position
+            {0.3f, 0.5f, 1.0f},     // blue color
+            0.5f,                    // intensity
+            10.0f                    // range
+        );
+        printf("  Lights added: %u\n", reactor::Lighting::count());
+        
         // Test SDF functions
         float sphere_dist = reactor::SDF::sphere({0.5f, 0, 0}, 1.0f);
         float box_dist = reactor::SDF::box({0.3f, 0.3f, 0.3f}, {0.5f, 0.5f, 0.5f});
@@ -40,6 +54,9 @@ public:
         // Set initial camera
         reactor::Camera::set_position(camera_pos_);
         reactor::Camera::set_target({0, 0, 0});
+        
+        // Scene info
+        printf("  Scene objects: %u\n", reactor::Scene::object_count());
     }
 
     void on_update(float dt) override {
@@ -75,11 +92,19 @@ public:
         // Update camera
         reactor::Camera::set_position(camera_pos_);
         
+        // Update object transforms in scene (if any)
+        uint32_t obj_count = reactor::Scene::object_count();
+        for (uint32_t i = 0; i < obj_count; ++i) {
+            auto transform = reactor::Mat4::RotationY(rotation_ + i * 0.5f);
+            reactor::Scene::set_transform(i, transform);
+        }
+        
         // Show FPS every 60 frames
         if (reactor::Time::frame_count() % 60 == 0) {
-            printf("\rFPS: %.1f  Camera: (%.1f, %.1f, %.1f)    ",
+            printf("\rFPS: %.1f  Camera: (%.1f, %.1f, %.1f)  Objects: %u    ",
                 reactor::Time::fps(),
-                camera_pos_.x, camera_pos_.y, camera_pos_.z);
+                camera_pos_.x, camera_pos_.y, camera_pos_.z,
+                obj_count);
             fflush(stdout);
         }
     }
@@ -94,17 +119,21 @@ public:
         // MVP = VP * Model
         auto mvp = vp * model;
         
-        // In full integration: draw meshes with mvp
+        // Scene is rendered automatically by REACTOR
     }
 
     void on_shutdown() override {
         printf("\n");
         reactor::Log::info("HelloReactor shutdown!");
+        
+        // Clear scene and lights
+        reactor::Scene::clear();
+        reactor::Lighting::clear();
     }
 };
 
 // =============================================================================
-// Example 2: Functional style (ultra-simple for small demos)
+// Example 2: Functional style with Scene API
 // =============================================================================
 
 void run_functional_example() {
@@ -116,11 +145,19 @@ void run_functional_example() {
         // on_init
         []() {
             reactor::Log::info("Functional example initialized!");
+            
+            // Add lighting
+            reactor::Lighting::add_directional({0, -1, 0}, {1, 1, 1}, 1.0f);
         },
         
         // on_update
         [&rotation](float dt) {
             rotation += dt;
+            
+            // Update all objects in scene
+            for (uint32_t i = 0; i < reactor::Scene::object_count(); ++i) {
+                reactor::Scene::set_transform(i, reactor::Mat4::RotationY(rotation));
+            }
             
             if (reactor::Input::key_pressed(reactor::Input::KEY_ESCAPE())) {
                 reactor::Window::request_close();
@@ -129,8 +166,7 @@ void run_functional_example() {
         
         // on_render
         [&rotation]() {
-            auto model = reactor::Mat4::RotationY(rotation);
-            // Draw with model matrix...
+            // Scene rendered automatically
         }
     );
 }
@@ -150,8 +186,15 @@ void run_minimal_example() {
 
 int main() {
     printf("╔══════════════════════════════════════════════════════════════╗\n");
-    printf("║           REACTOR C++ SDK — Hello World Example              ║\n");
+    printf("║       REACTOR C++ SDK — Scene API Example                    ║\n");
     printf("╚══════════════════════════════════════════════════════════════╝\n");
+    printf("\n");
+    printf("Features demonstrated:\n");
+    printf("  - Scene API: object management, transforms\n");
+    printf("  - Lighting API: directional, point, spot lights\n");
+    printf("  - Camera API: position, target, view-projection\n");
+    printf("  - Input API: keyboard, mouse\n");
+    printf("  - SDF API: signed distance functions\n");
     printf("\n");
     printf("Controls:\n");
     printf("  WASD      - Move camera\n");

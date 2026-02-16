@@ -135,6 +135,76 @@ struct Log {
 };
 
 // =============================================================================
+// Scene — Global scene management
+// =============================================================================
+
+struct Scene {
+    /// Get object count in the global scene
+    static uint32_t object_count() { return reactor_object_count(); }
+
+    /// Set transform for an object
+    static void set_transform(uint32_t index, const Mat4& transform) {
+        reactor_set_object_transform(index, transform.to_c());
+    }
+
+    /// Get transform for an object
+    static Mat4 get_transform(uint32_t index) {
+        return Mat4(reactor_get_object_transform(index));
+    }
+
+    /// Set visibility for an object
+    static void set_visible(uint32_t index, bool visible) {
+        reactor_set_object_visible(index, visible);
+    }
+
+    /// Clear all objects from the scene
+    static void clear() { reactor_clear_scene(); }
+};
+
+// =============================================================================
+// Lighting — Light management
+// =============================================================================
+
+struct Lighting {
+    /// Add a directional light
+    static int32_t add_directional(const Vec3& direction, const Vec3& color, float intensity) {
+        return reactor_add_directional_light(
+            direction.x, direction.y, direction.z,
+            color.x, color.y, color.z,
+            intensity
+        );
+    }
+
+    /// Add a point light
+    static int32_t add_point(const Vec3& position, const Vec3& color, float intensity, float range) {
+        return reactor_add_point_light(
+            position.x, position.y, position.z,
+            color.x, color.y, color.z,
+            intensity, range
+        );
+    }
+
+    /// Add a spot light
+    static int32_t add_spot(
+        const Vec3& position, const Vec3& direction,
+        const Vec3& color, float intensity, float range, float angle_degrees
+    ) {
+        return reactor_add_spot_light(
+            position.x, position.y, position.z,
+            direction.x, direction.y, direction.z,
+            color.x, color.y, color.z,
+            intensity, range, angle_degrees
+        );
+    }
+
+    /// Get light count
+    static uint32_t count() { return reactor_light_count(); }
+
+    /// Clear all lights
+    static void clear() { reactor_clear_lights(); }
+};
+
+// =============================================================================
 // Config — Application configuration
 // =============================================================================
 
