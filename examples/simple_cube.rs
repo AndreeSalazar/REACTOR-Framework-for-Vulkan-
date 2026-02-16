@@ -39,9 +39,10 @@ impl ReactorApp for SimpleCube {
     // INIT — Setup your scene once
     // -------------------------------------------------------------------------
     fn init(&mut self, ctx: &mut ReactorContext) {
-        // Camera
-        ctx.camera.position = Vec3::new(0.0, 2.0, 4.0);
-        ctx.camera.set_rotation(-0.3, 0.0);
+        // Camera - positioned to see the cube properly
+        ctx.camera.position = Vec3::new(0.0, 3.5, 3.0);
+        ctx.camera.set_rotation(-0.4, 0.0);
+        ctx.camera.fov = 60.0;
 
         // Light
         ctx.lighting.add_light(Light::directional(

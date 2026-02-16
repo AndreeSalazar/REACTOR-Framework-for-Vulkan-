@@ -307,6 +307,38 @@ impl Texture {
         unsafe {
             ctx.device.begin_command_buffer(command_buffer, &begin_info)?;
 
+            // First, transition ALL mip levels (except 0 which is already TRANSFER_DST) to TRANSFER_DST
+            // Mip level 0 is already in TRANSFER_DST_OPTIMAL from copy_buffer_to_image
+            // Mip levels 1+ are in UNDEFINED, need to transition them to TRANSFER_DST_OPTIMAL
+            if mip_levels > 1 {
+                let barrier = vk::ImageMemoryBarrier::default()
+                    .old_layout(vk::ImageLayout::UNDEFINED)
+                    .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+                    .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                    .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                    .image(image)
+                    .subresource_range(
+                        vk::ImageSubresourceRange::default()
+                            .aspect_mask(vk::ImageAspectFlags::COLOR)
+                            .base_mip_level(1)
+                            .level_count(mip_levels - 1)
+                            .base_array_layer(0)
+                            .layer_count(1),
+                    )
+                    .src_access_mask(vk::AccessFlags::empty())
+                    .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE);
+
+                ctx.device.cmd_pipeline_barrier(
+                    command_buffer,
+                    vk::PipelineStageFlags::TOP_OF_PIPE,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::DependencyFlags::empty(),
+                    &[],
+                    &[],
+                    &[barrier],
+                );
+            }
+
             let mut mip_width = width as i32;
             let mut mip_height = height as i32;
 

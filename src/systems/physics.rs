@@ -312,3 +312,153 @@ impl Default for PhysicsWorld {
         Self::new()
     }
 }
+
+// =============================================================================
+// Character Controller — FPS-style movement with physics
+// =============================================================================
+
+/// Character controller for FPS-style movement with gravity and collision
+#[derive(Clone, Debug)]
+pub struct CharacterController {
+    pub position: Vec3,
+    pub velocity: Vec3,
+    pub height: f32,
+    pub radius: f32,
+    pub move_speed: f32,
+    pub jump_force: f32,
+    pub gravity: f32,
+    pub ground_drag: f32,
+    pub air_drag: f32,
+    pub is_grounded: bool,
+    pub ground_check_distance: f32,
+}
+
+impl Default for CharacterController {
+    fn default() -> Self {
+        Self {
+            position: Vec3::new(0.0, 1.0, 0.0),
+            velocity: Vec3::ZERO,
+            height: 1.8,
+            radius: 0.3,
+            move_speed: 5.0,
+            jump_force: 5.0,
+            gravity: 9.81,
+            ground_drag: 10.0,
+            air_drag: 0.1,
+            is_grounded: false,
+            ground_check_distance: 0.1,
+        }
+    }
+}
+
+impl CharacterController {
+    pub fn new(position: Vec3) -> Self {
+        Self {
+            position,
+            ..Default::default()
+        }
+    }
+
+    /// Update the character controller with input
+    pub fn update(&mut self, dt: f32, move_input: Vec3, jump: bool, ground_y: f32) {
+        // Ground check
+        let feet_y = self.position.y - self.height * 0.5;
+        self.is_grounded = feet_y <= ground_y + self.ground_check_distance;
+
+        // Apply gravity
+        if !self.is_grounded {
+            self.velocity.y -= self.gravity * dt;
+        } else {
+            // Snap to ground
+            if self.velocity.y < 0.0 {
+                self.velocity.y = 0.0;
+                self.position.y = ground_y + self.height * 0.5;
+            }
+        }
+
+        // Jump
+        if jump && self.is_grounded {
+            self.velocity.y = self.jump_force;
+            self.is_grounded = false;
+        }
+
+        // Horizontal movement
+        let move_dir = Vec3::new(move_input.x, 0.0, move_input.z);
+        if move_dir.length_squared() > 0.0 {
+            let target_velocity = move_dir.normalize() * self.move_speed;
+            let drag = if self.is_grounded { self.ground_drag } else { self.air_drag };
+            self.velocity.x = lerp(self.velocity.x, target_velocity.x, drag * dt);
+            self.velocity.z = lerp(self.velocity.z, target_velocity.z, drag * dt);
+        } else if self.is_grounded {
+            // Apply friction when not moving
+            self.velocity.x = lerp(self.velocity.x, 0.0, self.ground_drag * dt);
+            self.velocity.z = lerp(self.velocity.z, 0.0, self.ground_drag * dt);
+        }
+
+        // Apply velocity
+        self.position += self.velocity * dt;
+    }
+
+    /// Get the eye position (for camera)
+    pub fn eye_position(&self) -> Vec3 {
+        Vec3::new(self.position.x, self.position.y + self.height * 0.4, self.position.z)
+    }
+
+    /// Get the collider as a sphere
+    pub fn collider(&self) -> Sphere {
+        Sphere::new(self.position, self.radius)
+    }
+
+    /// Get the collider as AABB
+    pub fn aabb(&self) -> AABB {
+        let half_height = self.height * 0.5;
+        AABB::new(
+            Vec3::new(self.position.x - self.radius, self.position.y - half_height, self.position.z - self.radius),
+            Vec3::new(self.position.x + self.radius, self.position.y + half_height, self.position.z + self.radius),
+        )
+    }
+
+    /// Check collision with AABB and resolve
+    pub fn collide_aabb(&mut self, aabb: &AABB) {
+        let char_aabb = self.aabb();
+        if !char_aabb.intersects(aabb) {
+            return;
+        }
+
+        // Calculate penetration on each axis
+        let overlap_x = (char_aabb.max.x - aabb.min.x).min(aabb.max.x - char_aabb.min.x);
+        let overlap_y = (char_aabb.max.y - aabb.min.y).min(aabb.max.y - char_aabb.min.y);
+        let overlap_z = (char_aabb.max.z - aabb.min.z).min(aabb.max.z - char_aabb.min.z);
+
+        // Push out on the axis with smallest overlap
+        if overlap_x < overlap_y && overlap_x < overlap_z {
+            if self.position.x < aabb.center().x {
+                self.position.x -= overlap_x;
+            } else {
+                self.position.x += overlap_x;
+            }
+            self.velocity.x = 0.0;
+        } else if overlap_y < overlap_z {
+            if self.position.y < aabb.center().y {
+                self.position.y -= overlap_y;
+                self.velocity.y = 0.0;
+            } else {
+                self.position.y += overlap_y;
+                self.velocity.y = 0.0;
+                self.is_grounded = true;
+            }
+        } else {
+            if self.position.z < aabb.center().z {
+                self.position.z -= overlap_z;
+            } else {
+                self.position.z += overlap_z;
+            }
+            self.velocity.z = 0.0;
+        }
+    }
+}
+
+/// Linear interpolation helper
+fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t.clamp(0.0, 1.0)
+}

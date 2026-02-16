@@ -952,6 +952,33 @@ pub extern "C" fn reactor_destroy_mesh(mesh: *mut MeshHandle) {
 // Material Creation API
 // =============================================================================
 
+/// Create a basic material from shader code
+/// Note: This is a placeholder - actual material creation requires Vulkan context
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_create_material(
+    _vert_spv: *const u32,
+    _vert_len: u32,
+    _frag_spv: *const u32,
+    _frag_len: u32,
+) -> *mut MaterialHandle {
+    // Material creation requires Vulkan context - placeholder
+    std::ptr::null_mut()
+}
+
+/// Create a textured material from shader code and texture
+/// Note: This is a placeholder - actual material creation requires Vulkan context
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_create_textured_material(
+    _vert_spv: *const u32,
+    _vert_len: u32,
+    _frag_spv: *const u32,
+    _frag_len: u32,
+    _texture: *const TextureHandle,
+) -> *mut MaterialHandle {
+    // Material creation requires Vulkan context - placeholder
+    std::ptr::null_mut()
+}
+
 /// Destroy a material handle
 #[unsafe(no_mangle)]
 pub extern "C" fn reactor_destroy_material(material: *mut MaterialHandle) {
@@ -1020,6 +1047,196 @@ pub extern "C" fn reactor_destroy_texture(texture: *mut TextureHandle) {
     if !texture.is_null() {
         unsafe { drop(Box::from_raw(texture)); }
     }
+}
+
+// =============================================================================
+// Model Loading API (OBJ)
+// =============================================================================
+
+/// OBJ data returned from loading
+#[repr(C)]
+pub struct CObjData {
+    pub vertex_count: u32,
+    pub index_count: u32,
+    pub triangle_count: u32,
+    pub success: bool,
+}
+
+/// Load an OBJ file and get info (actual mesh creation requires Vulkan context)
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_load_obj_info(path: *const std::ffi::c_char) -> CObjData {
+    if path.is_null() {
+        return CObjData { vertex_count: 0, index_count: 0, triangle_count: 0, success: false };
+    }
+    
+    let path_str = unsafe {
+        match std::ffi::CStr::from_ptr(path).to_str() {
+            Ok(s) => s,
+            Err(_) => return CObjData { vertex_count: 0, index_count: 0, triangle_count: 0, success: false },
+        }
+    };
+    
+    // Try to load OBJ to get info
+    match reactor::resources::model::ObjData::load(path_str) {
+        Ok(obj) => CObjData {
+            vertex_count: obj.vertex_count() as u32,
+            index_count: obj.index_count() as u32,
+            triangle_count: obj.triangle_count() as u32,
+            success: true,
+        },
+        Err(_) => CObjData { vertex_count: 0, index_count: 0, triangle_count: 0, success: false },
+    }
+}
+
+// =============================================================================
+// Physics API
+// =============================================================================
+
+/// Character controller handle
+#[repr(C)]
+pub struct CCharacterController {
+    pub position_x: f32,
+    pub position_y: f32,
+    pub position_z: f32,
+    pub velocity_x: f32,
+    pub velocity_y: f32,
+    pub velocity_z: f32,
+    pub height: f32,
+    pub radius: f32,
+    pub move_speed: f32,
+    pub jump_force: f32,
+    pub gravity: f32,
+    pub is_grounded: bool,
+}
+
+/// Create a character controller
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_character_controller_create(x: f32, y: f32, z: f32) -> CCharacterController {
+    CCharacterController {
+        position_x: x,
+        position_y: y,
+        position_z: z,
+        velocity_x: 0.0,
+        velocity_y: 0.0,
+        velocity_z: 0.0,
+        height: 1.8,
+        radius: 0.3,
+        move_speed: 5.0,
+        jump_force: 6.0,
+        gravity: 9.81,
+        is_grounded: false,
+    }
+}
+
+/// Update character controller with physics
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_character_controller_update(
+    controller: *mut CCharacterController,
+    dt: f32,
+    move_x: f32,
+    move_z: f32,
+    jump: bool,
+    ground_y: f32,
+) {
+    if controller.is_null() { return; }
+    
+    let c = unsafe { &mut *controller };
+    
+    // Ground check
+    let feet_y = c.position_y - c.height * 0.5;
+    c.is_grounded = feet_y <= ground_y + 0.1;
+    
+    // Gravity
+    if !c.is_grounded {
+        c.velocity_y -= c.gravity * dt;
+    } else if c.velocity_y < 0.0 {
+        c.velocity_y = 0.0;
+        c.position_y = ground_y + c.height * 0.5;
+    }
+    
+    // Jump
+    if jump && c.is_grounded {
+        c.velocity_y = c.jump_force;
+        c.is_grounded = false;
+    }
+    
+    // Horizontal movement
+    let move_len = (move_x * move_x + move_z * move_z).sqrt();
+    if move_len > 0.0 {
+        let nx = move_x / move_len;
+        let nz = move_z / move_len;
+        let target_vx = nx * c.move_speed;
+        let target_vz = nz * c.move_speed;
+        let drag = if c.is_grounded { 10.0 } else { 0.1 };
+        c.velocity_x += (target_vx - c.velocity_x) * drag * dt;
+        c.velocity_z += (target_vz - c.velocity_z) * drag * dt;
+    } else if c.is_grounded {
+        c.velocity_x *= 1.0 - 10.0 * dt;
+        c.velocity_z *= 1.0 - 10.0 * dt;
+    }
+    
+    // Apply velocity
+    c.position_x += c.velocity_x * dt;
+    c.position_y += c.velocity_y * dt;
+    c.position_z += c.velocity_z * dt;
+}
+
+/// Get eye position from character controller
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_character_controller_eye_position(controller: *const CCharacterController, out_x: *mut f32, out_y: *mut f32, out_z: *mut f32) {
+    if controller.is_null() { return; }
+    let c = unsafe { &*controller };
+    unsafe {
+        if !out_x.is_null() { *out_x = c.position_x; }
+        if !out_y.is_null() { *out_y = c.position_y + c.height * 0.4; }
+        if !out_z.is_null() { *out_z = c.position_z; }
+    }
+}
+
+/// Ray-AABB intersection test
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_raycast_aabb(
+    ray_ox: f32, ray_oy: f32, ray_oz: f32,
+    ray_dx: f32, ray_dy: f32, ray_dz: f32,
+    aabb_min_x: f32, aabb_min_y: f32, aabb_min_z: f32,
+    aabb_max_x: f32, aabb_max_y: f32, aabb_max_z: f32,
+    out_t: *mut f32,
+) -> bool {
+    let inv_dx = 1.0 / ray_dx;
+    let inv_dy = 1.0 / ray_dy;
+    let inv_dz = 1.0 / ray_dz;
+    
+    let t1 = (aabb_min_x - ray_ox) * inv_dx;
+    let t2 = (aabb_max_x - ray_ox) * inv_dx;
+    let t3 = (aabb_min_y - ray_oy) * inv_dy;
+    let t4 = (aabb_max_y - ray_oy) * inv_dy;
+    let t5 = (aabb_min_z - ray_oz) * inv_dz;
+    let t6 = (aabb_max_z - ray_oz) * inv_dz;
+    
+    let tmin = t1.min(t2).max(t3.min(t4)).max(t5.min(t6));
+    let tmax = t1.max(t2).min(t3.max(t4)).min(t5.max(t6));
+    
+    if tmax < 0.0 || tmin > tmax {
+        false
+    } else {
+        if !out_t.is_null() {
+            unsafe { *out_t = if tmin < 0.0 { tmax } else { tmin }; }
+        }
+        true
+    }
+}
+
+/// AABB-AABB intersection test
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_aabb_intersects(
+    a_min_x: f32, a_min_y: f32, a_min_z: f32,
+    a_max_x: f32, a_max_y: f32, a_max_z: f32,
+    b_min_x: f32, b_min_y: f32, b_min_z: f32,
+    b_max_x: f32, b_max_y: f32, b_max_z: f32,
+) -> bool {
+    a_min_x <= b_max_x && a_max_x >= b_min_x &&
+    a_min_y <= b_max_y && a_max_y >= b_min_y &&
+    a_min_z <= b_max_z && a_max_z >= b_min_z
 }
 
 // =============================================================================

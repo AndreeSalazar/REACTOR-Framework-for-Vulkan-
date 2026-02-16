@@ -18,6 +18,8 @@
 #include "types.hpp"
 #include <string>
 #include <functional>
+#include <vector>
+#include <cmath>
 
 namespace reactor {
 
@@ -296,6 +298,131 @@ struct Lighting {
 };
 
 // =============================================================================
+// Mesh — RAII wrapper for GPU meshes
+// =============================================================================
+
+class Mesh {
+private:
+    void* handle_ = nullptr;
+    uint32_t vertex_count_ = 0;
+    uint32_t index_count_ = 0;
+
+public:
+    Mesh() = default;
+    explicit Mesh(void* handle) : handle_(handle) {}
+
+    /// Create a cube mesh (built-in primitive)
+    static Mesh cube() {
+        Mesh m;
+        m.handle_ = reactor_create_cube();
+        m.vertex_count_ = 24;
+        m.index_count_ = 36;
+        return m;
+    }
+
+    /// Create mesh from vertex and index data
+    static Mesh from_data(const std::vector<CVertex>& vertices, const std::vector<uint32_t>& indices) {
+        Mesh m;
+        m.handle_ = reactor_create_mesh(
+            vertices.data(), static_cast<uint32_t>(vertices.size()),
+            indices.data(), static_cast<uint32_t>(indices.size())
+        );
+        m.vertex_count_ = static_cast<uint32_t>(vertices.size());
+        m.index_count_ = static_cast<uint32_t>(indices.size());
+        return m;
+    }
+
+    /// Create a simple quad mesh
+    static Mesh quad(float size = 1.0f) {
+        float h = size * 0.5f;
+        std::vector<CVertex> vertices = {
+            {{-h, 0, -h}, {0, 1, 0}, {0, 0}},
+            {{ h, 0, -h}, {0, 1, 0}, {1, 0}},
+            {{ h, 0,  h}, {0, 1, 0}, {1, 1}},
+            {{-h, 0,  h}, {0, 1, 0}, {0, 1}},
+        };
+        std::vector<uint32_t> indices = {0, 1, 2, 2, 3, 0};
+        return from_data(vertices, indices);
+    }
+
+    /// Create a plane mesh with subdivisions
+    static Mesh plane(float width, float depth, uint32_t subdivisions = 1) {
+        std::vector<CVertex> vertices;
+        std::vector<uint32_t> indices;
+        
+        float hw = width * 0.5f;
+        float hd = depth * 0.5f;
+        uint32_t segs = subdivisions + 1;
+        
+        for (uint32_t z = 0; z <= segs; ++z) {
+            for (uint32_t x = 0; x <= segs; ++x) {
+                float px = -hw + (width * x / segs);
+                float pz = -hd + (depth * z / segs);
+                float u = static_cast<float>(x) / segs;
+                float v = static_cast<float>(z) / segs;
+                vertices.push_back({{px, 0, pz}, {0, 1, 0}, {u, v}});
+            }
+        }
+        
+        for (uint32_t z = 0; z < segs; ++z) {
+            for (uint32_t x = 0; x < segs; ++x) {
+                uint32_t i = z * (segs + 1) + x;
+                indices.push_back(i);
+                indices.push_back(i + segs + 1);
+                indices.push_back(i + 1);
+                indices.push_back(i + 1);
+                indices.push_back(i + segs + 1);
+                indices.push_back(i + segs + 2);
+            }
+        }
+        
+        return from_data(vertices, indices);
+    }
+
+    ~Mesh() {
+        if (handle_) {
+            reactor_destroy_mesh(handle_);
+        }
+    }
+
+    // Move semantics
+    Mesh(Mesh&& other) noexcept 
+        : handle_(other.handle_), vertex_count_(other.vertex_count_), index_count_(other.index_count_) {
+        other.handle_ = nullptr;
+        other.vertex_count_ = 0;
+        other.index_count_ = 0;
+    }
+
+    Mesh& operator=(Mesh&& other) noexcept {
+        if (this != &other) {
+            if (handle_) reactor_destroy_mesh(handle_);
+            handle_ = other.handle_;
+            vertex_count_ = other.vertex_count_;
+            index_count_ = other.index_count_;
+            other.handle_ = nullptr;
+            other.vertex_count_ = 0;
+            other.index_count_ = 0;
+        }
+        return *this;
+    }
+
+    // No copy
+    Mesh(const Mesh&) = delete;
+    Mesh& operator=(const Mesh&) = delete;
+
+    /// Check if mesh is valid
+    bool valid() const { return handle_ != nullptr; }
+    explicit operator bool() const { return valid(); }
+
+    /// Get vertex/index counts
+    uint32_t vertex_count() const { return vertex_count_; }
+    uint32_t index_count() const { return index_count_; }
+
+    /// Get raw handle
+    void* raw() const { return handle_; }
+};
+
+// =============================================================================
 // Texture — RAII wrapper for textures
 // =============================================================================
 
@@ -386,6 +513,405 @@ public:
 
     /// Get raw handle (for advanced use)
     void* raw() const { return handle_; }
+};
+
+// =============================================================================
+// Material — RAII wrapper for GPU materials
+// =============================================================================
+
+class Material {
+private:
+    void* handle_ = nullptr;
+
+public:
+    Material() = default;
+    explicit Material(void* handle) : handle_(handle) {}
+
+    /// Create a basic material from SPIR-V shader code
+    static Material from_shaders(const std::vector<uint32_t>& vert_spv, const std::vector<uint32_t>& frag_spv) {
+        void* handle = reactor_create_material(
+            vert_spv.data(), static_cast<uint32_t>(vert_spv.size()),
+            frag_spv.data(), static_cast<uint32_t>(frag_spv.size())
+        );
+        return Material(handle);
+    }
+
+    /// Create a textured material from SPIR-V shader code and texture
+    static Material from_texture(const std::vector<uint32_t>& vert_spv, const std::vector<uint32_t>& frag_spv, const Texture& texture) {
+        void* handle = reactor_create_textured_material(
+            vert_spv.data(), static_cast<uint32_t>(vert_spv.size()),
+            frag_spv.data(), static_cast<uint32_t>(frag_spv.size()),
+            texture.raw()
+        );
+        return Material(handle);
+    }
+
+    ~Material() {
+        if (handle_) {
+            reactor_destroy_material(handle_);
+        }
+    }
+
+    // Move semantics
+    Material(Material&& other) noexcept : handle_(other.handle_) {
+        other.handle_ = nullptr;
+    }
+
+    Material& operator=(Material&& other) noexcept {
+        if (this != &other) {
+            if (handle_) reactor_destroy_material(handle_);
+            handle_ = other.handle_;
+            other.handle_ = nullptr;
+        }
+        return *this;
+    }
+
+    // No copy
+    Material(const Material&) = delete;
+    Material& operator=(const Material&) = delete;
+
+    /// Check if material is valid
+    bool valid() const { return handle_ != nullptr; }
+    explicit operator bool() const { return valid(); }
+
+    /// Get raw handle (for advanced use)
+    void* raw() const { return handle_; }
+};
+
+// =============================================================================
+// Model — OBJ model loading and info
+// =============================================================================
+
+struct ObjInfo {
+    uint32_t vertex_count = 0;
+    uint32_t index_count = 0;
+    uint32_t triangle_count = 0;
+    bool valid = false;
+
+    /// Load OBJ file info (does not create GPU resources)
+    static ObjInfo load(const std::string& path) {
+        CObjData data = reactor_load_obj_info(path.c_str());
+        ObjInfo info;
+        info.vertex_count = data.vertex_count;
+        info.index_count = data.index_count;
+        info.triangle_count = data.triangle_count;
+        info.valid = data.success;
+        return info;
+    }
+
+    explicit operator bool() const { return valid; }
+};
+
+// =============================================================================
+// GameObject — Represents an object in the scene
+// =============================================================================
+
+class GameObject {
+private:
+    uint32_t index_ = UINT32_MAX;
+    bool valid_ = false;
+
+public:
+    GameObject() = default;
+    explicit GameObject(uint32_t index) : index_(index), valid_(true) {}
+
+    /// Check if valid
+    bool valid() const { return valid_ && index_ != UINT32_MAX; }
+    explicit operator bool() const { return valid(); }
+
+    /// Get scene index
+    uint32_t index() const { return index_; }
+
+    /// Set transform
+    void set_transform(const Mat4& transform) {
+        if (valid()) reactor_set_object_transform(index_, transform.to_c());
+    }
+
+    /// Get transform
+    Mat4 transform() const {
+        if (valid()) return Mat4(reactor_get_object_transform(index_));
+        return Mat4::identity();
+    }
+
+    /// Set position (convenience)
+    void set_position(const Vec3& pos) {
+        Mat4 t = transform();
+        t.m[12] = pos.x;
+        t.m[13] = pos.y;
+        t.m[14] = pos.z;
+        set_transform(t);
+    }
+
+    /// Get position
+    Vec3 position() const {
+        Mat4 t = transform();
+        return Vec3(t.m[12], t.m[13], t.m[14]);
+    }
+
+    /// Set visibility
+    void set_visible(bool visible) {
+        if (valid()) reactor_set_object_visible(index_, visible);
+    }
+
+    /// Translate
+    void translate(const Vec3& delta) {
+        set_position(position() + delta);
+    }
+
+    /// Set rotation (Euler angles in radians)
+    void set_rotation(float pitch, float yaw, float roll) {
+        Vec3 pos = position();
+        // Build rotation matrix
+        float cp = std::cos(pitch), sp = std::sin(pitch);
+        float cy = std::cos(yaw), sy = std::sin(yaw);
+        float cr = std::cos(roll), sr = std::sin(roll);
+        
+        Mat4 rot = Mat4::identity();
+        rot.m[0] = cy * cr;
+        rot.m[1] = cy * sr;
+        rot.m[2] = -sy;
+        rot.m[4] = sp * sy * cr - cp * sr;
+        rot.m[5] = sp * sy * sr + cp * cr;
+        rot.m[6] = sp * cy;
+        rot.m[8] = cp * sy * cr + sp * sr;
+        rot.m[9] = cp * sy * sr - sp * cr;
+        rot.m[10] = cp * cy;
+        rot.m[12] = pos.x;
+        rot.m[13] = pos.y;
+        rot.m[14] = pos.z;
+        set_transform(rot);
+    }
+
+    /// Set scale (uniform)
+    void set_scale(float scale) {
+        set_scale(Vec3(scale, scale, scale));
+    }
+
+    /// Set scale (non-uniform)
+    void set_scale(const Vec3& scale) {
+        Mat4 t = transform();
+        // Extract position, apply scale to rotation part
+        Vec3 pos(t.m[12], t.m[13], t.m[14]);
+        t.m[0] *= scale.x; t.m[1] *= scale.x; t.m[2] *= scale.x;
+        t.m[4] *= scale.y; t.m[5] *= scale.y; t.m[6] *= scale.y;
+        t.m[8] *= scale.z; t.m[9] *= scale.z; t.m[10] *= scale.z;
+        set_transform(t);
+    }
+};
+
+// =============================================================================
+// Debug — Debug drawing utilities
+// =============================================================================
+
+struct Debug {
+    /// Draw a line (for one frame)
+    static void line(const Vec3& start, const Vec3& end, const Vec3& color = Vec3(1, 1, 1)) {
+        // TODO: Implement when C ABI is ready
+        (void)start; (void)end; (void)color;
+    }
+
+    /// Draw a wire box
+    static void wire_box(const Vec3& center, const Vec3& size, const Vec3& color = Vec3(1, 1, 1)) {
+        Vec3 h = size * 0.5f;
+        Vec3 corners[8] = {
+            center + Vec3(-h.x, -h.y, -h.z),
+            center + Vec3( h.x, -h.y, -h.z),
+            center + Vec3( h.x, -h.y,  h.z),
+            center + Vec3(-h.x, -h.y,  h.z),
+            center + Vec3(-h.x,  h.y, -h.z),
+            center + Vec3( h.x,  h.y, -h.z),
+            center + Vec3( h.x,  h.y,  h.z),
+            center + Vec3(-h.x,  h.y,  h.z),
+        };
+        // Bottom
+        line(corners[0], corners[1], color);
+        line(corners[1], corners[2], color);
+        line(corners[2], corners[3], color);
+        line(corners[3], corners[0], color);
+        // Top
+        line(corners[4], corners[5], color);
+        line(corners[5], corners[6], color);
+        line(corners[6], corners[7], color);
+        line(corners[7], corners[4], color);
+        // Verticals
+        line(corners[0], corners[4], color);
+        line(corners[1], corners[5], color);
+        line(corners[2], corners[6], color);
+        line(corners[3], corners[7], color);
+    }
+
+    /// Draw a wire sphere (approximation)
+    static void wire_sphere(const Vec3& center, float radius, const Vec3& color = Vec3(1, 1, 1)) {
+        const int segments = 16;
+        for (int i = 0; i < segments; ++i) {
+            float a1 = (float)i / segments * 6.28318f;
+            float a2 = (float)(i + 1) / segments * 6.28318f;
+            // XY circle
+            line(center + Vec3(std::cos(a1), std::sin(a1), 0) * radius,
+                 center + Vec3(std::cos(a2), std::sin(a2), 0) * radius, color);
+            // XZ circle
+            line(center + Vec3(std::cos(a1), 0, std::sin(a1)) * radius,
+                 center + Vec3(std::cos(a2), 0, std::sin(a2)) * radius, color);
+            // YZ circle
+            line(center + Vec3(0, std::cos(a1), std::sin(a1)) * radius,
+                 center + Vec3(0, std::cos(a2), std::sin(a2)) * radius, color);
+        }
+    }
+
+    /// Draw a grid on the XZ plane
+    static void grid(float size, int divisions, const Vec3& color = Vec3(0.5f, 0.5f, 0.5f)) {
+        float half = size * 0.5f;
+        float step = size / divisions;
+        for (int i = 0; i <= divisions; ++i) {
+            float pos = -half + i * step;
+            line(Vec3(pos, 0, -half), Vec3(pos, 0, half), color);
+            line(Vec3(-half, 0, pos), Vec3(half, 0, pos), color);
+        }
+    }
+
+    /// Draw coordinate axes
+    static void axes(const Vec3& origin, float length = 1.0f) {
+        line(origin, origin + Vec3(length, 0, 0), Vec3(1, 0, 0)); // X = Red
+        line(origin, origin + Vec3(0, length, 0), Vec3(0, 1, 0)); // Y = Green
+        line(origin, origin + Vec3(0, 0, length), Vec3(0, 0, 1)); // Z = Blue
+    }
+
+    /// Draw a ray
+    static void ray(const Vec3& origin, const Vec3& direction, float length = 10.0f, const Vec3& color = Vec3(1, 1, 0)) {
+        line(origin, origin + direction.normalized() * length, color);
+    }
+};
+
+// =============================================================================
+// CharacterController — FPS-style physics controller
+// =============================================================================
+
+class CharacterController {
+private:
+    CCharacterController data_;
+
+public:
+    CharacterController() : data_(reactor_character_controller_create(0, 1, 0)) {}
+    CharacterController(const Vec3& position) 
+        : data_(reactor_character_controller_create(position.x, position.y, position.z)) {}
+
+    /// Update physics (call every frame)
+    void update(float dt, const Vec3& move_input, bool jump, float ground_y = 0.0f) {
+        reactor_character_controller_update(&data_, dt, move_input.x, move_input.z, jump, ground_y);
+    }
+
+    /// Get eye position (for camera)
+    Vec3 eye_position() const {
+        float x, y, z;
+        reactor_character_controller_eye_position(&data_, &x, &y, &z);
+        return Vec3(x, y, z);
+    }
+
+    /// Get/set position
+    Vec3 position() const { return Vec3(data_.position_x, data_.position_y, data_.position_z); }
+    void set_position(const Vec3& pos) { data_.position_x = pos.x; data_.position_y = pos.y; data_.position_z = pos.z; }
+
+    /// Get/set velocity
+    Vec3 velocity() const { return Vec3(data_.velocity_x, data_.velocity_y, data_.velocity_z); }
+    void set_velocity(const Vec3& vel) { data_.velocity_x = vel.x; data_.velocity_y = vel.y; data_.velocity_z = vel.z; }
+
+    /// Properties
+    float height() const { return data_.height; }
+    void set_height(float h) { data_.height = h; }
+
+    float radius() const { return data_.radius; }
+    void set_radius(float r) { data_.radius = r; }
+
+    float move_speed() const { return data_.move_speed; }
+    void set_move_speed(float s) { data_.move_speed = s; }
+
+    float jump_force() const { return data_.jump_force; }
+    void set_jump_force(float f) { data_.jump_force = f; }
+
+    float gravity() const { return data_.gravity; }
+    void set_gravity(float g) { data_.gravity = g; }
+
+    bool is_grounded() const { return data_.is_grounded; }
+};
+
+// =============================================================================
+// Physics — Static physics utilities
+// =============================================================================
+
+struct Physics {
+    /// Raycast against AABB, returns hit distance or -1 if no hit
+    static float raycast_aabb(const Vec3& origin, const Vec3& direction, const Vec3& aabb_min, const Vec3& aabb_max) {
+        float t;
+        bool hit = reactor_raycast_aabb(
+            origin.x, origin.y, origin.z,
+            direction.x, direction.y, direction.z,
+            aabb_min.x, aabb_min.y, aabb_min.z,
+            aabb_max.x, aabb_max.y, aabb_max.z,
+            &t
+        );
+        return hit ? t : -1.0f;
+    }
+
+    /// Test AABB-AABB intersection
+    static bool aabb_intersects(const Vec3& a_min, const Vec3& a_max, const Vec3& b_min, const Vec3& b_max) {
+        return reactor_aabb_intersects(
+            a_min.x, a_min.y, a_min.z, a_max.x, a_max.y, a_max.z,
+            b_min.x, b_min.y, b_min.z, b_max.x, b_max.y, b_max.z
+        );
+    }
+
+    /// Test sphere-sphere intersection
+    static bool sphere_intersects(const Vec3& a_center, float a_radius, const Vec3& b_center, float b_radius) {
+        float dist_sq = (b_center - a_center).length_squared();
+        float radius_sum = a_radius + b_radius;
+        return dist_sq <= radius_sum * radius_sum;
+    }
+
+    /// Test point inside AABB
+    static bool point_in_aabb(const Vec3& point, const Vec3& aabb_min, const Vec3& aabb_max) {
+        return point.x >= aabb_min.x && point.x <= aabb_max.x &&
+               point.y >= aabb_min.y && point.y <= aabb_max.y &&
+               point.z >= aabb_min.z && point.z <= aabb_max.z;
+    }
+
+    /// Test point inside sphere
+    static bool point_in_sphere(const Vec3& point, const Vec3& center, float radius) {
+        return (point - center).length_squared() <= radius * radius;
+    }
+
+    /// Linear interpolation
+    static float lerp(float a, float b, float t) { return a + (b - a) * t; }
+    static Vec3 lerp(const Vec3& a, const Vec3& b, float t) { return a + (b - a) * t; }
+
+    /// Smoothstep interpolation
+    static float smoothstep(float edge0, float edge1, float x) {
+        float t = std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+        return t * t * (3.0f - 2.0f * t);
+    }
+};
+
+// =============================================================================
+// GPUInfo — GPU information queries
+// =============================================================================
+
+struct GPUInfo {
+    /// Get GPU name (placeholder - needs C ABI)
+    static std::string name() {
+        // TODO: reactor_get_gpu_name()
+        return "Unknown GPU";
+    }
+
+    /// Get VRAM in MB (placeholder - needs C ABI)
+    static uint32_t vram_mb() {
+        // TODO: reactor_get_vram()
+        return 0;
+    }
+
+    /// Get current MSAA sample count
+    static uint32_t msaa_samples() {
+        // TODO: reactor_get_msaa()
+        return 4;
+    }
 };
 
 // =============================================================================

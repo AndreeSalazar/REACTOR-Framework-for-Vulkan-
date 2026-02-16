@@ -302,6 +302,25 @@ impl Reactor {
         )
     }
 
+    /// Create a textured material with a diffuse texture
+    pub fn create_textured_material(
+        &self,
+        vert_code: &[u32],
+        frag_code: &[u32],
+        texture: &crate::resources::texture::Texture,
+    ) -> Result<Material, Box<dyn Error>> {
+        Material::with_texture(
+            &self.context,
+            self.render_pass,
+            vert_code,
+            frag_code,
+            self.swapchain.extent.width,
+            self.swapchain.extent.height,
+            texture,
+            self.msaa_samples,
+        )
+    }
+
     fn create_render_pass(context: &VulkanContext, format: vk::Format) -> Result<vk::RenderPass, Box<dyn Error>> {
         // TODO: MSAA requires creating MSAA image buffers and modifying framebuffers
         // For now, use simple render pass. MSAA can be enabled by:
@@ -711,27 +730,49 @@ impl Reactor {
             self.context.device.cmd_set_scissor(command_buffer, 0, &[scissor]);
 
             for object in &scene.objects {
-                self.context.device.cmd_bind_pipeline(
-                    command_buffer,
-                    vk::PipelineBindPoint::GRAPHICS,
-                    object.material.pipeline.pipeline,
-                );
+                // Bind pipeline and descriptor sets (for textures)
+                object.material.bind(&self.context.device, command_buffer);
 
                 // Calculate final transform (MVP)
                 let mvp = *view_projection * object.transform;
 
-                // Push Constants
-                let constants_array = std::slice::from_raw_parts(
-                    &mvp as *const glam::Mat4 as *const u8,
-                    std::mem::size_of::<glam::Mat4>(),
-                );
-                self.context.device.cmd_push_constants(
-                    command_buffer,
-                    object.material.pipeline.layout,
-                    vk::ShaderStageFlags::VERTEX,
-                    0,
-                    constants_array,
-                );
+                // Push Constants - size depends on whether material has textures
+                if object.material.descriptor_set.is_some() {
+                    // Textured material: MVP + Model matrix
+                    #[repr(C)]
+                    struct PushConstants {
+                        mvp: glam::Mat4,
+                        model: glam::Mat4,
+                    }
+                    let push = PushConstants {
+                        mvp,
+                        model: object.transform,
+                    };
+                    let constants_array = std::slice::from_raw_parts(
+                        &push as *const PushConstants as *const u8,
+                        std::mem::size_of::<PushConstants>(),
+                    );
+                    self.context.device.cmd_push_constants(
+                        command_buffer,
+                        object.material.pipeline.layout,
+                        vk::ShaderStageFlags::VERTEX,
+                        0,
+                        constants_array,
+                    );
+                } else {
+                    // Simple material: only MVP
+                    let constants_array = std::slice::from_raw_parts(
+                        &mvp as *const glam::Mat4 as *const u8,
+                        std::mem::size_of::<glam::Mat4>(),
+                    );
+                    self.context.device.cmd_push_constants(
+                        command_buffer,
+                        object.material.pipeline.layout,
+                        vk::ShaderStageFlags::VERTEX,
+                        0,
+                        constants_array,
+                    );
+                }
 
                 let vertex_buffers = [object.mesh.vertex_buffer.handle];
                 let offsets = [0];

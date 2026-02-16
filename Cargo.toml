@@ -31,13 +31,17 @@ name = "sandbox_elite"
 path = "examples/sandbox_elite.rs"
 
 [[example]]
-name = "adead_demo"
-path = "examples/adead_demo.rs"
-
-[[example]]
 name = "simple_cube"
 path = "examples/simple_cube.rs"
 
 [[example]]
 name = "textured_cube"
 path = "examples/textured_cube.rs"
+
+[[example]]
+name = "free_camera_test"
+path = "examples/free_camera_test.rs"
+
+[[example]]
+name = "physics_camera"
+path = "examples/physics_camera.rs"

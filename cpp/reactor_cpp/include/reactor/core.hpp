@@ -265,7 +265,45 @@ void reactor_destroy_mesh(void* mesh);
 // Material API
 // =============================================================================
 
+void* reactor_create_material(const uint32_t* vert_spv, uint32_t vert_len, const uint32_t* frag_spv, uint32_t frag_len);
+void* reactor_create_textured_material(const uint32_t* vert_spv, uint32_t vert_len, const uint32_t* frag_spv, uint32_t frag_len, const void* texture);
 void reactor_destroy_material(void* material);
+
+// =============================================================================
+// Model Loading API (OBJ)
+// =============================================================================
+
+struct CObjData {
+    uint32_t vertex_count;
+    uint32_t index_count;
+    uint32_t triangle_count;
+    bool success;
+};
+
+CObjData reactor_load_obj_info(const char* path);
+
+// =============================================================================
+// Physics API
+// =============================================================================
+
+struct CCharacterController {
+    float position_x, position_y, position_z;
+    float velocity_x, velocity_y, velocity_z;
+    float height;
+    float radius;
+    float move_speed;
+    float jump_force;
+    float gravity;
+    bool is_grounded;
+};
+
+CCharacterController reactor_character_controller_create(float x, float y, float z);
+void reactor_character_controller_update(CCharacterController* controller, float dt, float move_x, float move_z, bool jump, float ground_y);
+void reactor_character_controller_eye_position(const CCharacterController* controller, float* out_x, float* out_y, float* out_z);
+bool reactor_raycast_aabb(float ray_ox, float ray_oy, float ray_oz, float ray_dx, float ray_dy, float ray_dz,
+                          float aabb_min_x, float aabb_min_y, float aabb_min_z, float aabb_max_x, float aabb_max_y, float aabb_max_z, float* out_t);
+bool reactor_aabb_intersects(float a_min_x, float a_min_y, float a_min_z, float a_max_x, float a_max_y, float a_max_z,
+                             float b_min_x, float b_min_y, float b_min_z, float b_max_x, float b_max_y, float b_max_z);
 
 // =============================================================================
 // Texture API

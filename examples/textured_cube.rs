@@ -7,6 +7,7 @@
 
 use reactor::prelude::*;
 use reactor::Vertex;
+use reactor::resources::texture::Texture;
 use std::sync::Arc;
 
 // =============================================================================
@@ -15,6 +16,7 @@ use std::sync::Arc;
 
 struct TexturedCube {
     rotation: f32,
+    texture: Option<Texture>, // Keep texture alive for the lifetime of the app
 }
 
 impl ReactorApp for TexturedCube {
@@ -26,9 +28,10 @@ impl ReactorApp for TexturedCube {
     }
 
     fn init(&mut self, ctx: &mut ReactorContext) {
-        // Camera setup
-        ctx.camera.position = Vec3::new(0.0, 2.0, 4.0);
-        ctx.camera.set_rotation(-0.3, 0.0);
+        // Camera setup - closer to see the textured cube properly
+        ctx.camera.position = Vec3::new(0.0, 0.5, 2.5);
+        ctx.camera.set_rotation(-0.2, 0.0);
+        ctx.camera.fov = 45.0;
 
         // Lighting
         ctx.lighting.add_light(Light::directional(
@@ -40,23 +43,38 @@ impl ReactorApp for TexturedCube {
         // Create a cube mesh with UV coordinates
         let mesh = Arc::new(ctx.create_mesh(&cube_vertices_uv(), &cube_indices()).unwrap());
         
-        // Load shaders
-        let vert = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!("../shaders/vert.spv"))).unwrap();
-        let frag = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!("../shaders/frag.spv"))).unwrap();
-        let material = Arc::new(ctx.create_material(&vert, &frag).unwrap());
-
-        // Add cube to scene
-        ctx.scene.add_object(mesh, material, Mat4::IDENTITY);
-
-        // Load a texture (example - would need actual texture file)
-        // let texture = ctx.load_texture("assets/texture.png").unwrap();
+        // =====================================================================
+        // TEXTURED MATERIAL - Load texture and create material with it
+        // =====================================================================
         
-        // Or create a solid color texture
-        let _solid_texture = ctx.create_solid_texture(255, 128, 64, 255);
+        // Load texture from file and store it in self to keep it alive
+        let texture = ctx.load_texture("assets/textures/container.jpg")
+            .expect("Failed to load container.jpg texture");
+        println!("✅ Loaded container.jpg: {}x{}", texture.width, texture.height);
+
+        // Load texture shaders (with sampler support)
+        let vert = ash::util::read_spv(&mut std::io::Cursor::new(
+            include_bytes!("../shaders/texture_vert.spv")
+        )).unwrap();
+        let frag = ash::util::read_spv(&mut std::io::Cursor::new(
+            include_bytes!("../shaders/texture_frag.spv")
+        )).unwrap();
+
+        // Create textured material
+        let material = Arc::new(
+            ctx.create_textured_material(&vert, &frag, &texture)
+                .expect("Failed to create textured material")
+        );
+
+        // Store texture to keep it alive for the lifetime of the app
+        self.texture = Some(texture);
+
+        // Add cube to scene with textured material
+        ctx.scene.add_object(mesh, material, Mat4::IDENTITY);
         
         println!("🖼️ Textured Cube initialized!");
-        println!("   - Texture API ready for use");
-        println!("   - Use ctx.load_texture(\"path.png\") to load textures");
+        println!("   - Texture applied to cube material");
+        println!("   - Using texture shaders with sampler");
     }
 
     fn update(&mut self, ctx: &mut ReactorContext) {
@@ -80,7 +98,7 @@ impl ReactorApp for TexturedCube {
 // =============================================================================
 
 fn main() {
-    reactor::run(TexturedCube { rotation: 0.0 });
+    reactor::run(TexturedCube { rotation: 0.0, texture: None });
 }
 
 // =============================================================================

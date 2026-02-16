@@ -1,7 +1,183 @@
 use crate::resources::mesh::Mesh;
 use crate::resources::material::Material;
-use glam::Mat4;
+use crate::Vertex;
+use glam::{Mat4, Vec2, Vec3};
 use std::sync::Arc;
+use std::path::Path;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::error::Error;
+
+// =============================================================================
+// OBJ Loader — Basic Wavefront OBJ file loader
+// =============================================================================
+
+#[derive(Default)]
+pub struct ObjData {
+    pub positions: Vec<Vec3>,
+    pub normals: Vec<Vec3>,
+    pub uvs: Vec<Vec2>,
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
+}
+
+impl ObjData {
+    /// Load OBJ file from path
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn Error>> {
+        let file = File::open(path.as_ref())?;
+        let reader = BufReader::new(file);
+        
+        let mut positions: Vec<Vec3> = Vec::new();
+        let mut normals: Vec<Vec3> = Vec::new();
+        let mut uvs: Vec<Vec2> = Vec::new();
+        
+        let mut vertices: Vec<Vertex> = Vec::new();
+        let mut indices: Vec<u32> = Vec::new();
+        
+        // Map for deduplicating vertices: (pos_idx, uv_idx, norm_idx) -> vertex_index
+        let mut vertex_map: std::collections::HashMap<(usize, usize, usize), u32> = std::collections::HashMap::new();
+        
+        for line in reader.lines() {
+            let line = line?;
+            let line = line.trim();
+            
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.is_empty() {
+                continue;
+            }
+            
+            match parts[0] {
+                "v" if parts.len() >= 4 => {
+                    let x: f32 = parts[1].parse()?;
+                    let y: f32 = parts[2].parse()?;
+                    let z: f32 = parts[3].parse()?;
+                    positions.push(Vec3::new(x, y, z));
+                }
+                "vn" if parts.len() >= 4 => {
+                    let x: f32 = parts[1].parse()?;
+                    let y: f32 = parts[2].parse()?;
+                    let z: f32 = parts[3].parse()?;
+                    normals.push(Vec3::new(x, y, z).normalize());
+                }
+                "vt" if parts.len() >= 3 => {
+                    let u: f32 = parts[1].parse()?;
+                    let v: f32 = parts[2].parse()?;
+                    uvs.push(Vec2::new(u, 1.0 - v)); // Flip V for Vulkan
+                }
+                "f" if parts.len() >= 4 => {
+                    // Parse face (triangulate if needed)
+                    let mut face_indices: Vec<u32> = Vec::new();
+                    
+                    for i in 1..parts.len() {
+                        let vertex_data = parts[i];
+                        let indices_parts: Vec<&str> = vertex_data.split('/').collect();
+                        
+                        let pos_idx: usize = indices_parts[0].parse::<usize>()? - 1;
+                        let uv_idx: usize = if indices_parts.len() > 1 && !indices_parts[1].is_empty() {
+                            indices_parts[1].parse::<usize>()? - 1
+                        } else {
+                            0
+                        };
+                        let norm_idx: usize = if indices_parts.len() > 2 && !indices_parts[2].is_empty() {
+                            indices_parts[2].parse::<usize>()? - 1
+                        } else {
+                            0
+                        };
+                        
+                        let key = (pos_idx, uv_idx, norm_idx);
+                        
+                        let vertex_index = if let Some(&idx) = vertex_map.get(&key) {
+                            idx
+                        } else {
+                            let pos = positions.get(pos_idx).copied().unwrap_or(Vec3::ZERO);
+                            let uv = uvs.get(uv_idx).copied().unwrap_or(Vec2::ZERO);
+                            let normal = normals.get(norm_idx).copied().unwrap_or(Vec3::Y);
+                            
+                            let vertex = Vertex::new(pos, normal, uv);
+                            let idx = vertices.len() as u32;
+                            vertices.push(vertex);
+                            vertex_map.insert(key, idx);
+                            idx
+                        };
+                        
+                        face_indices.push(vertex_index);
+                    }
+                    
+                    // Triangulate (fan triangulation for convex polygons)
+                    for i in 1..face_indices.len() - 1 {
+                        indices.push(face_indices[0]);
+                        indices.push(face_indices[i]);
+                        indices.push(face_indices[i + 1]);
+                    }
+                }
+                _ => {}
+            }
+        }
+        
+        // Generate normals if none were provided
+        if normals.is_empty() && !vertices.is_empty() {
+            Self::generate_normals(&mut vertices, &indices);
+        }
+        
+        Ok(Self {
+            positions,
+            normals,
+            uvs,
+            vertices,
+            indices,
+        })
+    }
+    
+    /// Generate flat normals for vertices (stored in color field)
+    fn generate_normals(vertices: &mut [Vertex], indices: &[u32]) {
+        // Use a separate buffer for accumulating normals
+        let mut normals: Vec<Vec3> = vec![Vec3::ZERO; vertices.len()];
+        
+        // Calculate face normals and accumulate
+        for tri in indices.chunks(3) {
+            if tri.len() < 3 { continue; }
+            
+            let i0 = tri[0] as usize;
+            let i1 = tri[1] as usize;
+            let i2 = tri[2] as usize;
+            
+            let v0 = Vec3::from_array(vertices[i0].position);
+            let v1 = Vec3::from_array(vertices[i1].position);
+            let v2 = Vec3::from_array(vertices[i2].position);
+            
+            let edge1 = v1 - v0;
+            let edge2 = v2 - v0;
+            let normal = edge1.cross(edge2);
+            
+            normals[i0] += normal;
+            normals[i1] += normal;
+            normals[i2] += normal;
+        }
+        
+        // Normalize and store in color field (used as normal by shaders)
+        for (i, v) in vertices.iter_mut().enumerate() {
+            let n = if normals[i].length_squared() > 0.0001 {
+                normals[i].normalize()
+            } else {
+                Vec3::Y
+            };
+            v.color = n.to_array();
+        }
+    }
+    
+    /// Get vertex and index count
+    pub fn vertex_count(&self) -> usize { self.vertices.len() }
+    pub fn index_count(&self) -> usize { self.indices.len() }
+    pub fn triangle_count(&self) -> usize { self.indices.len() / 3 }
+}
+
+// =============================================================================
+// Model — A mesh with material and transform
+// =============================================================================
 
 pub struct Model {
     pub mesh: Arc<Mesh>,

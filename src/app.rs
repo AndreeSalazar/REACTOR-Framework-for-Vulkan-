@@ -317,6 +317,47 @@ impl ReactorContext {
         self.reactor.create_solid_texture(r, g, b, a)
     }
 
+    /// Create a textured material with a diffuse texture
+    pub fn create_textured_material(
+        &self,
+        vert_code: &[u32],
+        frag_code: &[u32],
+        texture: &crate::resources::texture::Texture,
+    ) -> Result<crate::material::Material, Box<dyn std::error::Error>> {
+        self.reactor.create_textured_material(vert_code, frag_code, texture)
+    }
+
+    // =========================================================================
+    // Model Loading (OBJ)
+    // =========================================================================
+
+    /// Load an OBJ file and return the mesh
+    pub fn load_obj(&self, path: &str) -> Result<crate::mesh::Mesh, Box<dyn std::error::Error>> {
+        use crate::resources::model::ObjData;
+        
+        let obj = ObjData::load(path)?;
+        if obj.vertices.is_empty() {
+            return Err("OBJ file contains no vertices".into());
+        }
+        
+        println!("📦 Loaded OBJ: {} vertices, {} triangles", obj.vertex_count(), obj.triangle_count());
+        
+        self.reactor.create_mesh(&obj.vertices, &obj.indices)
+    }
+
+    /// Load an OBJ file and create a mesh with material, returning a scene object index
+    pub fn load_obj_with_material(
+        &mut self,
+        path: &str,
+        material: std::sync::Arc<crate::material::Material>,
+    ) -> Result<u32, Box<dyn std::error::Error>> {
+        let mesh = self.load_obj(path)?;
+        let mesh_arc = std::sync::Arc::new(mesh);
+        let index = self.scene.objects.len() as u32;
+        self.scene.add_object(mesh_arc, material, glam::Mat4::IDENTITY);
+        Ok(index)
+    }
+
     // =========================================================================
     // Rendering
     // =========================================================================

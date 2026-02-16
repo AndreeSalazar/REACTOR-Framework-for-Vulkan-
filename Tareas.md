@@ -110,20 +110,20 @@ reactor.run("Mi Juego", width=1920, height=1080, scene="assets/level1.gltf")
 |---|-------|--------|------------|-------------|
 | R5 | Depth Buffer | ✅ Completado | `reactor.rs`, `pipeline.rs` | Z-buffer en render pass + framebuffers + depth testing |
 | R6 | Texturas | ✅ Completado | `resources/texture.rs` | PNG/JPG → VkImage, samplers, mipmaps, `from_file()`, `from_bytes()` |
-| R7 | Material con Texturas | 🔴 Pendiente | `material.rs`, `pipeline.rs` | `create_material()` que acepte texturas + UBOs |
+| R7 | Material con Texturas | ✅ Completado | `material.rs`, `pipeline.rs` | `create_textured_material()` con descriptor sets, shaders texture.vert/frag |
 | R8 | Render Pass configurable | 🟡 Pendiente | `graphics/render_pass.rs` | Forward rendering con depth + MSAA integrados |
 
 #### **FASE 3: Assets — Ownership de Rust protege recursos GPU**
 | # | Tarea | Estado | Archivo(s) | Descripción |
 |---|-------|--------|------------|-------------|
-| R9 | OBJ Loader | 🟡 Pendiente | `resources/model.rs` | Cargar .obj con normals y UVs |
+| R9 | OBJ Loader | ✅ Completado | `resources/model.rs` | `ObjData::load()`, normals, UVs, triangulación |
 | R10 | glTF 2.0 | 🟢 Pendiente | `resources/model.rs` | Formato estándar, meshes + materials + texturas |
 | R11 | Asset Manager | 🟢 Pendiente | `resources/asset_manager.rs` (nuevo) | Cache, deduplicación, async loading |
 
 #### **FASE 4: Sistemas de Juego — Rust = safe multithreading**
 | # | Tarea | Estado | Archivo(s) | Descripción |
 |---|-------|--------|------------|-------------|
-| R12 | Physics funcional | 🟡 Pendiente | `systems/physics.rs` | Integrar con el game loop, collision detection real |
+| R12 | Physics funcional | ✅ Completado | `systems/physics.rs` | `CharacterController`, AABB, Sphere, Ray, collision detection |
 | R13 | ECS funcional | 🟡 Pendiente | `systems/ecs.rs` | World.query(), sistemas iterando componentes |
 | R14 | Animation funcional | 🟡 Pendiente | `systems/animation.rs` | AnimationPlayer integrado con Scene |
 | R15 | Audio funcional | 🟢 Pendiente | `systems/audio.rs` | Backend real (rodio/cpal) |
@@ -201,12 +201,12 @@ reactor.run("Mi Juego", width=1920, height=1080, scene="assets/level1.gltf")
 | # | Clase C++ | Estado | Archivo | Wrappea C ABI |
 |---|-----------|--------|---------|---------------|
 | C0 | `Config` con `renderer`, `scene` | ✅ Completado | `application.hpp` | `CConfig` + `RendererMode` enum + `to_c()` |
-| C1 | `reactor::Material` | 🔴 Pendiente | `application.hpp` | `reactor_create_material()` |
+| C1 | `reactor::Material` | ✅ Completado | `application.hpp` | `reactor_create_material()`, `from_shaders()`, `from_texture()` |
 | C2 | `reactor::Texture` | ✅ Completado | `application.hpp` | RAII wrapper con `from_file()`, `solid()`, move semantics |
-| C3 | `reactor::Model` | 🟡 Pendiente | `application.hpp` | `reactor_load_model()` |
-| C4 | `reactor::Physics` | 🟡 Pendiente | `physics.hpp` (nuevo) | `reactor_physics_*` |
+| C3 | `reactor::Model` / `ObjInfo` | ✅ Completado | `application.hpp` | `ObjInfo::load()`, `Mesh::cube/quad/plane()` |
+| C4 | `reactor::Physics` | ✅ Completado | `application.hpp` | `CharacterController`, `Physics::raycast_aabb()`, collision tests |
 | C5 | `reactor::ECS` / `Entity` | 🟡 Pendiente | `ecs.hpp` (nuevo) | `reactor_ecs_*` |
-| C6 | `reactor::Debug` | 🟡 Pendiente | `application.hpp` | `reactor_debug_*` |
+| C6 | `reactor::Debug` | ✅ Completado | `application.hpp` | `line()`, `wire_box()`, `wire_sphere()`, `grid()`, `axes()` |
 | C7 | `reactor::Animation` | 🟢 Pendiente | `animation.hpp` (nuevo) | `reactor_animation_*` |
 | C8 | `reactor::Audio` | 🟢 Pendiente | `audio.hpp` (nuevo) | `reactor_audio_*` |
 | C9 | `reactor::Error` | 🔴 Pendiente | `application.hpp` | `reactor_get_last_error()` |
