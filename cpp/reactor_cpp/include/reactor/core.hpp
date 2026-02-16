@@ -338,4 +338,73 @@ CMat4 reactor_camera_get_view_projection(const void* camera);
 CMat4 reactor_camera_get_view(const void* camera);
 CMat4 reactor_camera_get_projection(const void* camera);
 
+// =============================================================================
+// ECS API
+// =============================================================================
+
+uint32_t reactor_ecs_create_entity();
+void reactor_ecs_destroy_entity(uint32_t entity);
+uint32_t reactor_ecs_entity_count();
+
+// =============================================================================
+// Debug Draw API
+// =============================================================================
+
+void reactor_debug_line(float x1, float y1, float z1, float x2, float y2, float z2, float r, float g, float b);
+void reactor_debug_aabb(float min_x, float min_y, float min_z, float max_x, float max_y, float max_z, float r, float g, float b);
+void reactor_debug_sphere(float cx, float cy, float cz, float radius, float r, float g, float b);
+void reactor_debug_grid(float size, uint32_t divisions, float r, float g, float b);
+void reactor_debug_clear();
+
+// =============================================================================
+// Animation API
+// =============================================================================
+
+uint32_t reactor_animation_create_clip(const char* name);
+void reactor_animation_add_position_keyframe(uint32_t clip, float time, float x, float y, float z);
+void reactor_animation_add_rotation_keyframe(uint32_t clip, float time, float x, float y, float z, float w);
+void reactor_animation_play(uint32_t clip, bool looping);
+void reactor_animation_stop(uint32_t clip);
+void reactor_animation_update(float dt);
+
+// =============================================================================
+// Audio API
+// =============================================================================
+
+uint32_t reactor_audio_load(const char* path);
+uint32_t reactor_audio_create_source();
+void reactor_audio_play(uint32_t source, uint32_t clip);
+void reactor_audio_stop(uint32_t source);
+void reactor_audio_set_volume(uint32_t source, float volume);
+void reactor_audio_set_position(uint32_t source, float x, float y, float z);
+void reactor_audio_set_master_volume(float volume);
+
+// =============================================================================
+// Post-Processing API
+// =============================================================================
+
+void reactor_postprocess_set_bloom(bool enabled, float intensity, float threshold);
+void reactor_postprocess_set_tonemapping(bool enabled, float exposure);
+void reactor_postprocess_set_vignette(bool enabled, float intensity);
+void reactor_postprocess_set_fxaa(bool enabled);
+
+// =============================================================================
+// GPU Info API
+// =============================================================================
+
+const char* reactor_get_gpu_name();
+uint32_t reactor_get_vram_mb();
+uint32_t reactor_get_msaa_samples();
+bool reactor_is_raytracing_supported();
+void reactor_get_vulkan_version(uint32_t* major, uint32_t* minor, uint32_t* patch);
+
+// =============================================================================
+// Error API
+// =============================================================================
+
+uint32_t reactor_get_last_error();
+const char* reactor_get_error_message();
+void reactor_clear_error();
+const char* reactor_error_description(uint32_t code);
+
 } // extern "C"

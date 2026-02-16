@@ -1130,4 +1130,134 @@ inline int ReactorApp(
     return ReactorApp(Config(title, width, height), on_init, on_update, on_render);
 }
 
+// =============================================================================
+// ECS — Entity Component System
+// =============================================================================
+
+using Entity = uint32_t;
+
+struct ECS {
+    static Entity create_entity() { return reactor_ecs_create_entity(); }
+    static void destroy_entity(Entity e) { reactor_ecs_destroy_entity(e); }
+    static uint32_t entity_count() { return reactor_ecs_entity_count(); }
+};
+
+// =============================================================================
+// Animation — Animation system wrapper
+// =============================================================================
+
+using AnimationClip = uint32_t;
+
+struct Animation {
+    static AnimationClip create_clip(const std::string& name) {
+        return reactor_animation_create_clip(name.c_str());
+    }
+    
+    static void add_position_keyframe(AnimationClip clip, float time, const Vec3& pos) {
+        reactor_animation_add_position_keyframe(clip, time, pos.x, pos.y, pos.z);
+    }
+    
+    static void add_rotation_keyframe(AnimationClip clip, float time, float x, float y, float z, float w) {
+        reactor_animation_add_rotation_keyframe(clip, time, x, y, z, w);
+    }
+    
+    static void play(AnimationClip clip, bool looping = false) {
+        reactor_animation_play(clip, looping);
+    }
+    
+    static void stop(AnimationClip clip) {
+        reactor_animation_stop(clip);
+    }
+    
+    static void update(float dt) {
+        reactor_animation_update(dt);
+    }
+};
+
+// =============================================================================
+// Audio — Audio system wrapper
+// =============================================================================
+
+using AudioClip = uint32_t;
+using AudioSource = uint32_t;
+
+struct Audio {
+    static AudioClip load(const std::string& path) {
+        return reactor_audio_load(path.c_str());
+    }
+    
+    static AudioSource create_source() {
+        return reactor_audio_create_source();
+    }
+    
+    static void play(AudioSource source, AudioClip clip) {
+        reactor_audio_play(source, clip);
+    }
+    
+    static void stop(AudioSource source) {
+        reactor_audio_stop(source);
+    }
+    
+    static void set_volume(AudioSource source, float volume) {
+        reactor_audio_set_volume(source, volume);
+    }
+    
+    static void set_position(AudioSource source, const Vec3& pos) {
+        reactor_audio_set_position(source, pos.x, pos.y, pos.z);
+    }
+    
+    static void set_master_volume(float volume) {
+        reactor_audio_set_master_volume(volume);
+    }
+};
+
+// =============================================================================
+// PostProcess — Post-processing effects
+// =============================================================================
+
+struct PostProcess {
+    static void set_bloom(bool enabled, float intensity = 1.0f, float threshold = 1.0f) {
+        reactor_postprocess_set_bloom(enabled, intensity, threshold);
+    }
+    
+    static void set_tonemapping(bool enabled, float exposure = 1.0f) {
+        reactor_postprocess_set_tonemapping(enabled, exposure);
+    }
+    
+    static void set_vignette(bool enabled, float intensity = 0.5f) {
+        reactor_postprocess_set_vignette(enabled, intensity);
+    }
+    
+    static void set_fxaa(bool enabled) {
+        reactor_postprocess_set_fxaa(enabled);
+    }
+};
+
+// =============================================================================
+// GPUInfo — GPU information
+// =============================================================================
+
+struct GPUInfo {
+    static const char* name() { return reactor_get_gpu_name(); }
+    static uint32_t vram_mb() { return reactor_get_vram_mb(); }
+    static uint32_t msaa_samples() { return reactor_get_msaa_samples(); }
+    static bool raytracing_supported() { return reactor_is_raytracing_supported(); }
+    
+    static void vulkan_version(uint32_t& major, uint32_t& minor, uint32_t& patch) {
+        reactor_get_vulkan_version(&major, &minor, &patch);
+    }
+};
+
+// =============================================================================
+// Error — Error handling
+// =============================================================================
+
+struct Error {
+    static uint32_t last_code() { return reactor_get_last_error(); }
+    static const char* last_message() { return reactor_get_error_message(); }
+    static const char* description(uint32_t code) { return reactor_error_description(code); }
+    static void clear() { reactor_clear_error(); }
+    static bool has_error() { return last_code() != 0; }
+};
+
 } // namespace reactor

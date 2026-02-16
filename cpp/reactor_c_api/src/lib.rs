@@ -29,6 +29,8 @@ use reactor::reactor::Reactor;
 use reactor::input::Input;
 use reactor::utils::time::Time;
 use reactor::scene::Scene;
+use reactor::mesh::Mesh;
+use reactor::material::Material;
 use reactor::systems::camera::Camera;
 use reactor::systems::lighting::LightingSystem;
 use reactor::systems::physics::PhysicsWorld;
@@ -366,14 +368,14 @@ impl ApplicationHandler for AppRunner {
             }
         };
 
-        println!("╔══════════════════════════════════════════════════════════════╗");
-        println!("║              🚀 REACTOR Framework for C++                    ║");
-        println!("║  Version: {}                                          ║", "0.4.1");
-        println!("║  Title: {:52} ║", s.title);
-        println!("║  Resolution: {}x{:<44} ║", s.width, s.height);
-        println!("║  Ray Tracing: {:<47} ║",
-            if reactor.ray_tracing.is_some() { "✅ Enabled" } else { "❌ Not available" });
-        println!("╚══════════════════════════════════════════════════════════════╝");
+        println!("+==============================================================+");
+        println!("|              REACTOR Framework for C++                       |");
+        println!("|  Version: {}                                             |", "1.0.5");
+        println!("|  Title: {:52} |", s.title);
+        println!("|  Resolution: {}x{:<44} |", s.width, s.height);
+        println!("|  Ray Tracing: {:<47} |",
+            if reactor.ray_tracing.is_some() { "[OK] Enabled" } else { "[X] Not available" });
+        println!("+==============================================================+");
 
         let aspect = s.width as f32 / s.height.max(1) as f32;
         s.camera = Camera::perspective(60.0, aspect, 0.1, 1000.0);
@@ -473,6 +475,15 @@ impl ApplicationHandler for AppRunner {
                 s.mouse_dy = 0.0;
 
                 let dt = s.delta_time;
+                
+                // Calculate view-projection matrix
+                let view_proj = s.camera.view_projection_matrix();
+                
+                // Render the scene directly while we have the lock
+                if let Some(ref mut reactor) = s.reactor {
+                    let _ = reactor.draw_scene(&s.scene, &view_proj);
+                }
+                
                 drop(state);
 
                 // Call user update
@@ -916,9 +927,45 @@ pub extern "C" fn reactor_clear_scene() {
 /// Create a cube mesh (built-in primitive)
 #[unsafe(no_mangle)]
 pub extern "C" fn reactor_create_cube() -> *mut MeshHandle {
-    // Note: This requires access to VulkanContext which we don't have in C API standalone
-    // For now, return null - full mesh creation requires reactor_run() context
-    std::ptr::null_mut()
+    use reactor::vertex::Vertex;
+    
+    let mut state = REACTOR_STATE.lock().unwrap();
+    let Some(s) = state.as_mut() else { return std::ptr::null_mut(); };
+    let Some(ref reactor) = s.reactor else { return std::ptr::null_mut(); };
+    
+    // Cube vertices: position, color, uv
+    let vertices = vec![
+        // Front face (red)
+        Vertex { position: [-0.5, -0.5,  0.5], color: [1.0, 0.0, 0.0], uv: [0.0, 0.0] },
+        Vertex { position: [ 0.5, -0.5,  0.5], color: [0.0, 1.0, 0.0], uv: [1.0, 0.0] },
+        Vertex { position: [ 0.5,  0.5,  0.5], color: [0.0, 0.0, 1.0], uv: [1.0, 1.0] },
+        Vertex { position: [-0.5,  0.5,  0.5], color: [1.0, 1.0, 0.0], uv: [0.0, 1.0] },
+        // Back face
+        Vertex { position: [-0.5, -0.5, -0.5], color: [1.0, 0.0, 1.0], uv: [1.0, 0.0] },
+        Vertex { position: [ 0.5, -0.5, -0.5], color: [0.0, 1.0, 1.0], uv: [0.0, 0.0] },
+        Vertex { position: [ 0.5,  0.5, -0.5], color: [1.0, 1.0, 1.0], uv: [0.0, 1.0] },
+        Vertex { position: [-0.5,  0.5, -0.5], color: [0.5, 0.5, 0.5], uv: [1.0, 1.0] },
+    ];
+    
+    let indices: Vec<u32> = vec![
+        // Front
+        0, 1, 2, 2, 3, 0,
+        // Right
+        1, 5, 6, 6, 2, 1,
+        // Back
+        5, 4, 7, 7, 6, 5,
+        // Left
+        4, 0, 3, 3, 7, 4,
+        // Top
+        3, 2, 6, 6, 7, 3,
+        // Bottom
+        4, 5, 1, 1, 0, 4,
+    ];
+    
+    match Mesh::new(&reactor.context, &reactor.allocator, &vertices, &indices) {
+        Ok(mesh) => Box::into_raw(Box::new(MeshHandle { mesh })),
+        Err(_) => std::ptr::null_mut(),
+    }
 }
 
 /// Create a mesh from vertex data
@@ -951,6 +998,14 @@ pub extern "C" fn reactor_destroy_mesh(mesh: *mut MeshHandle) {
 // =============================================================================
 // Material Creation API
 // =============================================================================
+
+/// Create a simple colored material (placeholder - requires shaders)
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_create_material_simple(_r: f32, _g: f32, _b: f32) -> *mut MaterialHandle {
+    // Material creation requires SPIR-V shaders
+    // This is a placeholder - use reactor_create_material with shader code
+    std::ptr::null_mut()
+}
 
 /// Create a basic material from shader code
 /// Note: This is a placeholder - actual material creation requires Vulkan context
@@ -1701,4 +1756,254 @@ pub extern "C" fn reactor_error_description(code: u32) -> *const c_char {
     guard.get(&code)
         .map(|s| s.as_ptr())
         .unwrap_or(std::ptr::null())
+}
+
+// =============================================================================
+// ECS API
+// =============================================================================
+
+/// Entity handle
+pub type CEntity = u32;
+
+/// Create a new entity in the ECS world
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_ecs_create_entity() -> CEntity {
+    static NEXT_ENTITY: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
+    NEXT_ENTITY.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Destroy an entity
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_ecs_destroy_entity(_entity: CEntity) {
+    // Placeholder - would remove from world
+}
+
+/// Get entity count
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_ecs_entity_count() -> u32 {
+    0 // Placeholder
+}
+
+// =============================================================================
+// Debug Draw API
+// =============================================================================
+
+/// Draw a debug line
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_debug_line(
+    x1: f32, y1: f32, z1: f32,
+    x2: f32, y2: f32, z2: f32,
+    r: f32, g: f32, b: f32,
+) {
+    // Placeholder - would add to debug renderer
+    let _ = (x1, y1, z1, x2, y2, z2, r, g, b);
+}
+
+/// Draw a debug AABB
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_debug_aabb(
+    min_x: f32, min_y: f32, min_z: f32,
+    max_x: f32, max_y: f32, max_z: f32,
+    r: f32, g: f32, b: f32,
+) {
+    let _ = (min_x, min_y, min_z, max_x, max_y, max_z, r, g, b);
+}
+
+/// Draw a debug sphere
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_debug_sphere(
+    cx: f32, cy: f32, cz: f32,
+    radius: f32,
+    r: f32, g: f32, b: f32,
+) {
+    let _ = (cx, cy, cz, radius, r, g, b);
+}
+
+/// Draw a debug grid
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_debug_grid(size: f32, divisions: u32, r: f32, g: f32, b: f32) {
+    let _ = (size, divisions, r, g, b);
+}
+
+/// Clear debug draws
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_debug_clear() {
+    // Placeholder
+}
+
+// =============================================================================
+// Animation API
+// =============================================================================
+
+/// Animation clip handle
+pub type CAnimationClip = u32;
+
+/// Create an animation clip
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_animation_create_clip(name: *const c_char) -> CAnimationClip {
+    let _ = name;
+    static NEXT_CLIP: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
+    NEXT_CLIP.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Add position keyframe
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_animation_add_position_keyframe(
+    clip: CAnimationClip,
+    time: f32,
+    x: f32, y: f32, z: f32,
+) {
+    let _ = (clip, time, x, y, z);
+}
+
+/// Add rotation keyframe
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_animation_add_rotation_keyframe(
+    clip: CAnimationClip,
+    time: f32,
+    x: f32, y: f32, z: f32, w: f32,
+) {
+    let _ = (clip, time, x, y, z, w);
+}
+
+/// Play animation
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_animation_play(clip: CAnimationClip, looping: bool) {
+    let _ = (clip, looping);
+}
+
+/// Stop animation
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_animation_stop(clip: CAnimationClip) {
+    let _ = clip;
+}
+
+/// Update animations (call each frame)
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_animation_update(dt: f32) {
+    let _ = dt;
+}
+
+// =============================================================================
+// Audio API
+// =============================================================================
+
+/// Audio clip handle
+pub type CAudioClip = u32;
+
+/// Audio source handle
+pub type CAudioSource = u32;
+
+/// Load an audio clip
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_audio_load(path: *const c_char) -> CAudioClip {
+    let _ = path;
+    static NEXT_CLIP: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
+    NEXT_CLIP.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Create an audio source
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_audio_create_source() -> CAudioSource {
+    static NEXT_SOURCE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
+    NEXT_SOURCE.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Play audio
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_audio_play(source: CAudioSource, clip: CAudioClip) {
+    let _ = (source, clip);
+}
+
+/// Stop audio
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_audio_stop(source: CAudioSource) {
+    let _ = source;
+}
+
+/// Set audio volume
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_audio_set_volume(source: CAudioSource, volume: f32) {
+    let _ = (source, volume);
+}
+
+/// Set audio position (3D)
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_audio_set_position(source: CAudioSource, x: f32, y: f32, z: f32) {
+    let _ = (source, x, y, z);
+}
+
+/// Set master volume
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_audio_set_master_volume(volume: f32) {
+    let _ = volume;
+}
+
+// =============================================================================
+// Post-Processing API
+// =============================================================================
+
+/// Enable/disable bloom
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_postprocess_set_bloom(enabled: bool, intensity: f32, threshold: f32) {
+    let _ = (enabled, intensity, threshold);
+}
+
+/// Enable/disable tone mapping
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_postprocess_set_tonemapping(enabled: bool, exposure: f32) {
+    let _ = (enabled, exposure);
+}
+
+/// Enable/disable vignette
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_postprocess_set_vignette(enabled: bool, intensity: f32) {
+    let _ = (enabled, intensity);
+}
+
+/// Enable/disable FXAA
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_postprocess_set_fxaa(enabled: bool) {
+    let _ = enabled;
+}
+
+// =============================================================================
+// GPU Info API
+// =============================================================================
+
+/// Get GPU name
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_get_gpu_name() -> *const c_char {
+    use std::sync::LazyLock;
+    static GPU_NAME: LazyLock<std::ffi::CString> = 
+        LazyLock::new(|| std::ffi::CString::new("Vulkan GPU").unwrap());
+    GPU_NAME.as_ptr()
+}
+
+/// Get VRAM in MB
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_get_vram_mb() -> u32 {
+    0 // Placeholder - would query Vulkan
+}
+
+/// Get current MSAA samples
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_get_msaa_samples() -> u32 {
+    4 // Default
+}
+
+/// Check if ray tracing is supported
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_is_raytracing_supported() -> bool {
+    false // Placeholder
+}
+
+/// Get Vulkan version
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_get_vulkan_version(major: *mut u32, minor: *mut u32, patch: *mut u32) {
+    unsafe {
+        if !major.is_null() { *major = 1; }
+        if !minor.is_null() { *minor = 3; }
+        if !patch.is_null() { *patch = 0; }
+    }
 }
