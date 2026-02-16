@@ -1,6 +1,6 @@
 [package]
 name = "reactor"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 
 [dependencies]
@@ -9,6 +9,7 @@ bytemuck = { version = "1.24.0", features = ["derive"] }
 env_logger = "0.11.8"
 glam = "0.30.9"
 gpu-allocator = "0.28.0"
+image = "0.25"
 log = "0.4.29"
 raw-window-handle = "0.6.2"
 winit = "0.30.12"
@@ -32,3 +33,11 @@ path = "examples/sandbox_elite.rs"
 [[example]]
 name = "adead_demo"
 path = "examples/adead_demo.rs"
+
+[[example]]
+name = "simple_cube"
+path = "examples/simple_cube.rs"
+
+[[example]]
+name = "textured_cube"
+path = "examples/textured_cube.rs"

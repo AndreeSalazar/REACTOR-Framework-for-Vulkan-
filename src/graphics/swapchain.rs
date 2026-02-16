@@ -1,6 +1,6 @@
 use ash::{vk, Device};
 use ash::khr::swapchain;
-use crate::core::context::VulkanContext;
+use crate::vulkan_context::VulkanContext;
 use std::error::Error;
 
 pub struct Swapchain {

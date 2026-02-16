@@ -1,11 +1,12 @@
 use ash::vk;
-use crate::core::context::VulkanContext;
+use crate::vulkan_context::VulkanContext;
 use crate::graphics::buffer::Buffer;
 use crate::graphics::image::Image;
 use crate::graphics::sampler::Sampler;
 use gpu_allocator::vulkan::Allocator;
 use gpu_allocator::MemoryLocation;
 use std::error::Error;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 pub struct Texture {
@@ -13,9 +14,65 @@ pub struct Texture {
     pub sampler: Sampler,
     pub width: u32,
     pub height: u32,
+    device: ash::Device,
 }
 
 impl Texture {
+    /// Load texture from file (PNG, JPG, BMP, etc.)
+    pub fn from_file<P: AsRef<Path>>(
+        ctx: &VulkanContext,
+        allocator: Arc<Mutex<Allocator>>,
+        path: P,
+        generate_mipmaps: bool,
+    ) -> Result<Self, Box<dyn Error>> {
+        let img = image::open(path)?;
+        let rgba = img.to_rgba8();
+        let (width, height) = rgba.dimensions();
+        let data = rgba.into_raw();
+        
+        Self::from_rgba(ctx, allocator, &data, width, height, generate_mipmaps)
+    }
+
+    /// Load texture from embedded bytes (PNG, JPG, etc.)
+    pub fn from_bytes(
+        ctx: &VulkanContext,
+        allocator: Arc<Mutex<Allocator>>,
+        bytes: &[u8],
+        generate_mipmaps: bool,
+    ) -> Result<Self, Box<dyn Error>> {
+        let img = image::load_from_memory(bytes)?;
+        let rgba = img.to_rgba8();
+        let (width, height) = rgba.dimensions();
+        let data = rgba.into_raw();
+        
+        Self::from_rgba(ctx, allocator, &data, width, height, generate_mipmaps)
+    }
+
+    /// Create a solid color texture (useful for defaults)
+    pub fn solid_color(
+        ctx: &VulkanContext,
+        allocator: Arc<Mutex<Allocator>>,
+        r: u8, g: u8, b: u8, a: u8,
+    ) -> Result<Self, Box<dyn Error>> {
+        let data = [r, g, b, a];
+        Self::from_rgba(ctx, allocator, &data, 1, 1, false)
+    }
+
+    /// Create white texture (default diffuse)
+    pub fn white(ctx: &VulkanContext, allocator: Arc<Mutex<Allocator>>) -> Result<Self, Box<dyn Error>> {
+        Self::solid_color(ctx, allocator, 255, 255, 255, 255)
+    }
+
+    /// Create black texture
+    pub fn black(ctx: &VulkanContext, allocator: Arc<Mutex<Allocator>>) -> Result<Self, Box<dyn Error>> {
+        Self::solid_color(ctx, allocator, 0, 0, 0, 255)
+    }
+
+    /// Create normal map default (flat surface pointing up)
+    pub fn default_normal(ctx: &VulkanContext, allocator: Arc<Mutex<Allocator>>) -> Result<Self, Box<dyn Error>> {
+        Self::solid_color(ctx, allocator, 128, 128, 255, 255)
+    }
+
     pub fn from_rgba(
         ctx: &VulkanContext,
         allocator: Arc<Mutex<Allocator>>,
@@ -61,7 +118,18 @@ impl Texture {
             sampler,
             width,
             height,
+            device: ctx.device.clone(),
         })
+    }
+
+    /// Get the image view for binding to descriptor sets
+    pub fn view(&self) -> vk::ImageView {
+        self.image.view
+    }
+
+    /// Get the sampler handle
+    pub fn sampler_handle(&self) -> vk::Sampler {
+        self.sampler.handle
     }
 
     fn copy_buffer_to_image(

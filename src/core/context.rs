@@ -1,6 +1,6 @@
 use ash::{Entry, Instance, Device};
 use ash::vk;
-use std::ffi::CStr;
+use std::ffi::{CStr, c_void};
 use raw_window_handle::HasWindowHandle;
 use std::error::Error;
 
@@ -19,6 +19,50 @@ pub struct VulkanContext {
     pub queue_family_index: u32,
     pub compute_queue_family_index: Option<u32>,
     pub transfer_queue_family_index: Option<u32>,
+    debug_utils: Option<ash::ext::debug_utils::Instance>,
+    debug_messenger: Option<vk::DebugUtilsMessengerEXT>,
+}
+
+/// Vulkan debug callback - logs validation messages
+unsafe extern "system" fn vulkan_debug_callback(
+    message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
+    message_type: vk::DebugUtilsMessageTypeFlagsEXT,
+    p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
+    _user_data: *mut c_void,
+) -> vk::Bool32 {
+    let callback_data = *p_callback_data;
+    let message = if callback_data.p_message.is_null() {
+        std::borrow::Cow::from("")
+    } else {
+        CStr::from_ptr(callback_data.p_message).to_string_lossy()
+    };
+
+    let type_str = match message_type {
+        vk::DebugUtilsMessageTypeFlagsEXT::GENERAL => "GENERAL",
+        vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION => "VALIDATION",
+        vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE => "PERFORMANCE",
+        _ => "UNKNOWN",
+    };
+
+    match message_severity {
+        vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => {
+            log::error!("[Vulkan {}] {}", type_str, message);
+        }
+        vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => {
+            log::warn!("[Vulkan {}] {}", type_str, message);
+        }
+        vk::DebugUtilsMessageSeverityFlagsEXT::INFO => {
+            log::info!("[Vulkan {}] {}", type_str, message);
+        }
+        vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => {
+            log::trace!("[Vulkan {}] {}", type_str, message);
+        }
+        _ => {
+            log::debug!("[Vulkan {}] {}", type_str, message);
+        }
+    }
+
+    vk::FALSE
 }
 
 impl VulkanContext {
@@ -29,11 +73,16 @@ impl VulkanContext {
         let layer_names = [CStr::from_bytes_with_nul(b"VK_LAYER_KHRONOS_validation\0")?];
         let layers_ptr: Vec<*const i8> = layer_names.iter().map(|raw_name| raw_name.as_ptr()).collect();
 
-        // Extensions
-        let extension_names = vec![
+        // Extensions - add debug utils in debug builds
+        let mut extension_names = vec![
             ash::khr::surface::NAME.as_ptr(),
             ash::khr::win32_surface::NAME.as_ptr(),
         ];
+        
+        #[cfg(debug_assertions)]
+        {
+            extension_names.push(ash::ext::debug_utils::NAME.as_ptr());
+        }
         
         let app_info = vk::ApplicationInfo::default()
             .api_version(vk::API_VERSION_1_3);
@@ -44,6 +93,35 @@ impl VulkanContext {
             .enabled_extension_names(&extension_names);
 
         let instance = unsafe { entry.create_instance(&create_info, None)? };
+        
+        // Setup debug messenger in debug builds
+        #[cfg(debug_assertions)]
+        let (debug_utils, debug_messenger) = {
+            let debug_utils = ash::ext::debug_utils::Instance::new(&entry, &instance);
+            
+            let debug_create_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
+                .message_severity(
+                    vk::DebugUtilsMessageSeverityFlagsEXT::ERROR
+                    | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
+                )
+                .message_type(
+                    vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
+                    | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION
+                    | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
+                )
+                .pfn_user_callback(Some(vulkan_debug_callback));
+            
+            let messenger = unsafe {
+                debug_utils.create_debug_utils_messenger(&debug_create_info, None)
+                    .expect("Failed to create debug messenger")
+            };
+            
+            log::info!("🔍 Vulkan validation layers enabled");
+            (Some(debug_utils), Some(messenger))
+        };
+        
+        #[cfg(not(debug_assertions))]
+        let (debug_utils, debug_messenger): (Option<ash::ext::debug_utils::Instance>, Option<vk::DebugUtilsMessengerEXT>) = (None, None);
         
         // Surface
         let surface = unsafe {
@@ -116,6 +194,8 @@ impl VulkanContext {
             queue_family_index,
             compute_queue_family_index: None,
             transfer_queue_family_index: None,
+            debug_utils,
+            debug_messenger,
         })
     }
 
@@ -129,6 +209,12 @@ impl Drop for VulkanContext {
         unsafe {
             self.device.destroy_device(None);
             self.surface_loader.destroy_surface(self.surface, None);
+            
+            // Destroy debug messenger before instance
+            if let (Some(debug_utils), Some(messenger)) = (&self.debug_utils, self.debug_messenger) {
+                debug_utils.destroy_debug_utils_messenger(messenger, None);
+            }
+            
             self.instance.destroy_instance(None);
         }
     }

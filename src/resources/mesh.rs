@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::error::Error;
 use crate::graphics::buffer::Buffer;
 use crate::resources::vertex::Vertex;
-use crate::core::context::VulkanContext;
+use crate::vulkan_context::VulkanContext;
 
 pub struct Mesh {
     pub vertex_buffer: Buffer,

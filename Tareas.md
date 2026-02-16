@@ -2,11 +2,89 @@
 
 ## 🎯 Objetivo Principal
 **ReactorApp() ONE CALL** — Una sola llamada para inicializar todo el engine.
-- **Rust**: `reactor::run(MyGame)` → trait `ReactorApp`
-- **C++**: `ReactorApp("Mi Juego")` → class `reactor::Application`
-- **Cualquier lenguaje**: `reactor_run()` → C ABI universal
+REACTOR = React-Like pero para Vulkan. Heredas, overrideas, modificas desde un solo archivo.
 
 Arquitectura: `Rust Core` → `C ABI (extern "C")` → `C++ SDK` → `Usuario hereda y modifica`
+
+---
+
+## 🎨 TARGET API — Lo que queremos lograr
+
+### Rust — Builder pattern + Trait (IMPLEMENTADO ✅)
+```rust
+use reactor::prelude::*;
+
+struct MyGame { rotation: f32 }
+
+impl ReactorApp for MyGame {
+    fn config(&self) -> ReactorConfig {
+        ReactorConfig::new("Mi Juego")
+            .with_size(1920, 1080)
+            .with_vsync(true)
+            .with_renderer(RendererMode::RayTracing)  // ← NUEVO
+            .with_scene("assets/level1.gltf")         // ← NUEVO (auto-load)
+    }
+
+    fn init(&mut self, ctx: &mut ReactorContext) {
+        ctx.camera.position = Vec3::new(0.0, 2.0, 4.0);
+        // Scene ya cargada por with_scene() ^
+    }
+
+    fn update(&mut self, ctx: &mut ReactorContext) {
+        self.rotation += ctx.delta() * 1.5;
+        ctx.scene.objects[0].transform = Mat4::from_rotation_y(self.rotation);
+    }
+    // render() automático — no necesitas override
+}
+
+fn main() { reactor::run(MyGame { rotation: 0.0 }); }
+```
+
+### C++ — Herencia + Designated Initializers (PENDIENTE ❌)
+```cpp
+#include <reactor/reactor.hpp>
+
+class MyGame : public reactor::Application {
+    float rotation = 0.0f;
+
+    Config config() override {
+        return Config("Mi Juego")
+            .with_size(1920, 1080)
+            .with_vsync(true)
+            .with_renderer(Renderer::RayTracing)  // ← FALTA
+            .with_scene("assets/level1.gltf");    // ← FALTA
+    }
+
+    void on_init() override {
+        Camera::set_position({0, 2, 4});
+    }
+
+    void on_update(float dt) override {
+        rotation += dt * 1.5f;
+        Scene::set_transform(0, Mat4::RotationY(rotation));
+    }
+};
+
+int main() { MyGame().run(); }
+```
+
+### C++ Ultra-Simple — Lambda ONE CALL (PENDIENTE ❌)
+```cpp
+// Sin clase, sin herencia — UNA LLAMADA
+ReactorApp({
+    .title = "Mi Juego",
+    .resolution = {1920, 1080},
+    .vsync = true,
+    .renderer = RayTracing,
+    .scene = "assets/level1.gltf"
+});
+```
+
+### Python / C# / Cualquier lenguaje — Via C ABI (FUTURO)
+```python
+import reactor
+reactor.run("Mi Juego", width=1920, height=1080, scene="assets/level1.gltf")
+```
 
 ---
 
@@ -22,15 +100,16 @@ Arquitectura: `Rust Core` → `C ABI (extern "C")` → `C++ SDK` → `Usuario he
 | # | Tarea | Estado | Archivo(s) | Descripción |
 |---|-------|--------|------------|-------------|
 | R1 | Vulkan cleanup | ✅ Completado | `reactor.rs` | Fix MSAA destruction, device_wait_idle |
-| R2 | Validation Layers | 🔴 Pendiente | `vulkan_context.rs` | `VK_LAYER_KHRONOS_validation` en debug builds, Debug messenger callback |
-| R3 | Error Handling | 🔴 Pendiente | `src/core/error.rs` (nuevo) | `ReactorError` enum, `Result<T, ReactorError>` en todo el core |
+| R2 | Validation Layers | ✅ Completado | `core/context.rs` | `VK_LAYER_KHRONOS_validation` en debug builds, Debug messenger callback |
+| R3 | Error Handling | ✅ Completado | `src/core/error.rs` | `ReactorError` enum, `Result<T, ReactorError>`, C ABI + C++ SDK |
 | R4 | Ejemplo cube.rs | ✅ Completado | `examples/cube.rs` | Renderiza correctamente |
+| R5a | ReactorConfig completo | ✅ Completado | `app.rs` | `vsync`, `fullscreen`, `msaa`, `renderer`, `scene` — builder pattern |
 
 #### **FASE 2: Renderizado — Lo que Rust hace único**
 | # | Tarea | Estado | Archivo(s) | Descripción |
 |---|-------|--------|------------|-------------|
-| R5 | Depth Buffer | 🔴 Pendiente | `graphics/depth.rs` → integrar en `reactor.rs` | Z-buffer en render pass + framebuffers |
-| R6 | Texturas | 🔴 Pendiente | `resources/texture.rs` → funcional | PNG/JPG → VkImage, samplers, descriptor sets, UV mapping |
+| R5 | Depth Buffer | ✅ Completado | `reactor.rs`, `pipeline.rs` | Z-buffer en render pass + framebuffers + depth testing |
+| R6 | Texturas | ✅ Completado | `resources/texture.rs` | PNG/JPG → VkImage, samplers, mipmaps, `from_file()`, `from_bytes()` |
 | R7 | Material con Texturas | 🔴 Pendiente | `material.rs`, `pipeline.rs` | `create_material()` que acepte texturas + UBOs |
 | R8 | Render Pass configurable | 🟡 Pendiente | `graphics/render_pass.rs` | Forward rendering con depth + MSAA integrados |
 
@@ -81,9 +160,10 @@ Arquitectura: `Rust Core` → `C ABI (extern "C")` → `C++ SDK` → `Usuario he
 #### **FALTA EXPONER ❌**
 | # | Tarea | Estado | Función C ABI | Depende de |
 |---|-------|--------|---------------|------------|
-| A1 | Error handling | 🔴 Pendiente | `reactor_get_last_error()`, `reactor_error_message()` | R3 |
-| A2 | Material creation | 🔴 Pendiente | `reactor_create_material(shader_vert, shader_frag)` | R7 |
-| A3 | Texture loading | 🔴 Pendiente | `reactor_load_texture(path)`, `reactor_destroy_texture()` | R6 |
+| A0 | CConfig completo | ✅ Completado | `CConfig.renderer`, `.scene`, `CRendererMode` enum | R5a |
+| A1 | Error handling | ✅ Completado | `reactor_get_last_error()`, `reactor_error_message()` | R3 |
+| A2 | Material creation | ✅ Completado | `reactor_create_material(shader_vert, shader_frag)` | R7 |
+| A3 | Texture loading | ✅ Completado | `reactor_load_texture()`, `reactor_texture_width/height()`, `reactor_destroy_texture()` | R6 |
 | A4 | Model loading | 🟡 Pendiente | `reactor_load_model(path)`, `reactor_destroy_model()` | R9/R10 |
 | A5 | Physics API | 🟡 Pendiente | `reactor_physics_step()`, `_add_rigidbody()`, `_raycast()` | R12 |
 | A6 | ECS API | 🟡 Pendiente | `reactor_ecs_create_entity()`, `_add_component()`, `_query()` | R13 |
@@ -120,8 +200,9 @@ Arquitectura: `Rust Core` → `C ABI (extern "C")` → `C++ SDK` → `Usuario he
 #### **FALTA IMPLEMENTAR ❌**
 | # | Clase C++ | Estado | Archivo | Wrappea C ABI |
 |---|-----------|--------|---------|---------------|
+| C0 | `Config` con `renderer`, `scene` | ✅ Completado | `application.hpp` | `CConfig` + `RendererMode` enum + `to_c()` |
 | C1 | `reactor::Material` | 🔴 Pendiente | `application.hpp` | `reactor_create_material()` |
-| C2 | `reactor::Texture` | 🔴 Pendiente | `application.hpp` | `reactor_load_texture()` |
+| C2 | `reactor::Texture` | ✅ Completado | `application.hpp` | RAII wrapper con `from_file()`, `solid()`, move semantics |
 | C3 | `reactor::Model` | 🟡 Pendiente | `application.hpp` | `reactor_load_model()` |
 | C4 | `reactor::Physics` | 🟡 Pendiente | `physics.hpp` (nuevo) | `reactor_physics_*` |
 | C5 | `reactor::ECS` / `Entity` | 🟡 Pendiente | `ecs.hpp` (nuevo) | `reactor_ecs_*` |
@@ -187,6 +268,7 @@ USUARIO (hereda y modifica desde UN archivo):
 
 | Orden | Rust | C ABI | C++ | Descripción |
 |-------|------|-------|-----|-------------|
+| 0 | R5a ✅ | A0 | C0 | **ReactorConfig** — `renderer`, `scene`, `vsync` en Rust → propagar a CConfig → Config C++ |
 | 1 | R3 | A1 | C9 | **Error Handling** — `ReactorError` enum → `reactor_get_last_error()` → `reactor::Error` |
 | 2 | R2 | — | — | **Validation Layers** — Solo Rust, debug builds |
 | 3 | R5 | — | — | **Depth Buffer** — Integrar en render pass existente |

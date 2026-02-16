@@ -29,13 +29,51 @@ use std::sync::Arc;
 // ReactorConfig — Application configuration
 // =============================================================================
 
+/// Renderer backend selection.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RendererMode {
+    Forward,
+    Deferred,
+    RayTracing,
+}
+
+impl Default for RendererMode {
+    fn default() -> Self { Self::Forward }
+}
+
 /// Configuration for a REACTOR application.
+///
+/// # Rust (builder pattern)
+/// ```rust,no_run
+/// ReactorConfig::new("My Game")
+///     .with_size(1920, 1080)
+///     .with_vsync(true)
+///     .with_renderer(RendererMode::RayTracing)
+///     .with_scene("assets/level1.gltf")
+/// ```
+///
+/// # C++ (designated initializers)
+/// ```cpp
+/// ReactorApp({
+///     .title = "My Game",
+///     .resolution = {1920, 1080},
+///     .vsync = true,
+///     .renderer = RayTracing,
+///     .scene = "assets/level1.gltf"
+/// });
+/// ```
 #[derive(Debug, Clone)]
 pub struct ReactorConfig {
     pub title: String,
     pub width: u32,
     pub height: u32,
+    pub vsync: bool,
+    pub fullscreen: bool,
+    pub resizable: bool,
+    pub msaa_samples: u32,
+    pub renderer: RendererMode,
     pub physics_hz: u32,
+    pub scene: Option<String>,
 }
 
 impl ReactorConfig {
@@ -52,8 +90,38 @@ impl ReactorConfig {
         self
     }
 
+    pub fn with_vsync(mut self, vsync: bool) -> Self {
+        self.vsync = vsync;
+        self
+    }
+
+    pub fn with_fullscreen(mut self, fullscreen: bool) -> Self {
+        self.fullscreen = fullscreen;
+        self
+    }
+
+    pub fn with_resizable(mut self, resizable: bool) -> Self {
+        self.resizable = resizable;
+        self
+    }
+
+    pub fn with_msaa(mut self, samples: u32) -> Self {
+        self.msaa_samples = samples;
+        self
+    }
+
+    pub fn with_renderer(mut self, mode: RendererMode) -> Self {
+        self.renderer = mode;
+        self
+    }
+
     pub fn with_physics_hz(mut self, hz: u32) -> Self {
         self.physics_hz = hz;
+        self
+    }
+
+    pub fn with_scene(mut self, path: &str) -> Self {
+        self.scene = Some(path.to_string());
         self
     }
 }
@@ -64,7 +132,13 @@ impl Default for ReactorConfig {
             title: "REACTOR Application".to_string(),
             width: 1280,
             height: 720,
+            vsync: true,
+            fullscreen: false,
+            resizable: true,
+            msaa_samples: 4,
+            renderer: RendererMode::default(),
             physics_hz: 60,
+            scene: None,
         }
     }
 }
@@ -226,6 +300,21 @@ impl ReactorContext {
     /// Create a material from SPIR-V shader code
     pub fn create_material(&self, vert_code: &[u32], frag_code: &[u32]) -> Result<crate::material::Material, Box<dyn std::error::Error>> {
         self.reactor.create_material(vert_code, frag_code)
+    }
+
+    /// Load texture from file (PNG, JPG, BMP, etc.)
+    pub fn load_texture(&self, path: &str) -> Result<crate::resources::texture::Texture, Box<dyn std::error::Error>> {
+        self.reactor.load_texture(path)
+    }
+
+    /// Load texture from embedded bytes
+    pub fn load_texture_bytes(&self, bytes: &[u8]) -> Result<crate::resources::texture::Texture, Box<dyn std::error::Error>> {
+        self.reactor.load_texture_bytes(bytes)
+    }
+
+    /// Create a solid color texture
+    pub fn create_solid_texture(&self, r: u8, g: u8, b: u8, a: u8) -> Result<crate::resources::texture::Texture, Box<dyn std::error::Error>> {
+        self.reactor.create_solid_texture(r, g, b, a)
     }
 
     // =========================================================================

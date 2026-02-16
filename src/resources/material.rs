@@ -1,7 +1,7 @@
 use ash::vk;
 use std::sync::Arc;
 use crate::graphics::pipeline::{Pipeline, PipelineConfig};
-use crate::core::context::VulkanContext;
+use crate::vulkan_context::VulkanContext;
 use std::error::Error;
 
 pub struct Material {

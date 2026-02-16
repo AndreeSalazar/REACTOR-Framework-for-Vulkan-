@@ -45,6 +45,13 @@ struct CLight {
     float outer_angle;
 };
 
+// Renderer mode enum
+enum CRendererMode {
+    Forward = 0,
+    Deferred = 1,
+    RayTracing = 2,
+};
+
 struct CConfig {
     const char* title;
     uint32_t width;
@@ -54,6 +61,8 @@ struct CConfig {
     bool fullscreen;
     bool resizable;
     uint32_t physics_hz;
+    CRendererMode renderer;
+    const char* scene;  // Path to auto-load scene (glTF, etc.)
 };
 
 // Callback types
@@ -209,6 +218,16 @@ void reactor_log_warn(const char* msg);
 void reactor_log_error(const char* msg);
 
 // =============================================================================
+// Error Handling API
+// =============================================================================
+
+uint32_t reactor_get_last_error();
+const char* reactor_get_error_message();
+bool reactor_has_error();
+void reactor_clear_error();
+const char* reactor_error_description(uint32_t code);
+
+// =============================================================================
 // Scene API — Global scene management
 // =============================================================================
 
@@ -247,6 +266,17 @@ void reactor_destroy_mesh(void* mesh);
 // =============================================================================
 
 void reactor_destroy_material(void* material);
+
+// =============================================================================
+// Texture API
+// =============================================================================
+
+void* reactor_load_texture(const char* path);
+void* reactor_load_texture_bytes(const uint8_t* data, uint32_t len);
+void* reactor_create_solid_texture(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+uint32_t reactor_texture_width(const void* texture);
+uint32_t reactor_texture_height(const void* texture);
+void reactor_destroy_texture(void* texture);
 
 // =============================================================================
 // Lighting API

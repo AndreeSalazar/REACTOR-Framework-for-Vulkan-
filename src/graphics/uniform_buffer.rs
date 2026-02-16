@@ -1,7 +1,7 @@
 use ash::vk;
 use gpu_allocator::vulkan::Allocator;
 use gpu_allocator::MemoryLocation;
-use crate::core::context::VulkanContext;
+use crate::vulkan_context::VulkanContext;
 use crate::graphics::buffer::Buffer;
 use std::error::Error;
 use std::sync::{Arc, Mutex};

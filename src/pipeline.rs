@@ -109,6 +109,14 @@ impl Pipeline {
             .logic_op_enable(false)
             .attachments(&attachments);
 
+        // Depth stencil state - enable depth testing
+        let depth_stencil_state = vk::PipelineDepthStencilStateCreateInfo::default()
+            .depth_test_enable(true)
+            .depth_write_enable(true)
+            .depth_compare_op(vk::CompareOp::LESS)
+            .depth_bounds_test_enable(false)
+            .stencil_test_enable(false);
+
         let push_constant_range = vk::PushConstantRange {
             stage_flags: vk::ShaderStageFlags::VERTEX,
             offset: 0,
@@ -127,6 +135,7 @@ impl Pipeline {
             .viewport_state(&viewport_state)
             .rasterization_state(&rasterization_state)
             .multisample_state(&multisample_state)
+            .depth_stencil_state(&depth_stencil_state)
             .color_blend_state(&color_blend_state)
             .dynamic_state(&dynamic_state_info)
             .layout(layout)

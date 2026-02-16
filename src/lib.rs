@@ -45,7 +45,7 @@ pub mod adead;
 // =============================================================================
 // App Trait System Re-exports
 // =============================================================================
-pub use app::{ReactorApp, ReactorContext, ReactorConfig, run};
+pub use app::{ReactorApp, ReactorContext, ReactorConfig, RendererMode, run};
 
 // =============================================================================
 // Legacy Re-exports (backwards compatibility)
@@ -210,7 +210,7 @@ pub use adead::adead_aa::{
 // =============================================================================
 pub mod prelude {
     // App Trait System
-    pub use crate::app::{ReactorApp, ReactorContext, ReactorConfig, run};
+    pub use crate::app::{ReactorApp, ReactorContext, ReactorConfig, RendererMode, run};
 
     // Core
     pub use crate::Reactor;

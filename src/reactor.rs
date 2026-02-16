@@ -37,6 +37,12 @@ pub struct Reactor {
     pub msaa_image: Option<vk::Image>,
     pub msaa_image_view: Option<vk::ImageView>,
     pub msaa_memory: Option<vk::DeviceMemory>,
+    
+    // Depth Buffer
+    pub depth_image: Option<vk::Image>,
+    pub depth_image_view: Option<vk::ImageView>,
+    pub depth_memory: Option<vk::DeviceMemory>,
+    pub depth_format: vk::Format,
 }
 
 const MAX_FRAMES_IN_FLIGHT: usize = 3;
@@ -76,8 +82,19 @@ impl Reactor {
             (None, None, None)
         };
         
-        let render_pass = Self::create_render_pass_with_msaa(&context, swapchain.format, msaa_samples)?;
-        let framebuffers = Self::create_framebuffers_msaa(&context, &swapchain, render_pass, msaa_image_view, msaa_samples)?;
+        // Create Depth Buffer
+        let depth_format = Self::find_depth_format(&context)?;
+        let (depth_image, depth_image_view, depth_memory) = Self::create_depth_resources(
+            &context,
+            swapchain.extent.width,
+            swapchain.extent.height,
+            depth_format,
+            msaa_samples,
+        )?;
+        println!("🔷 Depth buffer created: {:?}", depth_format);
+        
+        let render_pass = Self::create_render_pass_with_depth(&context, swapchain.format, depth_format, msaa_samples)?;
+        let framebuffers = Self::create_framebuffers_with_depth(&context, &swapchain, render_pass, msaa_image_view, depth_image_view, msaa_samples)?;
 
         // Command Pool
         let pool_create_info = vk::CommandPoolCreateInfo::default()
@@ -141,6 +158,11 @@ impl Reactor {
             msaa_image,
             msaa_image_view,
             msaa_memory,
+            // Depth Buffer
+            depth_image: Some(depth_image),
+            depth_image_view: Some(depth_image_view),
+            depth_memory: Some(depth_memory),
+            depth_format,
         })
     }
 
@@ -184,6 +206,17 @@ impl Reactor {
             }
         }
         
+        // Destroy old depth resources
+        if let Some(view) = self.depth_image_view.take() {
+            unsafe { self.context.device.destroy_image_view(view, None); }
+        }
+        if let Some(image) = self.depth_image.take() {
+            unsafe { self.context.device.destroy_image(image, None); }
+        }
+        if let Some(memory) = self.depth_memory.take() {
+            unsafe { self.context.device.free_memory(memory, None); }
+        }
+        
         // Destroy old MSAA resources if they exist
         if let Some(view) = self.msaa_image_view.take() {
             unsafe { self.context.device.destroy_image_view(view, None); }
@@ -213,12 +246,25 @@ impl Reactor {
             self.msaa_memory = Some(mem);
         }
         
-        // Recreate framebuffers with MSAA support
-        self.framebuffers = Self::create_framebuffers_msaa(
+        // Recreate depth buffer
+        let (depth_img, depth_view, depth_mem) = Self::create_depth_resources(
+            &self.context,
+            self.swapchain.extent.width,
+            self.swapchain.extent.height,
+            self.depth_format,
+            self.msaa_samples,
+        )?;
+        self.depth_image = Some(depth_img);
+        self.depth_image_view = Some(depth_view);
+        self.depth_memory = Some(depth_mem);
+        
+        // Recreate framebuffers with depth support
+        self.framebuffers = Self::create_framebuffers_with_depth(
             &self.context, 
             &self.swapchain, 
             self.render_pass,
             self.msaa_image_view,
+            depth_view,
             self.msaa_samples
         )?;
         
@@ -227,6 +273,21 @@ impl Reactor {
 
     pub fn create_mesh(&self, vertices: &[crate::vertex::Vertex], indices: &[u32]) -> Result<Mesh, Box<dyn Error>> {
         Mesh::new(&self.context, &self.allocator, vertices, indices)
+    }
+
+    /// Load texture from file (PNG, JPG, BMP, etc.)
+    pub fn load_texture(&self, path: &str) -> Result<crate::resources::texture::Texture, Box<dyn Error>> {
+        crate::resources::texture::Texture::from_file(&self.context, self.allocator.clone(), path, true)
+    }
+
+    /// Load texture from embedded bytes
+    pub fn load_texture_bytes(&self, bytes: &[u8]) -> Result<crate::resources::texture::Texture, Box<dyn Error>> {
+        crate::resources::texture::Texture::from_bytes(&self.context, self.allocator.clone(), bytes, true)
+    }
+
+    /// Create a solid color texture
+    pub fn create_solid_texture(&self, r: u8, g: u8, b: u8, a: u8) -> Result<crate::resources::texture::Texture, Box<dyn Error>> {
+        crate::resources::texture::Texture::solid_color(&self.context, self.allocator.clone(), r, g, b, a)
     }
 
     pub fn create_material(&self, vert_code: &[u32], frag_code: &[u32]) -> Result<Material, Box<dyn Error>> {
@@ -595,10 +656,22 @@ impl Reactor {
 
         let begin_info = vk::CommandBufferBeginInfo::default();
         
+        // Clear values: [MSAA color, resolve color, depth]
         let clear_values = [
             vk::ClearValue {
                 color: vk::ClearColorValue {
                     float32: [0.1, 0.1, 0.1, 1.0],
+                },
+            },
+            vk::ClearValue {
+                color: vk::ClearColorValue {
+                    float32: [0.1, 0.1, 0.1, 1.0],
+                },
+            },
+            vk::ClearValue {
+                depth_stencil: vk::ClearDepthStencilValue {
+                    depth: 1.0,
+                    stencil: 0,
                 },
             },
         ];
@@ -882,6 +955,261 @@ impl Reactor {
             Err(e) => Err(Box::new(e)),
         }
     }
+
+    /// Find a supported depth format
+    fn find_depth_format(context: &VulkanContext) -> Result<vk::Format, Box<dyn Error>> {
+        let candidates = [
+            vk::Format::D32_SFLOAT,
+            vk::Format::D32_SFLOAT_S8_UINT,
+            vk::Format::D24_UNORM_S8_UINT,
+        ];
+
+        for &format in &candidates {
+            let props = unsafe {
+                context.instance.get_physical_device_format_properties(context.physical_device, format)
+            };
+            if props.optimal_tiling_features.contains(vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT) {
+                return Ok(format);
+            }
+        }
+
+        Err("Failed to find supported depth format".into())
+    }
+
+    /// Create depth buffer resources
+    fn create_depth_resources(
+        context: &VulkanContext,
+        width: u32,
+        height: u32,
+        format: vk::Format,
+        samples: vk::SampleCountFlags,
+    ) -> Result<(vk::Image, vk::ImageView, vk::DeviceMemory), Box<dyn Error>> {
+        let image_info = vk::ImageCreateInfo::default()
+            .image_type(vk::ImageType::TYPE_2D)
+            .extent(vk::Extent3D { width, height, depth: 1 })
+            .mip_levels(1)
+            .array_layers(1)
+            .format(format)
+            .tiling(vk::ImageTiling::OPTIMAL)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .usage(vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE)
+            .samples(samples);
+
+        let image = unsafe { context.device.create_image(&image_info, None)? };
+        let requirements = unsafe { context.device.get_image_memory_requirements(image) };
+
+        let memory_props = unsafe { context.instance.get_physical_device_memory_properties(context.physical_device) };
+        let memory_type_index = (0..memory_props.memory_type_count)
+            .find(|&i| {
+                let suitable = (requirements.memory_type_bits & (1 << i)) != 0;
+                let memory_type = memory_props.memory_types[i as usize];
+                suitable && memory_type.property_flags.contains(vk::MemoryPropertyFlags::DEVICE_LOCAL)
+            })
+            .ok_or("Failed to find suitable memory type for depth buffer")?;
+
+        let alloc_info = vk::MemoryAllocateInfo::default()
+            .allocation_size(requirements.size)
+            .memory_type_index(memory_type_index);
+
+        let memory = unsafe { context.device.allocate_memory(&alloc_info, None)? };
+        unsafe { context.device.bind_image_memory(image, memory, 0)? };
+
+        let view_info = vk::ImageViewCreateInfo::default()
+            .image(image)
+            .view_type(vk::ImageViewType::TYPE_2D)
+            .format(format)
+            .subresource_range(
+                vk::ImageSubresourceRange::default()
+                    .aspect_mask(vk::ImageAspectFlags::DEPTH)
+                    .base_mip_level(0)
+                    .level_count(1)
+                    .base_array_layer(0)
+                    .layer_count(1),
+            );
+
+        let view = unsafe { context.device.create_image_view(&view_info, None)? };
+
+        Ok((image, view, memory))
+    }
+
+    /// Create render pass with MSAA and depth support
+    fn create_render_pass_with_depth(
+        context: &VulkanContext,
+        color_format: vk::Format,
+        depth_format: vk::Format,
+        samples: vk::SampleCountFlags,
+    ) -> Result<vk::RenderPass, Box<dyn Error>> {
+        if samples == vk::SampleCountFlags::TYPE_1 {
+            // No MSAA - simple render pass with depth
+            let color_attachment = vk::AttachmentDescription::default()
+                .format(color_format)
+                .samples(vk::SampleCountFlags::TYPE_1)
+                .load_op(vk::AttachmentLoadOp::CLEAR)
+                .store_op(vk::AttachmentStoreOp::STORE)
+                .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+                .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+                .initial_layout(vk::ImageLayout::UNDEFINED)
+                .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
+
+            let depth_attachment = vk::AttachmentDescription::default()
+                .format(depth_format)
+                .samples(vk::SampleCountFlags::TYPE_1)
+                .load_op(vk::AttachmentLoadOp::CLEAR)
+                .store_op(vk::AttachmentStoreOp::DONT_CARE)
+                .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+                .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+                .initial_layout(vk::ImageLayout::UNDEFINED)
+                .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+            let color_ref = vk::AttachmentReference::default()
+                .attachment(0)
+                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+
+            let depth_ref = vk::AttachmentReference::default()
+                .attachment(1)
+                .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+            let color_attachments = [color_ref];
+            let subpass = vk::SubpassDescription::default()
+                .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+                .color_attachments(&color_attachments)
+                .depth_stencil_attachment(&depth_ref);
+
+            let dependency = vk::SubpassDependency::default()
+                .src_subpass(vk::SUBPASS_EXTERNAL)
+                .dst_subpass(0)
+                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
+                .src_access_mask(vk::AccessFlags::empty())
+                .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
+                .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE);
+
+            let attachments = [color_attachment, depth_attachment];
+            let subpasses = [subpass];
+            let dependencies = [dependency];
+
+            let render_pass_info = vk::RenderPassCreateInfo::default()
+                .attachments(&attachments)
+                .subpasses(&subpasses)
+                .dependencies(&dependencies);
+
+            return unsafe { Ok(context.device.create_render_pass(&render_pass_info, None)?) };
+        }
+
+        // MSAA with depth
+        let msaa_color = vk::AttachmentDescription::default()
+            .format(color_format)
+            .samples(samples)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+
+        let resolve_color = vk::AttachmentDescription::default()
+            .format(color_format)
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .store_op(vk::AttachmentStoreOp::STORE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
+
+        let depth_attachment = vk::AttachmentDescription::default()
+            .format(depth_format)
+            .samples(samples)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+        let color_ref = vk::AttachmentReference::default()
+            .attachment(0)
+            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+
+        let resolve_ref = vk::AttachmentReference::default()
+            .attachment(1)
+            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+
+        let depth_ref = vk::AttachmentReference::default()
+            .attachment(2)
+            .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+        let color_attachments = [color_ref];
+        let resolve_attachments = [resolve_ref];
+        let subpass = vk::SubpassDescription::default()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attachments)
+            .resolve_attachments(&resolve_attachments)
+            .depth_stencil_attachment(&depth_ref);
+
+        let dependency = vk::SubpassDependency::default()
+            .src_subpass(vk::SUBPASS_EXTERNAL)
+            .dst_subpass(0)
+            .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
+            .src_access_mask(vk::AccessFlags::empty())
+            .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
+            .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE);
+
+        let attachments = [msaa_color, resolve_color, depth_attachment];
+        let subpasses = [subpass];
+        let dependencies = [dependency];
+
+        let render_pass_info = vk::RenderPassCreateInfo::default()
+            .attachments(&attachments)
+            .subpasses(&subpasses)
+            .dependencies(&dependencies);
+
+        unsafe { Ok(context.device.create_render_pass(&render_pass_info, None)?) }
+    }
+
+    /// Create framebuffers with depth support
+    fn create_framebuffers_with_depth(
+        context: &VulkanContext,
+        swapchain: &Swapchain,
+        render_pass: vk::RenderPass,
+        msaa_view: Option<vk::ImageView>,
+        depth_view: vk::ImageView,
+        samples: vk::SampleCountFlags,
+    ) -> Result<Vec<vk::Framebuffer>, Box<dyn Error>> {
+        if samples == vk::SampleCountFlags::TYPE_1 {
+            // No MSAA: [color, depth]
+            return swapchain.image_views
+                .iter()
+                .map(|&color_view| {
+                    let attachments = [color_view, depth_view];
+                    let framebuffer_info = vk::FramebufferCreateInfo::default()
+                        .render_pass(render_pass)
+                        .attachments(&attachments)
+                        .width(swapchain.extent.width)
+                        .height(swapchain.extent.height)
+                        .layers(1);
+                    unsafe { context.device.create_framebuffer(&framebuffer_info, None).map_err(|e| e.into()) }
+                })
+                .collect();
+        }
+
+        // MSAA: [msaa_color, resolve_color, depth]
+        let msaa_view = msaa_view.ok_or("MSAA view required for MSAA framebuffers")?;
+        
+        swapchain.image_views
+            .iter()
+            .map(|&resolve_view| {
+                let attachments = [msaa_view, resolve_view, depth_view];
+                let framebuffer_info = vk::FramebufferCreateInfo::default()
+                    .render_pass(render_pass)
+                    .attachments(&attachments)
+                    .width(swapchain.extent.width)
+                    .height(swapchain.extent.height)
+                    .layers(1);
+                unsafe { context.device.create_framebuffer(&framebuffer_info, None).map_err(|e| e.into()) }
+            })
+            .collect()
+    }
 }
 
 impl Drop for Reactor {
@@ -890,7 +1218,18 @@ impl Drop for Reactor {
             // Wait for all GPU operations to complete
             let _ = self.context.device.device_wait_idle();
             
-            // Destroy MSAA resources first (they depend on device)
+            // Destroy depth resources
+            if let Some(depth_view) = self.depth_image_view.take() {
+                self.context.device.destroy_image_view(depth_view, None);
+            }
+            if let Some(depth_image) = self.depth_image.take() {
+                self.context.device.destroy_image(depth_image, None);
+            }
+            if let Some(depth_memory) = self.depth_memory.take() {
+                self.context.device.free_memory(depth_memory, None);
+            }
+            
+            // Destroy MSAA resources
             if let Some(msaa_view) = self.msaa_image_view.take() {
                 self.context.device.destroy_image_view(msaa_view, None);
             }

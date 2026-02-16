@@ -1,5 +1,5 @@
 use ash::vk;
-use crate::core::context::VulkanContext;
+use crate::vulkan_context::VulkanContext;
 use std::error::Error;
 
 // ============================================================================

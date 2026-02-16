@@ -33,37 +33,95 @@ A (Vulkan/Ash) → B (Reactor) → C (Game)
 | **Utils** | GPUDetector, CPUDetector, ResolutionDetector, Time, FixedTimestep |
 | **🔥 ADead-GPU** | **ISR** (Intelligent Shading Rate), **SDF** (Signed Distance Functions), **Ray Marching**, **Anti-Aliasing**, **Hybrid Rendering** |
 
-## 🚀 Quick Start
+## 🚀 Quick Start — ONE CALL Pattern
 
 ### Requisitos
 - [Rust](https://rustup.rs/) (1.70+)
 - Vulkan SDK (1.3+)
 
-### Ejecutar Sandbox
+### Ejecutar Ejemplos
 ```bash
-cargo run --example sandbox
+cargo run --example simple_cube   # Cubo 3D rotando
+cargo run --example cube          # Demo completo con controles
+cargo run --example sandbox       # Sandbox experimental
 ```
 
-### Código de Ejemplo (Layer C)
+### 🎯 ReactorApp() — El Patrón Principal
+
+**REACTOR** usa un patrón "React-like" donde heredas, configuras y modificas desde UN solo archivo:
 
 ```rust
 use reactor::prelude::*;
-use winit::event_loop::EventLoop;
 
-fn main() {
-    let event_loop = EventLoop::new().unwrap();
-    // ... crear ventana ...
+struct MiJuego { rotacion: f32 }
+
+impl ReactorApp for MiJuego {
+    // ═══════════════════════════════════════════════════════════════
+    // CONFIG — Una sola función para configurar TODO
+    // ═══════════════════════════════════════════════════════════════
+    fn config(&self) -> ReactorConfig {
+        ReactorConfig::new("Mi Juego")
+            .with_size(1920, 1080)
+            .with_vsync(true)
+            .with_msaa(4)
+            .with_renderer(RendererMode::Forward)
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // INIT — Setup inicial (cámara, luces, objetos)
+    // ═══════════════════════════════════════════════════════════════
+    fn init(&mut self, ctx: &mut ReactorContext) {
+        ctx.camera.position = Vec3::new(0.0, 2.0, 4.0);
+        ctx.lighting.add_light(Light::directional(Vec3::NEG_Y, Vec3::ONE, 1.0));
+        // Agregar objetos a la escena...
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // UPDATE — Lógica de juego cada frame
+    // ═══════════════════════════════════════════════════════════════
+    fn update(&mut self, ctx: &mut ReactorContext) {
+        self.rotacion += ctx.time.delta();
+        ctx.scene.objects[0].transform = Mat4::from_rotation_y(self.rotacion);
+    }
     
-    // Una línea para inicializar TODO Vulkan
-    let reactor = Reactor::init(&window).expect("Failed to init Vulkan");
-    
-    // Crear recursos fácilmente
-    let mesh = reactor.create_mesh(&vertices, &indices)?;
-    let material = reactor.create_material(&vert_spv, &frag_spv)?;
-    
-    // Renderizar escena
-    reactor.draw_scene(&scene, &view_projection)?;
+    // render() es AUTOMÁTICO — no necesitas override
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// MAIN — UNA SOLA LÍNEA
+// ═══════════════════════════════════════════════════════════════════
+fn main() {
+    reactor::run(MiJuego { rotacion: 0.0 });
+}
+```
+
+### C++ Equivalente
+
+```cpp
+#include <reactor/reactor.hpp>
+
+class MiJuego : public reactor::Application {
+    float rotacion = 0.0f;
+
+    Config config() override {
+        return Config("Mi Juego")
+            .with_size(1920, 1080)
+            .with_vsync(true)
+            .with_msaa(4);
+    }
+
+    void on_init() override {
+        Camera::set_position({0, 2, 4});
+        Lighting::add_directional({0, -1, 0}, {1, 1, 1}, 1.0f);
+    }
+
+    void on_update(float dt) override {
+        rotacion += dt;
+        Scene::set_transform(0, Mat4::rotation_y(rotacion));
+    }
+};
+
+int main() { return MiJuego().run(); }
 ```
 
 ## 📁 Estructura del Proyecto

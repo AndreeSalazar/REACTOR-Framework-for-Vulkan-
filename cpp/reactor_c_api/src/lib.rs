@@ -34,6 +34,7 @@ use reactor::systems::lighting::LightingSystem;
 use reactor::systems::physics::PhysicsWorld;
 use reactor::systems::frustum::CullingSystem;
 use reactor::graphics::debug_renderer::DebugRenderer;
+use reactor::core::error::{ErrorCode, get_last_error_code, get_last_error_message, clear_last_error, has_error};
 
 use std::sync::Arc;
 
@@ -120,6 +121,10 @@ pub struct MeshHandle {
 
 pub struct MaterialHandle {
     pub(crate) material: reactor::material::Material,
+}
+
+pub struct TextureHandle {
+    pub(crate) texture: reactor::resources::texture::Texture,
 }
 
 pub struct CameraHandle {
@@ -221,6 +226,16 @@ impl Default for CLight {
     }
 }
 
+/// Renderer mode enum for C ABI
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub enum CRendererMode {
+    #[default]
+    Forward = 0,
+    Deferred = 1,
+    RayTracing = 2,
+}
+
 #[repr(C)]
 pub struct CConfig {
     pub title: *const c_char,
@@ -231,6 +246,8 @@ pub struct CConfig {
     pub fullscreen: bool,
     pub resizable: bool,
     pub physics_hz: u32,
+    pub renderer: CRendererMode,
+    pub scene: *const c_char,  // Path to auto-load scene (glTF, etc.)
 }
 
 impl Default for CConfig {
@@ -244,6 +261,8 @@ impl Default for CConfig {
             fullscreen: false,
             resizable: true,
             physics_hz: 60,
+            renderer: CRendererMode::Forward,
+            scene: std::ptr::null(),
         }
     }
 }
@@ -942,6 +961,68 @@ pub extern "C" fn reactor_destroy_material(material: *mut MaterialHandle) {
 }
 
 // =============================================================================
+// Texture API
+// =============================================================================
+
+/// Load a texture from file (PNG, JPG, BMP, etc.)
+/// Returns null if loading fails or if called outside of reactor context
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_load_texture(path: *const std::ffi::c_char) -> *mut TextureHandle {
+    if path.is_null() { return std::ptr::null_mut(); }
+    
+    let path_str = unsafe {
+        match std::ffi::CStr::from_ptr(path).to_str() {
+            Ok(s) => s,
+            Err(_) => return std::ptr::null_mut(),
+        }
+    };
+    
+    // Texture loading requires Vulkan context - placeholder for now
+    // Actual loading happens through ReactorContext in callbacks
+    let _ = path_str;
+    std::ptr::null_mut()
+}
+
+/// Load a texture from memory bytes
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_load_texture_bytes(data: *const u8, len: u32) -> *mut TextureHandle {
+    if data.is_null() || len == 0 { return std::ptr::null_mut(); }
+    
+    // Texture loading requires Vulkan context - placeholder
+    std::ptr::null_mut()
+}
+
+/// Create a solid color texture (1x1 pixel)
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_create_solid_texture(r: u8, g: u8, b: u8, a: u8) -> *mut TextureHandle {
+    let _ = (r, g, b, a);
+    // Texture creation requires Vulkan context - placeholder
+    std::ptr::null_mut()
+}
+
+/// Get texture width
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_texture_width(texture: *const TextureHandle) -> u32 {
+    if texture.is_null() { return 0; }
+    unsafe { (*texture).texture.width }
+}
+
+/// Get texture height
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_texture_height(texture: *const TextureHandle) -> u32 {
+    if texture.is_null() { return 0; }
+    unsafe { (*texture).texture.height }
+}
+
+/// Destroy a texture handle
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_destroy_texture(texture: *mut TextureHandle) {
+    if !texture.is_null() {
+        unsafe { drop(Box::from_raw(texture)); }
+    }
+}
+
+// =============================================================================
 // Lighting API
 // =============================================================================
 
@@ -1343,4 +1424,64 @@ pub extern "C" fn reactor_log_error(msg: *const c_char) {
     if msg.is_null() { return; }
     let s = unsafe { CStr::from_ptr(msg) }.to_string_lossy();
     eprintln!("[REACTOR ERROR] {}", s);
+}
+
+// =============================================================================
+// Error Handling API
+// =============================================================================
+
+/// Get the last error code (0 = no error)
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_get_last_error() -> u32 {
+    get_last_error_code() as u32
+}
+
+/// Get the last error message (returns null if no error)
+/// The returned string is valid until the next error occurs or clear_error is called
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_get_error_message() -> *const c_char {
+    static ERROR_MSG: Mutex<Option<std::ffi::CString>> = Mutex::new(None);
+    
+    if let Some(msg) = get_last_error_message() {
+        if let Ok(cstring) = std::ffi::CString::new(msg) {
+            let mut guard = ERROR_MSG.lock().unwrap();
+            *guard = Some(cstring);
+            return guard.as_ref().unwrap().as_ptr();
+        }
+    }
+    std::ptr::null()
+}
+
+/// Check if there's a pending error
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_has_error() -> bool {
+    has_error()
+}
+
+/// Clear the last error
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_clear_error() {
+    clear_last_error();
+}
+
+/// Get a human-readable description for an error code
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_error_description(code: u32) -> *const c_char {
+    use std::sync::LazyLock;
+    static DESCRIPTIONS: LazyLock<Mutex<HashMap<u32, std::ffi::CString>>> = 
+        LazyLock::new(|| Mutex::new(HashMap::new()));
+    
+    let error_code: ErrorCode = unsafe { std::mem::transmute(code) };
+    let desc = error_code.description();
+    
+    let mut guard = DESCRIPTIONS.lock().unwrap();
+    if !guard.contains_key(&code) {
+        if let Ok(cstring) = std::ffi::CString::new(desc) {
+            guard.insert(code, cstring);
+        }
+    }
+    
+    guard.get(&code)
+        .map(|s| s.as_ptr())
+        .unwrap_or(std::ptr::null())
 }

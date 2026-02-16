@@ -1,5 +1,5 @@
 use ash::vk;
-use crate::core::context::VulkanContext;
+use crate::vulkan_context::VulkanContext;
 use std::error::Error;
 
 pub struct Sampler {
@@ -38,7 +38,7 @@ impl Default for SamplerConfig {
             min_filter: FilterMode::Linear,
             mipmap_mode: FilterMode::Linear,
             address_mode: WrapMode::Repeat,
-            anisotropy: Some(16.0),
+            anisotropy: None, // Disabled by default - requires samplerAnisotropy feature
             max_lod: 12.0,
         }
     }

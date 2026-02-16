@@ -135,6 +135,97 @@ struct Log {
 };
 
 // =============================================================================
+// Error — Error handling system
+// =============================================================================
+
+/// Error codes matching Rust ErrorCode enum
+enum class ErrorCode : uint32_t {
+    None = 0,
+    
+    // Vulkan errors (100-199)
+    VulkanInstanceCreation = 100,
+    VulkanDeviceCreation = 101,
+    VulkanSurfaceCreation = 102,
+    VulkanSwapchainCreation = 103,
+    VulkanRenderPassCreation = 104,
+    VulkanPipelineCreation = 105,
+    VulkanBufferCreation = 106,
+    VulkanImageCreation = 107,
+    VulkanMemoryAllocation = 108,
+    VulkanCommandBuffer = 109,
+    VulkanSynchronization = 110,
+    VulkanShaderCompilation = 111,
+    VulkanDescriptorSet = 112,
+    VulkanValidation = 113,
+    
+    // Resource errors (200-299)
+    FileNotFound = 200,
+    InvalidFormat = 201,
+    TextureLoadFailed = 202,
+    ModelLoadFailed = 203,
+    ShaderLoadFailed = 204,
+    AssetNotFound = 205,
+    
+    // Window errors (300-399)
+    WindowCreation = 300,
+    EventLoopError = 301,
+    
+    // System errors (400-499)
+    OutOfMemory = 400,
+    InvalidParameter = 401,
+    NotInitialized = 402,
+    AlreadyInitialized = 403,
+    NotSupported = 404,
+    InternalError = 405,
+    
+    // Scene errors (500-599)
+    InvalidObjectIndex = 500,
+    InvalidMeshHandle = 501,
+    InvalidMaterialHandle = 502,
+    
+    Unknown = 999,
+};
+
+struct Error {
+    /// Get the last error code (None = no error)
+    static ErrorCode code() {
+        return static_cast<ErrorCode>(reactor_get_last_error());
+    }
+    
+    /// Get the last error message (nullptr if no error)
+    static const char* message() {
+        return reactor_get_error_message();
+    }
+    
+    /// Check if there's a pending error
+    static bool has_error() {
+        return reactor_has_error();
+    }
+    
+    /// Clear the last error
+    static void clear() {
+        reactor_clear_error();
+    }
+    
+    /// Get a human-readable description for an error code
+    static const char* description(ErrorCode code) {
+        return reactor_error_description(static_cast<uint32_t>(code));
+    }
+    
+    /// Check and log any pending error, returns true if there was an error
+    static bool check_and_log() {
+        if (has_error()) {
+            const char* msg = message();
+            if (msg) {
+                Log::error(msg);
+            }
+            return true;
+        }
+        return false;
+    }
+};
+
+// =============================================================================
 // Scene — Global scene management
 // =============================================================================
 
@@ -205,8 +296,108 @@ struct Lighting {
 };
 
 // =============================================================================
+// Texture — RAII wrapper for textures
+// =============================================================================
+
+class Texture {
+    void* handle_ = nullptr;
+    uint32_t width_ = 0;
+    uint32_t height_ = 0;
+
+public:
+    Texture() = default;
+    
+    /// Load from file (PNG, JPG, BMP, etc.)
+    explicit Texture(const std::string& path) {
+        handle_ = reactor_load_texture(path.c_str());
+        if (handle_) {
+            width_ = reactor_texture_width(handle_);
+            height_ = reactor_texture_height(handle_);
+        }
+    }
+
+    /// Load from memory
+    Texture(const uint8_t* data, uint32_t len) {
+        handle_ = reactor_load_texture_bytes(data, len);
+        if (handle_) {
+            width_ = reactor_texture_width(handle_);
+            height_ = reactor_texture_height(handle_);
+        }
+    }
+
+    /// Create solid color texture
+    static Texture solid(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255) {
+        Texture tex;
+        tex.handle_ = reactor_create_solid_texture(r, g, b, a);
+        if (tex.handle_) {
+            tex.width_ = 1;
+            tex.height_ = 1;
+        }
+        return tex;
+    }
+
+    /// Create white texture (default diffuse)
+    static Texture white() { return solid(255, 255, 255, 255); }
+
+    /// Create black texture
+    static Texture black() { return solid(0, 0, 0, 255); }
+
+    /// Create default normal map (flat surface)
+    static Texture default_normal() { return solid(128, 128, 255, 255); }
+
+    ~Texture() {
+        if (handle_) {
+            reactor_destroy_texture(handle_);
+        }
+    }
+
+    // Move semantics
+    Texture(Texture&& other) noexcept 
+        : handle_(other.handle_), width_(other.width_), height_(other.height_) {
+        other.handle_ = nullptr;
+        other.width_ = 0;
+        other.height_ = 0;
+    }
+
+    Texture& operator=(Texture&& other) noexcept {
+        if (this != &other) {
+            if (handle_) reactor_destroy_texture(handle_);
+            handle_ = other.handle_;
+            width_ = other.width_;
+            height_ = other.height_;
+            other.handle_ = nullptr;
+            other.width_ = 0;
+            other.height_ = 0;
+        }
+        return *this;
+    }
+
+    // No copy
+    Texture(const Texture&) = delete;
+    Texture& operator=(const Texture&) = delete;
+
+    /// Check if texture is valid
+    bool valid() const { return handle_ != nullptr; }
+    explicit operator bool() const { return valid(); }
+
+    /// Get dimensions
+    uint32_t width() const { return width_; }
+    uint32_t height() const { return height_; }
+
+    /// Get raw handle (for advanced use)
+    void* raw() const { return handle_; }
+};
+
+// =============================================================================
 // Config — Application configuration
 // =============================================================================
+
+/// Renderer mode for the engine
+enum class RendererMode {
+    Forward = 0,
+    Deferred = 1,
+    RayTracing = 2,
+};
 
 struct Config {
     std::string title = "REACTOR Application";
@@ -217,6 +408,8 @@ struct Config {
     bool fullscreen = false;
     bool resizable = true;
     uint32_t physics_hz = 60;
+    RendererMode renderer = RendererMode::Forward;
+    std::string scene = "";  // Path to auto-load scene (glTF, etc.)
 
     Config() = default;
     Config(const std::string& t) : title(t) {}
@@ -228,6 +421,24 @@ struct Config {
     Config& with_fullscreen(bool f) { fullscreen = f; return *this; }
     Config& with_resizable(bool r) { resizable = r; return *this; }
     Config& with_physics_hz(uint32_t hz) { physics_hz = hz; return *this; }
+    Config& with_renderer(RendererMode mode) { renderer = mode; return *this; }
+    Config& with_scene(const std::string& path) { scene = path; return *this; }
+    
+    /// Convert to C API config
+    CConfig to_c() const {
+        return CConfig{
+            title.c_str(),
+            width,
+            height,
+            vsync,
+            msaa_samples,
+            fullscreen,
+            resizable,
+            physics_hz,
+            static_cast<CRendererMode>(renderer),
+            scene.empty() ? nullptr : scene.c_str()
+        };
+    }
 };
 
 // =============================================================================
