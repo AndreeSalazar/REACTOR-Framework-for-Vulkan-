@@ -1,41 +1,40 @@
 // =============================================================================
-// physics_camera.rs — FPS Camera with Physics (Gravity + Collision)
+// obj_loader_demo.rs — OBJ Model Loading Demo
 // =============================================================================
-// Demonstrates CharacterController with gravity, jumping, and ground collision.
+// Demonstrates loading 3D models from OBJ files with physics and collisions.
 // =============================================================================
 
 use reactor::prelude::*;
 use reactor::Vertex;
 use reactor::resources::texture::Texture;
+use reactor::resources::model::ObjData;
 use reactor::systems::physics::{CharacterController, AABB};
 use std::sync::Arc;
 use winit::keyboard::KeyCode;
 use winit::event::MouseButton;
 
 // =============================================================================
-// COLLIDER — Simple AABB collider for objects
+// COLLIDER
 // =============================================================================
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct Collider {
     aabb: AABB,
-    is_static: bool,
 }
 
 impl Collider {
     fn new(center: Vec3, half_extents: Vec3) -> Self {
         Self {
             aabb: AABB::new(center - half_extents, center + half_extents),
-            is_static: true,
         }
     }
 }
 
 // =============================================================================
-// PHYSICS CAMERA DEMO
+// OBJ LOADER DEMO
 // =============================================================================
 
-struct PhysicsCameraDemo {
+struct ObjLoaderDemo {
     texture: Option<Texture>,
     controller: CharacterController,
     yaw: f32,
@@ -43,12 +42,13 @@ struct PhysicsCameraDemo {
     mouse_sensitivity: f32,
     mouse_captured: bool,
     colliders: Vec<Collider>,
+    obj_loaded: bool,
 }
 
-impl Default for PhysicsCameraDemo {
+impl Default for ObjLoaderDemo {
     fn default() -> Self {
         let mut controller = CharacterController::default();
-        controller.position = Vec3::new(0.0, 2.0, 5.0);
+        controller.position = Vec3::new(0.0, 2.0, 8.0);
         controller.move_speed = 5.0;
         controller.jump_force = 6.0;
         
@@ -60,20 +60,20 @@ impl Default for PhysicsCameraDemo {
             mouse_sensitivity: 0.003,
             mouse_captured: false,
             colliders: Vec::new(),
+            obj_loaded: false,
         }
     }
 }
 
-impl ReactorApp for PhysicsCameraDemo {
+impl ReactorApp for ObjLoaderDemo {
     fn config(&self) -> ReactorConfig {
-        ReactorConfig::new("🎮 Physics Camera Demo - REACTOR")
+        ReactorConfig::new("📦 OBJ Loader Demo - REACTOR")
             .with_size(1280, 720)
             .with_vsync(true)
             .with_msaa(4)
     }
 
     fn init(&mut self, ctx: &mut ReactorContext) {
-        // Camera initial setup
         ctx.camera.fov = 70.0;
 
         // Lighting
@@ -88,9 +88,7 @@ impl ReactorApp for PhysicsCameraDemo {
             .expect("Failed to load texture");
         println!("✅ Loaded texture: {}x{}", texture.width, texture.height);
 
-        // Create textured cube mesh
-        let mesh = Arc::new(ctx.create_mesh(&cube_vertices_uv(), &cube_indices()).unwrap());
-        
+        // Load shaders
         let vert = ash::util::read_spv(&mut std::io::Cursor::new(
             include_bytes!("../shaders/texture_vert.spv")
         )).unwrap();
@@ -104,23 +102,72 @@ impl ReactorApp for PhysicsCameraDemo {
         );
         self.texture = Some(texture);
 
-        // Add cubes at various positions with colliders
-        let cube_positions = [
-            Vec3::new(0.0, 0.5, 0.0),
-            Vec3::new(3.0, 0.5, 0.0),
-            Vec3::new(-3.0, 0.5, 0.0),
-            Vec3::new(0.0, 0.5, 3.0),
-            Vec3::new(0.0, 0.5, -3.0),
-        ];
-        
-        for pos in &cube_positions {
-            ctx.scene.add_object(mesh.clone(), material.clone(), Mat4::from_translation(*pos));
-            self.colliders.push(Collider::new(*pos, Vec3::splat(0.5)));
+        // Try to load OBJ model
+        match ObjData::load("assets/models/cube.obj") {
+            Ok(obj) => {
+                println!("✅ Loaded OBJ: {} vertices, {} triangles", 
+                    obj.vertex_count(), obj.triangle_count());
+                
+                // Create mesh from OBJ data
+                if let Ok(mesh) = ctx.create_mesh(&obj.vertices, &obj.indices) {
+                    let mesh = Arc::new(mesh);
+                    
+                    // Add multiple instances of the loaded model
+                    let positions = [
+                        Vec3::new(0.0, 0.5, 0.0),
+                        Vec3::new(3.0, 0.5, 0.0),
+                        Vec3::new(-3.0, 0.5, 0.0),
+                        Vec3::new(0.0, 0.5, 3.0),
+                        Vec3::new(0.0, 0.5, -3.0),
+                    ];
+                    
+                    for pos in &positions {
+                        ctx.scene.add_object(mesh.clone(), material.clone(), Mat4::from_translation(*pos));
+                        self.colliders.push(Collider::new(*pos, Vec3::splat(0.5)));
+                    }
+                    
+                    self.obj_loaded = true;
+                    println!("✅ Created {} objects from OBJ model", positions.len());
+                }
+            }
+            Err(e) => {
+                println!("⚠️ Could not load OBJ: {}", e);
+                println!("   Using procedural cubes instead...");
+                
+                // Fallback to procedural cubes
+                let mesh = Arc::new(ctx.create_mesh(&cube_vertices_uv(), &cube_indices()).unwrap());
+                
+                let positions = [
+                    Vec3::new(0.0, 0.5, 0.0),
+                    Vec3::new(3.0, 0.5, 0.0),
+                    Vec3::new(-3.0, 0.5, 0.0),
+                ];
+                
+                for pos in &positions {
+                    ctx.scene.add_object(mesh.clone(), material.clone(), Mat4::from_translation(*pos));
+                    self.colliders.push(Collider::new(*pos, Vec3::splat(0.5)));
+                }
+            }
         }
 
-        // Floor (large flat cube)
+        // Load pyramid if available
+        if let Ok(pyramid) = ObjData::load("assets/models/pyramid.obj") {
+            println!("✅ Loaded pyramid OBJ: {} vertices", pyramid.vertex_count());
+            if let Ok(mesh) = ctx.create_mesh(&pyramid.vertices, &pyramid.indices) {
+                let mesh = Arc::new(mesh);
+                ctx.scene.add_object(mesh.clone(), material.clone(), 
+                    Mat4::from_translation(Vec3::new(5.0, 0.0, 0.0)));
+                ctx.scene.add_object(mesh.clone(), material.clone(), 
+                    Mat4::from_translation(Vec3::new(-5.0, 0.0, 0.0)));
+                self.colliders.push(Collider::new(Vec3::new(5.0, 0.5, 0.0), Vec3::new(0.5, 0.5, 0.5)));
+                self.colliders.push(Collider::new(Vec3::new(-5.0, 0.5, 0.0), Vec3::new(0.5, 0.5, 0.5)));
+            }
+        }
+
+        // Floor
+        let floor_mesh = Arc::new(ctx.create_mesh(&cube_vertices_uv(), &cube_indices()).unwrap());
         ctx.scene.add_object(
-            mesh.clone(), 
+            floor_mesh.clone(), 
             material.clone(), 
             Mat4::from_scale_rotation_translation(
                 Vec3::new(20.0, 0.2, 20.0),
@@ -129,38 +176,15 @@ impl ReactorApp for PhysicsCameraDemo {
             )
         );
 
-        // Platforms with colliders
+        // Platforms
         let platforms = [
-            (Vec3::new(5.0, 1.0, 0.0), Vec3::new(1.0, 0.15, 1.0)),
-            (Vec3::new(7.0, 2.0, 0.0), Vec3::new(1.0, 0.15, 1.0)),
-            (Vec3::new(-5.0, 0.5, 3.0), Vec3::new(1.5, 0.15, 1.5)),
-            (Vec3::new(-5.0, 1.5, 0.0), Vec3::new(1.0, 0.15, 1.0)),
+            (Vec3::new(6.0, 1.0, 3.0), Vec3::new(1.5, 0.15, 1.5)),
+            (Vec3::new(-6.0, 1.5, -3.0), Vec3::new(1.0, 0.15, 1.0)),
         ];
         
         for (pos, half_ext) in &platforms {
             ctx.scene.add_object(
-                mesh.clone(), 
-                material.clone(), 
-                Mat4::from_scale_rotation_translation(
-                    *half_ext * 2.0,
-                    glam::Quat::IDENTITY,
-                    *pos,
-                )
-            );
-            self.colliders.push(Collider::new(*pos, *half_ext));
-        }
-        
-        // Walls
-        let walls = [
-            (Vec3::new(10.0, 1.0, 0.0), Vec3::new(0.2, 1.0, 5.0)),
-            (Vec3::new(-10.0, 1.0, 0.0), Vec3::new(0.2, 1.0, 5.0)),
-            (Vec3::new(0.0, 1.0, 10.0), Vec3::new(5.0, 1.0, 0.2)),
-            (Vec3::new(0.0, 1.0, -10.0), Vec3::new(5.0, 1.0, 0.2)),
-        ];
-        
-        for (pos, half_ext) in &walls {
-            ctx.scene.add_object(
-                mesh.clone(), 
+                floor_mesh.clone(), 
                 material.clone(), 
                 Mat4::from_scale_rotation_translation(
                     *half_ext * 2.0,
@@ -172,17 +196,18 @@ impl ReactorApp for PhysicsCameraDemo {
         }
 
         println!("╔══════════════════════════════════════════════════════════════╗");
-        println!("║              🎮 PHYSICS CAMERA DEMO                          ║");
+        println!("║              📦 OBJ LOADER DEMO                              ║");
         println!("╠══════════════════════════════════════════════════════════════╣");
         println!("║  Controls:                                                   ║");
         println!("║    Click     - Capture mouse                                 ║");
         println!("║    WASD      - Move                                          ║");
         println!("║    SPACE     - Jump                                          ║");
         println!("║    SHIFT     - Sprint                                        ║");
-        println!("║    Mouse     - Look around (when captured)                   ║");
+        println!("║    Mouse     - Look around                                   ║");
         println!("║    ESC       - Release mouse / Exit                          ║");
         println!("╠══════════════════════════════════════════════════════════════╣");
-        println!("║  Physics: Gravity, Collision, Jumping                        ║");
+        println!("║  OBJ Loaded: {}                                              ║", 
+            if self.obj_loaded { "YES ✅" } else { "NO ❌ " });
         println!("║  Colliders: {} objects                                       ║", self.colliders.len());
         println!("╚══════════════════════════════════════════════════════════════╝");
     }
@@ -251,19 +276,19 @@ impl ReactorApp for PhysicsCameraDemo {
             self.controller.move_speed = 5.0;
         }
 
-        // Update physics controller (ground at Y=0)
+        // Update physics controller
         self.controller.update(dt, move_input, space_down, 0.0);
 
-        // Check collisions with all colliders
+        // Check collisions
         for collider in &self.colliders {
             self.controller.collide_aabb(&collider.aabb);
         }
 
-        // Update camera position from controller
+        // Update camera
         ctx.camera.position = self.controller.eye_position();
         ctx.camera.set_rotation(self.yaw, self.pitch);
 
-        // Rotate cubes for visual interest
+        // Rotate some objects
         let time = ctx.time.elapsed();
         for (i, obj) in ctx.scene.objects.iter_mut().enumerate() {
             if i < 5 {
@@ -291,11 +316,11 @@ impl ReactorApp for PhysicsCameraDemo {
 // =============================================================================
 
 fn main() {
-    reactor::run(PhysicsCameraDemo::default());
+    reactor::run(ObjLoaderDemo::default());
 }
 
 // =============================================================================
-// CUBE DATA WITH UV COORDINATES
+// CUBE DATA (fallback)
 // =============================================================================
 
 fn cube_vertices_uv() -> [Vertex; 24] {

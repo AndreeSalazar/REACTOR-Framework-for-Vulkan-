@@ -36,7 +36,13 @@ Makefile
 *.pdb
 *.ilk
 *.exp
-*.obj
+
+# Compiled object files (not 3D models)
+*.o
+build/**/*.obj
+
+# Allow 3D model OBJ files in assets
+!assets/models/*.obj
 
 # Compiled shaders
 *.spv

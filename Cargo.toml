@@ -8,6 +8,7 @@ ash = "0.38.0"
 bytemuck = { version = "1.24.0", features = ["derive"] }
 env_logger = "0.11.8"
 glam = "0.30.9"
+gltf = "1.4"
 gpu-allocator = "0.28.0"
 image = "0.25"
 log = "0.4.29"
@@ -19,29 +20,17 @@ name = "cube"
 path = "examples/cube.rs"
 
 [[example]]
-name = "hello_reactor"
-path = "examples/hello_reactor.rs"
-
-[[example]]
 name = "sandbox"
 path = "examples/sandbox.rs"
-
-[[example]]
-name = "sandbox_elite"
-path = "examples/sandbox_elite.rs"
-
-[[example]]
-name = "simple_cube"
-path = "examples/simple_cube.rs"
 
 [[example]]
 name = "textured_cube"
 path = "examples/textured_cube.rs"
 
 [[example]]
-name = "free_camera_test"
-path = "examples/free_camera_test.rs"
-
-[[example]]
 name = "physics_camera"
 path = "examples/physics_camera.rs"
+
+[[example]]
+name = "obj_loader_demo"
+path = "examples/obj_loader_demo.rs"

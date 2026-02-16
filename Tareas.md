@@ -117,7 +117,7 @@ reactor.run("Mi Juego", width=1920, height=1080, scene="assets/level1.gltf")
 | # | Tarea | Estado | Archivo(s) | Descripción |
 |---|-------|--------|------------|-------------|
 | R9 | OBJ Loader | ✅ Completado | `resources/model.rs` | `ObjData::load()`, normals, UVs, triangulación |
-| R10 | glTF 2.0 | 🟢 Pendiente | `resources/model.rs` | Formato estándar, meshes + materials + texturas |
+| R10 | glTF 2.0 | ✅ Completado | `resources/model.rs` | `GltfData::load()`, meshes, normals, UVs |
 | R11 | Asset Manager | 🟢 Pendiente | `resources/asset_manager.rs` (nuevo) | Cache, deduplicación, async loading |
 
 #### **FASE 4: Sistemas de Juego — Rust = safe multithreading**

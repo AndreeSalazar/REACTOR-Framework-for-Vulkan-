@@ -7,6 +7,7 @@ use std::path::Path;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::error::Error;
+use gltf;
 
 // =============================================================================
 // OBJ Loader — Basic Wavefront OBJ file loader
@@ -241,4 +242,84 @@ impl ModelBatch {
     pub fn is_empty(&self) -> bool {
         self.models.is_empty()
     }
+}
+
+// =============================================================================
+// glTF 2.0 Loader — Standard 3D model format
+// =============================================================================
+
+#[derive(Default)]
+pub struct GltfData {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
+    pub name: String,
+}
+
+impl GltfData {
+    /// Load glTF/GLB file from path
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Vec<Self>, Box<dyn Error>> {
+        let (document, buffers, _images) = gltf::import(path.as_ref())?;
+        let mut meshes = Vec::new();
+        
+        for mesh in document.meshes() {
+            for primitive in mesh.primitives() {
+                let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
+                
+                let mut vertices = Vec::new();
+                let indices;
+                
+                // Read positions
+                let positions: Vec<[f32; 3]> = reader
+                    .read_positions()
+                    .map(|iter| iter.collect())
+                    .unwrap_or_default();
+                
+                // Read normals
+                let normals: Vec<[f32; 3]> = reader
+                    .read_normals()
+                    .map(|iter| iter.collect())
+                    .unwrap_or_else(|| vec![[0.0, 1.0, 0.0]; positions.len()]);
+                
+                // Read texture coordinates
+                let tex_coords: Vec<[f32; 2]> = reader
+                    .read_tex_coords(0)
+                    .map(|iter| iter.into_f32().collect())
+                    .unwrap_or_else(|| vec![[0.0, 0.0]; positions.len()]);
+                
+                // Build vertices
+                for i in 0..positions.len() {
+                    let pos = Vec3::from_array(positions[i]);
+                    let normal = Vec3::from_array(normals.get(i).copied().unwrap_or([0.0, 1.0, 0.0]));
+                    let uv = Vec2::from_array(tex_coords.get(i).copied().unwrap_or([0.0, 0.0]));
+                    vertices.push(Vertex::new(pos, normal, uv));
+                }
+                
+                // Read indices
+                if let Some(indices_reader) = reader.read_indices() {
+                    indices = indices_reader.into_u32().collect();
+                } else {
+                    // Generate indices if not present
+                    indices = (0..vertices.len() as u32).collect();
+                }
+                
+                meshes.push(GltfData {
+                    vertices,
+                    indices,
+                    name: mesh.name().unwrap_or("unnamed").to_string(),
+                });
+            }
+        }
+        
+        Ok(meshes)
+    }
+    
+    /// Load first mesh from glTF file
+    pub fn load_first<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn Error>> {
+        let meshes = Self::load(path)?;
+        meshes.into_iter().next().ok_or_else(|| "No meshes found in glTF file".into())
+    }
+    
+    pub fn vertex_count(&self) -> usize { self.vertices.len() }
+    pub fn index_count(&self) -> usize { self.indices.len() }
+    pub fn triangle_count(&self) -> usize { self.indices.len() / 3 }
 }
