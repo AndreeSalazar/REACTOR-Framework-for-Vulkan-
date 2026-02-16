@@ -1,0 +1,14 @@
+language = "C"
+header = "/* REACTOR Framework - Auto-generated C API header */"
+include_guard = "REACTOR_C_API_H"
+tab_width = 4
+style = "both"
+
+[export]
+include = ["CVec2", "CVec3", "CVec4", "CMat4", "CVertex", "CTransform", "CLight", "CConfig", "CCallbacks"]
+
+[defines]
+"target_os = windows" = "REACTOR_WINDOWS"
+
+[fn]
+rename_args = "None"

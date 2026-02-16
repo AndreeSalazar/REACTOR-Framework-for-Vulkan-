@@ -1,0 +1,13 @@
+[package]
+name = "reactor-c-api"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+reactor = { path = "../.." }
+glam = "0.30.9"
+winit = "0.30"
+env_logger = "0.11"

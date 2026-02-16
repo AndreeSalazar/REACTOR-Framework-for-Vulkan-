@@ -7,6 +7,9 @@
 //   C: High-level game API
 // =============================================================================
 
+// Application trait system
+pub mod app;
+
 // Legacy modules (for backwards compatibility)
 pub mod vulkan_context;
 pub mod reactor;
@@ -33,8 +36,16 @@ pub mod resources;
 pub mod systems;
 pub mod utils;
 
+// Platform abstraction
+pub mod platform;
+
 // ADead-GPU Integration (ISR, SDF, Ray Marching, AA)
 pub mod adead;
+
+// =============================================================================
+// App Trait System Re-exports
+// =============================================================================
+pub use app::{ReactorApp, ReactorContext, ReactorConfig, run};
 
 // =============================================================================
 // Legacy Re-exports (backwards compatibility)
@@ -198,6 +209,9 @@ pub use adead::adead_aa::{
 // Prelude - Import everything commonly needed
 // =============================================================================
 pub mod prelude {
+    // App Trait System
+    pub use crate::app::{ReactorApp, ReactorContext, ReactorConfig, run};
+
     // Core
     pub use crate::Reactor;
     
