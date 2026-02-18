@@ -16,7 +16,7 @@
 
 use egui::{Color32, Painter, Pos2, Rect, Sense, Stroke, Ui, Vec2};
 use glam::{Vec3, Vec4, Mat4};
-use crate::editor::core::editor_context::{EditorContext, EntityId, GizmoMode, MeshPrimitive, LightType};
+use crate::editor::core::editor_context::{EditorContext, EntityId, GizmoMode, MeshPrimitive};
 
 // ─── Cube geometry ───────────────────────────────────────────────────────────
 const CUBE_VERTS: [Vec3; 8] = [
