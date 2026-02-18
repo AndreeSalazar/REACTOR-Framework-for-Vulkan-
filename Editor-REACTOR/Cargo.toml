@@ -1,0 +1,16 @@
+[package]
+name = "reactor-editor"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "reactor-editor"
+path = "src/main.rs"
+
+[dependencies]
+eframe = "0.30"
+egui = "0.30"
+egui_dock = "0.15"
+glam = "0.30"
+log = "0.4"
+env_logger = "0.11"
