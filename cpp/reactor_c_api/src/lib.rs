@@ -382,16 +382,25 @@ pub extern "C" fn reactor_shutdown() -> ReactorResult {
         return ReactorResult::ErrorNotInitialized;
     }
     
-    // Clean up state
+    // Clean up state - IMPORTANT: Clear scene objects BEFORE destroying Vulkan resources
     {
         let mut state = REACTOR_STATE.lock().unwrap();
         if let Some(ref mut s) = *state {
+            // 1. Wait for GPU to finish all operations
             if let Some(ref reactor) = s.reactor {
                 unsafe {
                     let _ = reactor.context.device.device_wait_idle();
                 }
             }
+            
+            // 2. Clear scene objects (releases Arc<Mesh> and Arc<Material>)
+            s.scene.objects.clear();
+            
+            // 3. Clear lighting
+            s.lighting.lights.clear();
         }
+        
+        // 4. Drop the entire state (Reactor, Window, etc.)
         *state = None;
     }
     
@@ -619,11 +628,18 @@ impl ApplicationHandler for AppRunner {
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
         let mut state = REACTOR_STATE.lock().unwrap();
         if let Some(s) = state.as_mut() {
+            // 1. Wait for GPU to finish all operations
             if let Some(ref reactor) = s.reactor {
                 unsafe {
                     let _ = reactor.context.device.device_wait_idle();
                 }
             }
+            
+            // 2. Clear scene objects BEFORE Reactor is dropped (releases VkBuffer/VkPipeline)
+            s.scene.objects.clear();
+            
+            // 3. Clear lighting
+            s.lighting.lights.clear();
         }
     }
 }

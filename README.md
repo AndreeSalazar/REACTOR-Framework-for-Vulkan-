@@ -541,12 +541,27 @@ cmake --build build --config Release
 
 ### v1.0.5 (Actual)
 
+**Arquitectura Profesional:**
+- **ReactorResult enum** - Error handling ABI-safe (sin excepciones cruzando FFI)
+- **Handles opacos** - `MeshHandle*`, `MaterialHandle*`, `SceneHandle*` (C++ nunca dereferencia)
+- **Ownership claro** - Rust crea → Rust destruye (memory safety garantizado)
+- **Lifecycle formal** - `reactor_initialize()` → `reactor_run()` → `reactor_shutdown()`
+- **Frame lifecycle** - `reactor_begin_frame()` / `reactor_end_frame()` para control manual
+
+**Features:**
 - **C ABI completo** - Todas las funciones expuestas para C/C++
 - **C++ SDK** - Wrappers RAII para uso idiomatico
-- **Shaders embebidos** - Materiales funcionan sin archivos externos
+- **Shaders SPIR-V embebidos** - Materiales funcionan sin archivos externos
 - **Ray Tracing automatico** - Detecta y usa RTX si disponible
 - **MSAA 4x** - Anti-aliasing por defecto
-- **Documentacion** - Guias completas para Rust y C++
+- **3000+ FPS** - Rendimiento excepcional en RTX 3060
+- **Shutdown limpio** - Sin Vulkan validation errors
+
+**Documentacion:**
+- [Arquitectura](docs/architecture.md) - Diagrama de sistema y reglas ABI
+- [Manual General](docs/manual.md) - Uso rapido
+- [Guia Rust](docs/rust-guide.md) - Desarrollo con Rust
+- [Guia C++](docs/cpp-guide.md) - Desarrollo con C++
 
 ### v0.4.x
 

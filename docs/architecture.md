@@ -4,7 +4,7 @@
 
 ```
 +------------------------------------------------------------------+
-|                        C++ Game / App                             |
+|                        C++ Game / App                            |
 |  main_basic.cpp / main_class.cpp / your_game.cpp                 |
 +------------------------------------------------------------------+
         |                    |                    |
@@ -12,15 +12,15 @@
         | reactor_begin_frame| reactor_end_frame  |
         v                    v                    v
 +------------------------------------------------------------------+
-|                    C++ SDK (reactor.hpp)                          |
+|                    C++ SDK (reactor.hpp)                         |
 |  reactor::Application, GPU, Mesh, Material, Scene, Lighting      |
 +------------------------------------------------------------------+
         |
         | #include <reactor/core.hpp>
         v
 +------------------------------------------------------------------+
-|              Stable C ABI Contract (core.hpp)                     |
-|                                                                   |
+|              Stable C ABI Contract (core.hpp)                    |
+|                                                                  |
 |  Opaque Handles:  MeshHandle*, MaterialHandle*, SceneHandle*     |
 |  Error Model:     ReactorResult enum (no exceptions)             |
 |  Ownership:       Rust creates -> Rust destroys                  |
@@ -32,8 +32,8 @@
         | reactor_c_api.dll / .so
         v
 +------------------------------------------------------------------+
-|                   Rust Core (lib.rs)                              |
-|                                                                   |
+|                   Rust Core (lib.rs)                             |
+|                                                                  |
 |  ReactorState (global singleton, Mutex-protected)                |
 |  - Reactor (Vulkan context)                                      |
 |  - Scene, Camera, Lighting, Physics, Culling                     |
@@ -45,20 +45,20 @@
         | Reactor::init(), draw_scene(), handle_event()
         v
 +------------------------------------------------------------------+
-|                  Vulkan 1.3 Backend                               |
-|                                                                   |
+|                  Vulkan 1.3 Backend                              |
+|                                                                  |
 |  VulkanContext  — Instance, Device, Queues                       |
 |  Swapchain     — Triple buffering                                |
-|  RenderPass    — MSAA 4x + Depth (D32_SFLOAT)                   |
+|  RenderPass    — MSAA 4x + Depth (D32_SFLOAT)                    |
 |  Pipeline      — Vertex + Fragment shaders                       |
-|  Ray Tracing   — Auto-detected (VK_KHR_ray_tracing_pipeline)    |
+|  Ray Tracing   — Auto-detected (VK_KHR_ray_tracing_pipeline)     |
 |  Memory        — VMA (Vulkan Memory Allocator)                   |
 +------------------------------------------------------------------+
         |
         v
 +------------------------------------------------------------------+
-|                     GPU Hardware                                  |
-|  NVIDIA RTX 3060 12GB — 3000+ FPS @ 1280x720                    |
+|                     GPU Hardware                                 |
+|  NVIDIA RTX 3060 12GB — 3000+ FPS @ 1280x720                     |
 +------------------------------------------------------------------+
 ```
 
