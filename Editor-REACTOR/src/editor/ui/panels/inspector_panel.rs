@@ -18,7 +18,7 @@ impl InspectorPanel {
         });
         ui.separator();
 
-        let selected_id = match ctx.selected_entity {
+        let selected_id = match ctx.selected {
             Some(id) => id,
             None => {
                 ui.add_space(8.0);
@@ -47,10 +47,7 @@ impl InspectorPanel {
             .show(ui, |ui| {
                 // ── Entity Header ──────────────────────────────────────────
                 ui.horizontal(|ui| {
-                    let icon = if entity.camera.is_some() { "🎥" }
-                        else if entity.light.is_some() { "💡" }
-                        else if entity.mesh.is_some() { "📦" }
-                        else { "⬜" };
+                    let icon = entity.icon();
                     ui.label(RichText::new(icon).size(20.0));
                     ui.vertical(|ui| {
                         // Editable name
@@ -116,8 +113,9 @@ impl InspectorPanel {
                             if let Some(e) = ctx.scene.get_mut(selected_id) {
                                 if e.mesh.is_none() {
                                     e.mesh = Some(crate::editor::core::editor_context::MeshComponent {
-                                        mesh_path: "assets/models/cube.obj".to_string(),
-                                        material_path: "assets/materials/default.mat".to_string(),
+                                        mesh_path: "primitives://cube".to_string(),
+                                        material_path: "default".to_string(),
+                                        primitive: crate::editor::core::editor_context::MeshPrimitive::Cube,
                                     });
                                 }
                             }
@@ -130,6 +128,8 @@ impl InspectorPanel {
                                         light_type: LightType::Point,
                                         color: glam::Vec3::ONE,
                                         intensity: 1.0,
+                                        range: 10.0,
+                                        spot_angle: 45.0,
                                     });
                                 }
                             }
@@ -175,7 +175,7 @@ impl InspectorPanel {
 
                         // Rotation (Euler degrees)
                         ui.label(RichText::new("Rotation").color(Color32::from_rgb(180, 180, 180)));
-                        let (mut yaw, mut pitch, mut roll) = entity.transform.rotation.to_euler(glam::EulerRot::YXZ);
+                        let (yaw, pitch, roll) = entity.transform.rotation.to_euler(glam::EulerRot::YXZ);
                         let mut yaw_deg = yaw.to_degrees();
                         let mut pitch_deg = pitch.to_degrees();
                         let mut roll_deg = roll.to_degrees();

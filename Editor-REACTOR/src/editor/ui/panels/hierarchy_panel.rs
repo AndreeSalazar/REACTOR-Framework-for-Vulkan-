@@ -2,7 +2,7 @@
 // HierarchyPanel — Scene entity tree (like Unreal's Outliner)
 // =============================================================================
 
-use egui::{Color32, RichText, Ui, Vec2};
+use egui::{Color32, RichText, Ui};
 use crate::editor::core::editor_context::{EditorContext, EntityId};
 
 pub struct HierarchyPanel {
@@ -66,7 +66,7 @@ impl HierarchyPanel {
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
-                let root_ids: Vec<EntityId> = ctx.scene.root_entities().to_vec();
+                let root_ids: Vec<EntityId> = ctx.scene.root_entities.to_vec();
 
                 for id in root_ids {
                     self.draw_entity_row(ui, ctx, id, 0);
@@ -83,17 +83,14 @@ impl HierarchyPanel {
             });
 
         // Context menu for selected entity
-        if let Some(selected) = ctx.selected_entity {
+        if ctx.selected.is_some() {
             ui.separator();
             ui.horizontal(|ui| {
                 if ui.small_button("🗑 Delete").clicked() {
                     ctx.delete_selected();
                 }
                 if ui.small_button("📋 Duplicate").clicked() {
-                    if let Some(e) = ctx.scene.get(selected) {
-                        let name = format!("{} (Copy)", e.name.clone());
-                        ctx.spawn_entity(name);
-                    }
+                    ctx.duplicate_selected();
                 }
             });
         }
@@ -112,7 +109,7 @@ impl HierarchyPanel {
             }
         }
 
-        let is_selected = ctx.selected_entity == Some(id);
+        let is_selected = ctx.selected == Some(id);
         let indent = depth as f32 * 16.0;
 
         ui.horizontal(|ui| {
@@ -127,7 +124,7 @@ impl HierarchyPanel {
             }
 
             // Entity type icon
-            let icon = entity_icon(&entity);
+            let icon = entity.icon();
 
             // Rename mode
             if self.rename_target == Some(id) {
@@ -184,7 +181,7 @@ impl HierarchyPanel {
                     ui.separator();
                     if ui.button("🗑 Delete").clicked() {
                         ctx.scene.remove(id);
-                        if ctx.selected_entity == Some(id) {
+                        if ctx.selected == Some(id) {
                             ctx.select(None);
                         }
                         ui.close_menu();
@@ -199,11 +196,4 @@ impl HierarchyPanel {
             self.draw_entity_row(ui, ctx, child_id, depth + 1);
         }
     }
-}
-
-fn entity_icon(entity: &crate::editor::core::editor_context::EditorEntity) -> &'static str {
-    if entity.camera.is_some() { return "🎥"; }
-    if entity.light.is_some() { return "💡"; }
-    if entity.mesh.is_some() { return "📦"; }
-    "⬜"
 }

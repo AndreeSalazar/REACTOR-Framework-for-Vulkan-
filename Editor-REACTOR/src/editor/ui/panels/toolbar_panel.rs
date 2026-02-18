@@ -3,7 +3,7 @@
 // =============================================================================
 
 use egui::{Color32, RichText, Ui};
-use crate::editor::core::editor_context::{EditorContext, EditorMode};
+use crate::editor::core::editor_context::{EditorContext, GizmoMode};
 
 pub struct ToolbarPanel;
 
@@ -40,7 +40,7 @@ impl ToolbarPanel {
             ui.separator();
 
             // ── Transform mode buttons ────────────────────────────────────
-            let mode_btn = |ui: &mut Ui, label: &str, tooltip: &str, mode: EditorMode, current: &EditorMode| -> bool {
+            let mode_btn = |ui: &mut Ui, label: &str, tooltip: &str, mode: GizmoMode, current: &GizmoMode| -> bool {
                 let active = current == &mode;
                 let text = if active {
                     RichText::new(label).color(Color32::from_rgb(255, 200, 60)).strong()
@@ -50,17 +50,17 @@ impl ToolbarPanel {
                 ui.selectable_label(active, text).on_hover_text(tooltip).clicked()
             };
 
-            if mode_btn(ui, "↖ Select [Q]", "Select mode", EditorMode::Select, &ctx.editor_mode) {
-                ctx.editor_mode = EditorMode::Select;
+            if mode_btn(ui, "↖ Select [Q]", "Select mode", GizmoMode::Select, &ctx.gizmo_mode) {
+                ctx.gizmo_mode = GizmoMode::Select;
             }
-            if mode_btn(ui, "↔ Move [W]", "Translate mode", EditorMode::Translate, &ctx.editor_mode) {
-                ctx.editor_mode = EditorMode::Translate;
+            if mode_btn(ui, "↔ Move [W]", "Translate mode", GizmoMode::Translate, &ctx.gizmo_mode) {
+                ctx.gizmo_mode = GizmoMode::Translate;
             }
-            if mode_btn(ui, "↻ Rotate [E]", "Rotate mode", EditorMode::Rotate, &ctx.editor_mode) {
-                ctx.editor_mode = EditorMode::Rotate;
+            if mode_btn(ui, "↻ Rotate [E]", "Rotate mode", GizmoMode::Rotate, &ctx.gizmo_mode) {
+                ctx.gizmo_mode = GizmoMode::Rotate;
             }
-            if mode_btn(ui, "⤢ Scale [R]", "Scale mode", EditorMode::Scale, &ctx.editor_mode) {
-                ctx.editor_mode = EditorMode::Scale;
+            if mode_btn(ui, "⤢ Scale [R]", "Scale mode", GizmoMode::Scale, &ctx.gizmo_mode) {
+                ctx.gizmo_mode = GizmoMode::Scale;
             }
 
             ui.separator();
@@ -73,42 +73,29 @@ impl ToolbarPanel {
                 }
                 ui.separator();
                 if ui.button("🟫  Cube").clicked() {
-                    let id = ctx.spawn_entity("Cube");
-                    if let Some(e) = ctx.scene.get_mut(id) {
-                        e.mesh = Some(crate::editor::core::editor_context::MeshComponent {
-                            mesh_path: "assets/models/cube.obj".to_string(),
-                            material_path: "assets/materials/default.mat".to_string(),
-                        });
-                    }
+                    ctx.spawn_cube();
                     ui.close_menu();
                 }
+                if ui.button("🔵  Sphere").clicked() {
+                    ctx.spawn_sphere();
+                    ui.close_menu();
+                }
+                ui.separator();
                 if ui.button("💡  Directional Light").clicked() {
-                    let id = ctx.spawn_entity("Directional Light");
-                    if let Some(e) = ctx.scene.get_mut(id) {
-                        e.light = Some(crate::editor::core::editor_context::LightComponent {
-                            light_type: crate::editor::core::editor_context::LightType::Directional,
-                            color: glam::Vec3::new(1.0, 0.98, 0.95),
-                            intensity: 1.0,
-                        });
-                    }
+                    ctx.spawn_light(crate::editor::core::editor_context::LightType::Directional);
                     ui.close_menu();
                 }
                 if ui.button("💡  Point Light").clicked() {
-                    let id = ctx.spawn_entity("Point Light");
-                    if let Some(e) = ctx.scene.get_mut(id) {
-                        e.light = Some(crate::editor::core::editor_context::LightComponent {
-                            light_type: crate::editor::core::editor_context::LightType::Point,
-                            color: glam::Vec3::ONE,
-                            intensity: 1.0,
-                        });
-                    }
+                    ctx.spawn_light(crate::editor::core::editor_context::LightType::Point);
                     ui.close_menu();
                 }
+                if ui.button("💡  Spot Light").clicked() {
+                    ctx.spawn_light(crate::editor::core::editor_context::LightType::Spot);
+                    ui.close_menu();
+                }
+                ui.separator();
                 if ui.button("🎥  Camera").clicked() {
-                    let id = ctx.spawn_entity("Camera");
-                    if let Some(e) = ctx.scene.get_mut(id) {
-                        e.camera = Some(crate::editor::core::editor_context::CameraComponent::default());
-                    }
+                    ctx.spawn_camera();
                     ui.close_menu();
                 }
             });

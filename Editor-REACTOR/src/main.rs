@@ -187,16 +187,16 @@ impl ReactorEditor {
         ctx.input(|i| {
             // Transform mode shortcuts
             if i.key_pressed(egui::Key::Q) {
-                self.editor_ctx.editor_mode = editor::core::editor_context::EditorMode::Select;
+                self.editor_ctx.gizmo_mode = editor::core::editor_context::GizmoMode::Select;
             }
             if i.key_pressed(egui::Key::W) {
-                self.editor_ctx.editor_mode = editor::core::editor_context::EditorMode::Translate;
+                self.editor_ctx.gizmo_mode = editor::core::editor_context::GizmoMode::Translate;
             }
             if i.key_pressed(egui::Key::E) {
-                self.editor_ctx.editor_mode = editor::core::editor_context::EditorMode::Rotate;
+                self.editor_ctx.gizmo_mode = editor::core::editor_context::GizmoMode::Rotate;
             }
             if i.key_pressed(egui::Key::R) {
-                self.editor_ctx.editor_mode = editor::core::editor_context::EditorMode::Scale;
+                self.editor_ctx.gizmo_mode = editor::core::editor_context::GizmoMode::Scale;
             }
 
             // Undo / Redo
@@ -219,11 +219,13 @@ impl ReactorEditor {
         });
 
         // Undo/Redo (needs mutable borrow)
-        let (do_undo, do_redo, do_delete, do_play) = ctx.input(|i| (
+        let (do_undo, do_redo, do_delete, do_play, do_duplicate, do_focus) = ctx.input(|i| (
             i.modifiers.ctrl && i.key_pressed(egui::Key::Z),
             i.modifiers.ctrl && i.key_pressed(egui::Key::Y),
             i.key_pressed(egui::Key::Delete),
             i.key_pressed(egui::Key::F5),
+            i.modifiers.ctrl && i.key_pressed(egui::Key::D),
+            i.key_pressed(egui::Key::F),
         ));
 
         if do_undo {
@@ -242,6 +244,12 @@ impl ReactorEditor {
             } else {
                 self.editor_ctx.log_info("Play mode stopped (F5).");
             }
+        }
+        if do_duplicate {
+            self.editor_ctx.duplicate_selected();
+        }
+        if do_focus {
+            self.editor_ctx.focus_selected();
         }
     }
 

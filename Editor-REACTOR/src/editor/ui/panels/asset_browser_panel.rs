@@ -115,9 +115,8 @@ impl AssetBrowserPanel {
             // Double-click to start drag
             if response.double_clicked() {
                 ctx.drag_payload = Some(DragPayload {
-                    asset_path: asset.path.clone(),
-                    asset_type: asset.asset_type.clone(),
                     asset_name: asset.name.clone(),
+                    asset_type: asset.asset_type.clone(),
                 });
                 ctx.log_info(format!("Dragging asset: {}", asset.name));
             }
@@ -188,9 +187,8 @@ impl AssetBrowserPanel {
 
                     if response.double_clicked() {
                         ctx.drag_payload = Some(DragPayload {
-                            asset_path: asset.path.clone(),
-                            asset_type: asset.asset_type.clone(),
                             asset_name: asset.name.clone(),
+                            asset_type: asset.asset_type.clone(),
                         });
                         ctx.log_info(format!("Dragging asset: {}", asset.name));
                     }
