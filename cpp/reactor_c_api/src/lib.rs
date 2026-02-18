@@ -13,6 +13,7 @@
 use std::os::raw::c_char;
 use std::ffi::CStr;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::HashMap;
 
 use winit::{
@@ -45,6 +46,7 @@ use std::sync::Arc;
 // =============================================================================
 
 static REACTOR_STATE: Mutex<Option<ReactorState>> = Mutex::new(None);
+static REACTOR_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 struct ReactorState {
     reactor: Option<Reactor>,
@@ -58,6 +60,7 @@ struct ReactorState {
     debug: DebugRenderer,
     running: bool,
     should_close: bool,
+    frame_active: bool,
     width: u32,
     height: u32,
     title: String,
@@ -88,6 +91,7 @@ impl Default for ReactorState {
             debug: DebugRenderer::new(),
             running: false,
             should_close: false,
+            frame_active: false,
             width: 1280,
             height: 720,
             title: String::from("REACTOR Application"),
@@ -304,9 +308,112 @@ impl Default for CCallbacks {
 // Version & Info
 // =============================================================================
 
+// =============================================================================
+// ReactorResult — ABI-safe error codes (never panic across FFI boundary)
+// =============================================================================
+
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ReactorResult {
+    Ok = 0,
+    ErrorNotInitialized = 1,
+    ErrorAlreadyInitialized = 2,
+    ErrorVulkanInit = 3,
+    ErrorWindowCreation = 4,
+    ErrorShaderCompilation = 5,
+    ErrorMeshCreation = 6,
+    ErrorMaterialCreation = 7,
+    ErrorInvalidHandle = 8,
+    ErrorOutOfMemory = 9,
+    ErrorInvalidArgument = 10,
+    ErrorFrameNotActive = 11,
+    ErrorFrameAlreadyActive = 12,
+    ErrorUnknown = 255,
+}
+
+/// Get human-readable string for a ReactorResult
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_result_string(result: ReactorResult) -> *const c_char {
+    match result {
+        ReactorResult::Ok => c"REACTOR_OK".as_ptr(),
+        ReactorResult::ErrorNotInitialized => c"REACTOR_ERROR_NOT_INITIALIZED".as_ptr(),
+        ReactorResult::ErrorAlreadyInitialized => c"REACTOR_ERROR_ALREADY_INITIALIZED".as_ptr(),
+        ReactorResult::ErrorVulkanInit => c"REACTOR_ERROR_VULKAN_INIT".as_ptr(),
+        ReactorResult::ErrorWindowCreation => c"REACTOR_ERROR_WINDOW_CREATION".as_ptr(),
+        ReactorResult::ErrorShaderCompilation => c"REACTOR_ERROR_SHADER_COMPILATION".as_ptr(),
+        ReactorResult::ErrorMeshCreation => c"REACTOR_ERROR_MESH_CREATION".as_ptr(),
+        ReactorResult::ErrorMaterialCreation => c"REACTOR_ERROR_MATERIAL_CREATION".as_ptr(),
+        ReactorResult::ErrorInvalidHandle => c"REACTOR_ERROR_INVALID_HANDLE".as_ptr(),
+        ReactorResult::ErrorOutOfMemory => c"REACTOR_ERROR_OUT_OF_MEMORY".as_ptr(),
+        ReactorResult::ErrorInvalidArgument => c"REACTOR_ERROR_INVALID_ARGUMENT".as_ptr(),
+        ReactorResult::ErrorFrameNotActive => c"REACTOR_ERROR_FRAME_NOT_ACTIVE".as_ptr(),
+        ReactorResult::ErrorFrameAlreadyActive => c"REACTOR_ERROR_FRAME_ALREADY_ACTIVE".as_ptr(),
+        ReactorResult::ErrorUnknown => c"REACTOR_ERROR_UNKNOWN".as_ptr(),
+    }
+}
+
+// =============================================================================
+// Global Initialization / Shutdown (Formal Lifecycle)
+// =============================================================================
+
+/// Initialize REACTOR subsystems. Must be called before any other reactor_ function.
+/// Returns REACTOR_OK on success.
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_initialize() -> ReactorResult {
+    if REACTOR_INITIALIZED.load(Ordering::SeqCst) {
+        return ReactorResult::ErrorAlreadyInitialized;
+    }
+    
+    // Initialize global state
+    {
+        let mut state = REACTOR_STATE.lock().unwrap();
+        *state = Some(ReactorState::default());
+    }
+    
+    REACTOR_INITIALIZED.store(true, Ordering::SeqCst);
+    ReactorResult::Ok
+}
+
+/// Shutdown REACTOR and release all resources.
+/// After this call, no reactor_ functions should be used until reactor_initialize() is called again.
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_shutdown() -> ReactorResult {
+    if !REACTOR_INITIALIZED.load(Ordering::SeqCst) {
+        return ReactorResult::ErrorNotInitialized;
+    }
+    
+    // Clean up state
+    {
+        let mut state = REACTOR_STATE.lock().unwrap();
+        if let Some(ref mut s) = *state {
+            if let Some(ref reactor) = s.reactor {
+                unsafe {
+                    let _ = reactor.context.device.device_wait_idle();
+                }
+            }
+        }
+        *state = None;
+    }
+    
+    // Clean up callbacks
+    {
+        let mut cb = CALLBACKS.lock().unwrap();
+        *cb = CCallbacks::default();
+    }
+    
+    REACTOR_INITIALIZED.store(false, Ordering::SeqCst);
+    ReactorResult::Ok
+}
+
+/// Check if REACTOR is initialized
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_is_initialized() -> bool {
+    REACTOR_INITIALIZED.load(Ordering::SeqCst)
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn reactor_version() -> *const c_char {
-    c"REACTOR v0.4.1".as_ptr()
+    c"REACTOR v1.0.5".as_ptr()
 }
 
 #[unsafe(no_mangle)]
@@ -315,13 +422,13 @@ pub extern "C" fn reactor_engine_name() -> *const c_char {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn reactor_get_version_major() -> u32 { 0 }
+pub extern "C" fn reactor_get_version_major() -> u32 { 1 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn reactor_get_version_minor() -> u32 { 4 }
+pub extern "C" fn reactor_get_version_minor() -> u32 { 0 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn reactor_get_version_patch() -> u32 { 1 }
+pub extern "C" fn reactor_get_version_patch() -> u32 { 5 }
 
 // =============================================================================
 // CORE API — The ONE CALL entry point
@@ -586,6 +693,68 @@ pub extern "C" fn reactor_run_simple(
         on_resize: None,
     };
     reactor_run(config, callbacks)
+}
+
+// =============================================================================
+// Frame Lifecycle — Command submission boundary
+// =============================================================================
+
+/// Begin a new frame. Must be called before any per-frame operations.
+/// Pairs with reactor_end_frame(). Returns REACTOR_OK on success.
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_begin_frame() -> ReactorResult {
+    let mut state = REACTOR_STATE.lock().unwrap();
+    let Some(s) = state.as_mut() else {
+        return ReactorResult::ErrorNotInitialized;
+    };
+    if s.frame_active {
+        return ReactorResult::ErrorFrameAlreadyActive;
+    }
+    
+    // Update time
+    s.time.update();
+    s.delta_time = s.time.delta();
+    s.total_time += s.delta_time;
+    s.frame_count += 1;
+    
+    // Clear per-frame input
+    s.keys_pressed.clear();
+    s.mouse_dx = 0.0;
+    s.mouse_dy = 0.0;
+    
+    s.frame_active = true;
+    ReactorResult::Ok
+}
+
+/// End the current frame. Submits rendering commands to the GPU.
+/// Must be called after reactor_begin_frame().
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_end_frame() -> ReactorResult {
+    let mut state = REACTOR_STATE.lock().unwrap();
+    let Some(s) = state.as_mut() else {
+        return ReactorResult::ErrorNotInitialized;
+    };
+    if !s.frame_active {
+        return ReactorResult::ErrorFrameNotActive;
+    }
+    
+    // Render the scene
+    let view_proj = s.camera.view_projection_matrix();
+    if let Some(ref mut reactor) = s.reactor {
+        let _ = reactor.draw_scene(&s.scene, &view_proj);
+    }
+    
+    s.frame_active = false;
+    ReactorResult::Ok
+}
+
+/// Check if a frame is currently active (between begin_frame/end_frame)
+#[unsafe(no_mangle)]
+pub extern "C" fn reactor_is_frame_active() -> bool {
+    REACTOR_STATE.lock().unwrap()
+        .as_ref()
+        .map(|s| s.frame_active)
+        .unwrap_or(false)
 }
 
 // =============================================================================

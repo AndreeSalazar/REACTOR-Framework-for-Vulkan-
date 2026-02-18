@@ -1,19 +1,63 @@
 // =============================================================================
 // REACTOR C++ SDK — Core C API Declarations
 // =============================================================================
-// Auto-generated declarations for the Rust C API.
-// This file declares all extern "C" functions from reactor_c_api.dll
+// Stable ABI contract for the Rust C API (reactor_c_api.dll).
+// All types are repr(C) compatible. All handles are opaque pointers.
+//
+// Ownership Rule:
+//   Rust creates → Rust destroys.
+//   C++ uses handles but NEVER calls delete/free on them.
+//   Use reactor_destroy_*() functions to release resources.
+//
+// Lifecycle:
+//   reactor_initialize()
+//   reactor_run() or manual loop with begin_frame/end_frame
+//   reactor_shutdown()
 // =============================================================================
 
 #pragma once
 
 #include <cstdint>
 
+extern "C" {
+
+// =============================================================================
+// ReactorResult — ABI-safe error codes (no exceptions across FFI)
+// =============================================================================
+
+enum ReactorResult : int32_t {
+    REACTOR_OK                       = 0,
+    REACTOR_ERROR_NOT_INITIALIZED    = 1,
+    REACTOR_ERROR_ALREADY_INITIALIZED = 2,
+    REACTOR_ERROR_VULKAN_INIT        = 3,
+    REACTOR_ERROR_WINDOW_CREATION    = 4,
+    REACTOR_ERROR_SHADER_COMPILATION = 5,
+    REACTOR_ERROR_MESH_CREATION      = 6,
+    REACTOR_ERROR_MATERIAL_CREATION  = 7,
+    REACTOR_ERROR_INVALID_HANDLE     = 8,
+    REACTOR_ERROR_OUT_OF_MEMORY      = 9,
+    REACTOR_ERROR_INVALID_ARGUMENT   = 10,
+    REACTOR_ERROR_FRAME_NOT_ACTIVE   = 11,
+    REACTOR_ERROR_FRAME_ALREADY_ACTIVE = 12,
+    REACTOR_ERROR_UNKNOWN            = 255,
+};
+
+const char* reactor_result_string(ReactorResult result);
+
+// =============================================================================
+// Opaque Handles — C++ NEVER dereferences these, only passes them around
+// =============================================================================
+
+typedef struct ReactorHandle ReactorHandle;
+typedef struct MeshHandle MeshHandle;
+typedef struct MaterialHandle MaterialHandle;
+typedef struct TextureHandle TextureHandle;
+typedef struct SceneHandle SceneHandle;
+typedef struct CameraHandle CameraHandle;
+
 // =============================================================================
 // C API Types (must match Rust repr(C) types)
 // =============================================================================
-
-extern "C" {
 
 // Math types
 struct CVec2 { float x, y; };
@@ -81,6 +125,14 @@ struct CCallbacks {
 };
 
 // =============================================================================
+// Global Lifecycle — Initialize / Shutdown
+// =============================================================================
+
+ReactorResult reactor_initialize();
+ReactorResult reactor_shutdown();
+bool reactor_is_initialized();
+
+// =============================================================================
 // Version & Info
 // =============================================================================
 
@@ -103,6 +155,14 @@ int32_t reactor_run_simple(
     UpdateCallback on_update,
     RenderCallback on_render
 );
+
+// =============================================================================
+// Frame Lifecycle — Command submission boundary
+// =============================================================================
+
+ReactorResult reactor_begin_frame();
+ReactorResult reactor_end_frame();
+bool reactor_is_frame_active();
 
 // =============================================================================
 // Time & Frame Info
@@ -232,42 +292,43 @@ const char* reactor_error_description(uint32_t code);
 // =============================================================================
 
 uint32_t reactor_object_count();
-int32_t reactor_add_object(void* mesh, void* material, CMat4 transform);
+int32_t reactor_add_object(MeshHandle* mesh, MaterialHandle* material, CMat4 transform);
 void reactor_set_object_transform(uint32_t index, CMat4 transform);
 CMat4 reactor_get_object_transform(uint32_t index);
 void reactor_set_object_visible(uint32_t index, bool visible);
 void reactor_clear_scene();
 
 // =============================================================================
-// Scene Handle API — For custom scenes
+// Scene Handle API — For custom scenes (opaque handles)
 // =============================================================================
 
-void* reactor_scene_create();
-void reactor_scene_destroy(void* scene);
-uint32_t reactor_scene_object_count(const void* scene);
-void reactor_scene_clear(void* scene);
-int32_t reactor_scene_add_object(void* scene, void* mesh, void* material, CMat4 transform);
-void reactor_scene_set_transform(void* scene, uint32_t index, CMat4 transform);
-CMat4 reactor_scene_get_transform(const void* scene, uint32_t index);
-void reactor_scene_set_visible(void* scene, uint32_t index, bool visible);
-bool reactor_scene_is_visible(const void* scene, uint32_t index);
-bool reactor_scene_remove_object(void* scene, uint32_t index);
+SceneHandle* reactor_scene_create();
+void reactor_scene_destroy(SceneHandle* scene);
+uint32_t reactor_scene_object_count(const SceneHandle* scene);
+void reactor_scene_clear(SceneHandle* scene);
+int32_t reactor_scene_add_object(SceneHandle* scene, MeshHandle* mesh, MaterialHandle* material, CMat4 transform);
+void reactor_scene_set_transform(SceneHandle* scene, uint32_t index, CMat4 transform);
+CMat4 reactor_scene_get_transform(const SceneHandle* scene, uint32_t index);
+void reactor_scene_set_visible(SceneHandle* scene, uint32_t index, bool visible);
+bool reactor_scene_is_visible(const SceneHandle* scene, uint32_t index);
+bool reactor_scene_remove_object(SceneHandle* scene, uint32_t index);
 
 // =============================================================================
-// Mesh API
+// Mesh API (Rust owns memory — use reactor_destroy_mesh to free)
 // =============================================================================
 
-void* reactor_create_mesh(const CVertex* vertices, uint32_t vertex_count, const uint32_t* indices, uint32_t index_count);
-void* reactor_create_cube();
-void reactor_destroy_mesh(void* mesh);
+MeshHandle* reactor_create_mesh(const CVertex* vertices, uint32_t vertex_count, const uint32_t* indices, uint32_t index_count);
+MeshHandle* reactor_create_cube();
+void reactor_destroy_mesh(MeshHandle* mesh);
 
 // =============================================================================
-// Material API
+// Material API (Rust owns memory — use reactor_destroy_material to free)
 // =============================================================================
 
-void* reactor_create_material(const uint32_t* vert_spv, uint32_t vert_len, const uint32_t* frag_spv, uint32_t frag_len);
-void* reactor_create_textured_material(const uint32_t* vert_spv, uint32_t vert_len, const uint32_t* frag_spv, uint32_t frag_len, const void* texture);
-void reactor_destroy_material(void* material);
+MaterialHandle* reactor_create_material(const uint32_t* vert_spv, uint32_t vert_len, const uint32_t* frag_spv, uint32_t frag_len);
+MaterialHandle* reactor_create_material_simple(float r, float g, float b);
+MaterialHandle* reactor_create_textured_material(const uint32_t* vert_spv, uint32_t vert_len, const uint32_t* frag_spv, uint32_t frag_len, const TextureHandle* texture);
+void reactor_destroy_material(MaterialHandle* material);
 
 // =============================================================================
 // Model Loading API (OBJ)
@@ -306,15 +367,15 @@ bool reactor_aabb_intersects(float a_min_x, float a_min_y, float a_min_z, float 
                              float b_min_x, float b_min_y, float b_min_z, float b_max_x, float b_max_y, float b_max_z);
 
 // =============================================================================
-// Texture API
+// Texture API (Rust owns memory — use reactor_destroy_texture to free)
 // =============================================================================
 
-void* reactor_load_texture(const char* path);
-void* reactor_load_texture_bytes(const uint8_t* data, uint32_t len);
-void* reactor_create_solid_texture(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-uint32_t reactor_texture_width(const void* texture);
-uint32_t reactor_texture_height(const void* texture);
-void reactor_destroy_texture(void* texture);
+TextureHandle* reactor_load_texture(const char* path);
+TextureHandle* reactor_load_texture_bytes(const uint8_t* data, uint32_t len);
+TextureHandle* reactor_create_solid_texture(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+uint32_t reactor_texture_width(const TextureHandle* texture);
+uint32_t reactor_texture_height(const TextureHandle* texture);
+void reactor_destroy_texture(TextureHandle* texture);
 
 // =============================================================================
 // Lighting API
@@ -327,16 +388,16 @@ uint32_t reactor_light_count();
 void reactor_clear_lights();
 
 // =============================================================================
-// Camera Handle API — For custom cameras
+// Camera Handle API — For custom cameras (opaque handles)
 // =============================================================================
 
-void* reactor_camera_create_perspective(float fov, float aspect, float near_plane, float far_plane);
-void reactor_camera_destroy(void* camera);
-void reactor_camera_set_position(void* camera, float x, float y, float z);
-void reactor_camera_set_target(void* camera, float x, float y, float z);
-CMat4 reactor_camera_get_view_projection(const void* camera);
-CMat4 reactor_camera_get_view(const void* camera);
-CMat4 reactor_camera_get_projection(const void* camera);
+CameraHandle* reactor_camera_create_perspective(float fov, float aspect, float near_plane, float far_plane);
+void reactor_camera_destroy(CameraHandle* camera);
+void reactor_camera_set_position(CameraHandle* camera, float x, float y, float z);
+void reactor_camera_set_target(CameraHandle* camera, float x, float y, float z);
+CMat4 reactor_camera_get_view_projection(const CameraHandle* camera);
+CMat4 reactor_camera_get_view(const CameraHandle* camera);
+CMat4 reactor_camera_get_projection(const CameraHandle* camera);
 
 // =============================================================================
 // ECS API
@@ -397,39 +458,5 @@ uint32_t reactor_get_vram_mb();
 uint32_t reactor_get_msaa_samples();
 bool reactor_is_raytracing_supported();
 void reactor_get_vulkan_version(uint32_t* major, uint32_t* minor, uint32_t* patch);
-
-// =============================================================================
-// Error API
-// =============================================================================
-
-uint32_t reactor_get_last_error();
-const char* reactor_get_error_message();
-void reactor_clear_error();
-const char* reactor_error_description(uint32_t code);
-
-// =============================================================================
-// Mesh API
-// =============================================================================
-
-void* reactor_create_cube();
-void reactor_destroy_mesh(void* mesh);
-
-// =============================================================================
-// Material API
-// =============================================================================
-
-void* reactor_create_material_simple(float r, float g, float b);
-void reactor_destroy_material(void* material);
-
-// =============================================================================
-// Scene Object API
-// =============================================================================
-
-int32_t reactor_add_object(void* mesh, void* material, CMat4 transform);
-void reactor_set_object_transform(uint32_t index, CMat4 transform);
-CMat4 reactor_get_object_transform(uint32_t index);
-void reactor_set_object_visible(uint32_t index, bool visible);
-uint32_t reactor_object_count();
-void reactor_clear_scene();
 
 } // extern "C"

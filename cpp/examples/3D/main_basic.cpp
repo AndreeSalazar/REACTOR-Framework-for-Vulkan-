@@ -1,79 +1,36 @@
 // =============================================================================
-// REACTOR 3D — Basic Working Example
+// REACTOR 3D — Formal Lifecycle Example
 // =============================================================================
-// This uses only the absolute minimum C API functions.
-// Demonstrates ReactorApp() pattern with Vulkan rendering.
+// Demonstrates the professional REACTOR lifecycle:
+//
+//   reactor_initialize()         — global init
+//   reactor_run() / callbacks    — main loop
+//   reactor_shutdown()           — clean teardown
+//
+// Ownership: Rust creates → Rust destroys (opaque handles only)
+// Errors:    ReactorResult enum (no exceptions across FFI)
 // =============================================================================
 
-#include <cstdint>
+#include <reactor/core.hpp>
 #include <cstdio>
-
-extern "C" {
-    // Callback types
-    typedef void (*InitCallback)();
-    typedef void (*UpdateCallback)(float);
-    typedef void (*RenderCallback)();
-    
-    // Core functions
-    int32_t reactor_run_simple(
-        const char* title,
-        uint32_t width,
-        uint32_t height,
-        InitCallback on_init,
-        UpdateCallback on_update,
-        RenderCallback on_render
-    );
-    
-    // Info functions
-    const char* reactor_get_gpu_name();
-    uint32_t reactor_get_msaa_samples();
-    float reactor_get_fps();
-    uint64_t reactor_get_frame_count();
-    
-    // Input functions
-    int32_t reactor_key_pressed(uint32_t key);
-    uint32_t reactor_key_escape();
-    
-    // Window functions
-    void reactor_request_close();
-    
-    // Camera functions
-    void reactor_set_camera_position(float x, float y, float z);
-    void reactor_set_camera_target(float x, float y, float z);
-    
-    // Lighting functions
-    int32_t reactor_add_directional_light(float dx, float dy, float dz, float r, float g, float b, float intensity);
-    
-    // Mesh functions
-    void* reactor_create_cube();
-    void reactor_destroy_mesh(void* mesh);
-    
-    // Material functions
-    void* reactor_create_material_simple(float r, float g, float b);
-    void reactor_destroy_material(void* material);
-    
-    // Scene functions
-    struct CMat4 { float cols[4][4]; };
-    int32_t reactor_add_object(void* mesh, void* material, CMat4 transform);
-    void reactor_set_object_transform(uint32_t index, CMat4 transform);
-    uint32_t reactor_object_count();
-}
 
 // Global state for callbacks
 static float g_rotation = 0.0f;
 
-// Global handles for 3D objects
-static void* g_cube_mesh = nullptr;
-static void* g_cube_material = nullptr;
-static int32_t g_cube_index = -1;
+// Opaque handles — C++ never dereferences these
+static MeshHandle*     g_cube_mesh     = nullptr;
+static MaterialHandle* g_cube_material = nullptr;
+static int32_t         g_cube_index    = -1;
 
 void on_init() {
     printf("+==============================================================+\n");
     printf("|           REACTOR 3D - C++ Vulkan Example                    |\n");
     printf("+==============================================================+\n");
     printf("\n");
+    printf("Version: %s\n", reactor_version());
     printf("GPU: %s\n", reactor_get_gpu_name());
     printf("MSAA: %ux\n", reactor_get_msaa_samples());
+    printf("Initialized: %s\n", reactor_is_initialized() ? "YES" : "NO");
     printf("\n");
     printf("Controles:\n");
     printf("  ESC - Salir\n");
@@ -86,19 +43,18 @@ void on_init() {
     // Setup lighting
     reactor_add_directional_light(-0.5f, -1.0f, -0.3f, 1.0f, 0.98f, 0.95f, 1.0f);
     
-    // Create a cube mesh
+    // Create a cube mesh (Rust owns the memory)
     g_cube_mesh = reactor_create_cube();
     if (g_cube_mesh) {
         printf("Cubo creado correctamente!\n");
         
-        // Create a simple material
+        // Create a simple material (Rust owns the memory)
         g_cube_material = reactor_create_material_simple(1.0f, 0.5f, 0.2f);
         if (g_cube_material) {
             printf("Material creado correctamente!\n");
             
             // Add cube to scene with identity transform
             CMat4 transform = {};
-            // Identity matrix
             transform.cols[0][0] = 1.0f;
             transform.cols[1][1] = 1.0f;
             transform.cols[2][2] = 1.0f;
@@ -134,13 +90,28 @@ void on_render() {
     // Scene is rendered automatically by REACTOR
 }
 
+// =============================================================================
+// MAIN — Formal Lifecycle
+// =============================================================================
+//
+//   1. reactor_initialize()   — prepare subsystems
+//   2. reactor_run_simple()   — enter main loop (creates window, Vulkan, etc.)
+//   3. reactor_shutdown()     — release all resources
+//
+// =============================================================================
+
 int main() {
-    printf("\n");
-    printf("Starting REACTOR 3D...\n");
-    printf("\n");
+    printf("\nStarting REACTOR 3D...\n\n");
     
-    // THE ONE CALL - ReactorApp() pattern
-    return reactor_run_simple(
+    // 1. Initialize REACTOR subsystems
+    ReactorResult result = reactor_initialize();
+    if (result != REACTOR_OK) {
+        printf("ERROR: reactor_initialize() failed: %s\n", reactor_result_string(result));
+        return -1;
+    }
+    
+    // 2. Run the application (blocking — returns when window closes)
+    int32_t exit_code = reactor_run_simple(
         "REACTOR 3D",    // title
         1280,            // width
         720,             // height
@@ -148,4 +119,13 @@ int main() {
         on_update,       // update callback
         on_render        // render callback
     );
+    
+    // 3. Shutdown — release all resources
+    result = reactor_shutdown();
+    if (result != REACTOR_OK) {
+        printf("WARN: reactor_shutdown() returned: %s\n", reactor_result_string(result));
+    }
+    
+    printf("\nREACTOR shutdown complete.\n");
+    return exit_code;
 }
