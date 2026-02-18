@@ -240,7 +240,8 @@ impl ReactorEditor {
         if do_play {
             self.editor_ctx.play_mode = !self.editor_ctx.play_mode;
             if self.editor_ctx.play_mode {
-                self.editor_ctx.log_info("Play mode started (F5).");
+                self.editor_ctx.log_info("Play mode started (F5). Launching REACTOR Engine...");
+                self.launch_play_window();
             } else {
                 self.editor_ctx.log_info("Play mode stopped (F5).");
             }
@@ -262,6 +263,65 @@ impl ReactorEditor {
         let fps = if dt > 0.0 { 1.0 / dt } else { 0.0 };
         let frame_ms = dt * 1000.0;
         self.editor_ctx.update_stats(fps, frame_ms);
+    }
+
+    /// Launch the REACTOR engine in Play mode with the current scene
+    fn launch_play_window(&mut self) {
+        // Export scene to temporary file for the engine to load
+        let scene_data = self.export_scene_for_play();
+        
+        // For now, we'll show a message about what would happen
+        // In a full implementation, this would:
+        // 1. Serialize the current scene to a temp file
+        // 2. Launch the REACTOR engine executable with the scene path
+        // 3. Monitor the process and stop play mode when it exits
+        
+        self.editor_ctx.log_info(format!(
+            "Scene '{}' ready for play with {} entities.",
+            self.editor_ctx.scene.name,
+            self.editor_ctx.stats.entity_count
+        ));
+        
+        // Log scene contents
+        for entity in self.editor_ctx.scene.all_entities() {
+            let entity_type = if entity.mesh.is_some() { "Mesh" }
+                else if entity.light.is_some() { "Light" }
+                else if entity.camera.is_some() { "Camera" }
+                else { "Empty" };
+            self.editor_ctx.log_info(format!(
+                "  → {} [{}] at ({:.1}, {:.1}, {:.1})",
+                entity.name, entity_type,
+                entity.transform.position.x,
+                entity.transform.position.y,
+                entity.transform.position.z
+            ));
+        }
+
+        self.editor_ctx.log_info("Play window would launch here with Vulkan rendering.");
+        self.editor_ctx.log_info("Press F5 to stop play mode.");
+    }
+
+    /// Export current scene data for the play runtime
+    fn export_scene_for_play(&self) -> String {
+        // Simple JSON-like export of scene data
+        let mut output = String::new();
+        output.push_str(&format!("scene: {}\n", self.editor_ctx.scene.name));
+        output.push_str(&format!("entities: {}\n", self.editor_ctx.stats.entity_count));
+        
+        for entity in self.editor_ctx.scene.all_entities() {
+            output.push_str(&format!(
+                "entity: {} pos: {},{},{} scale: {},{},{}\n",
+                entity.name,
+                entity.transform.position.x,
+                entity.transform.position.y,
+                entity.transform.position.z,
+                entity.transform.scale.x,
+                entity.transform.scale.y,
+                entity.transform.scale.z,
+            ));
+        }
+        
+        output
     }
 }
 

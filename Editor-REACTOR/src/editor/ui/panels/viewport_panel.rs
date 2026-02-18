@@ -1,22 +1,24 @@
 // =============================================================================
-// ViewportPanel — Professional 3D Viewport (Blender/UE style)
+// ViewportPanel — Professional 3D Viewport (UE5/Blender style)
 // =============================================================================
-// Real-time software-rendered 3D viewport with:
-//   - Orbit / Pan / Zoom camera (middle-mouse, shift+middle, scroll)
+// Features:
+//   - Functional transform gizmos (translate/rotate/scale in real-time)
+//   - UE5-style top bar with view modes and settings
+//   - Bottom bar with grid/snap settings
+//   - Orbit / Pan / Zoom camera controls
 //   - Infinite ground grid with fade
-//   - Wireframe + solid shaded objects
+//   - Solid shaded + wireframe objects
+//   - Light visualization (radius, direction)
 //   - Selection highlights and bounding boxes
 //   - Orientation gizmo (top-right corner)
-//   - Transform gizmo on selected object
-//   - Entity click-selection
-//   - Camera view presets (Numpad 1/3/7)
+//   - Click-selection with multi-select
 // =============================================================================
 
 use egui::{Color32, Painter, Pos2, Rect, Sense, Stroke, Ui, Vec2};
 use glam::{Vec3, Vec4, Mat4};
-use crate::editor::core::editor_context::{EditorContext, EntityId, GizmoMode, MeshPrimitive};
+use crate::editor::core::editor_context::{EditorContext, EntityId, GizmoMode, MeshPrimitive, LightType};
 
-// ─── Cube wireframe vertices (unit cube centered at origin) ──────────────────
+// ─── Cube geometry ───────────────────────────────────────────────────────────
 const CUBE_VERTS: [Vec3; 8] = [
     Vec3::new(-0.5, -0.5, -0.5), Vec3::new( 0.5, -0.5, -0.5),
     Vec3::new( 0.5,  0.5, -0.5), Vec3::new(-0.5,  0.5, -0.5),
@@ -24,71 +26,331 @@ const CUBE_VERTS: [Vec3; 8] = [
     Vec3::new( 0.5,  0.5,  0.5), Vec3::new(-0.5,  0.5,  0.5),
 ];
 const CUBE_EDGES: [(usize, usize); 12] = [
-    (0,1),(1,2),(2,3),(3,0), // front
-    (4,5),(5,6),(6,7),(7,4), // back
-    (0,4),(1,5),(2,6),(3,7), // sides
+    (0,1),(1,2),(2,3),(3,0), (4,5),(5,6),(6,7),(7,4), (0,4),(1,5),(2,6),(3,7),
 ];
-// Cube faces for solid rendering (quads as 2 triangles each)
 const CUBE_FACES: [(usize, usize, usize, Vec3); 12] = [
-    // front  (z-)
     (0,1,2, Vec3::new(0.0, 0.0,-1.0)), (0,2,3, Vec3::new(0.0, 0.0,-1.0)),
-    // back   (z+)
     (5,4,7, Vec3::new(0.0, 0.0, 1.0)), (5,7,6, Vec3::new(0.0, 0.0, 1.0)),
-    // top    (y+)
     (3,2,6, Vec3::new(0.0, 1.0, 0.0)), (3,6,7, Vec3::new(0.0, 1.0, 0.0)),
-    // bottom (y-)
     (4,5,1, Vec3::new(0.0,-1.0, 0.0)), (4,1,0, Vec3::new(0.0,-1.0, 0.0)),
-    // right  (x+)
     (1,5,6, Vec3::new(1.0, 0.0, 0.0)), (1,6,2, Vec3::new(1.0, 0.0, 0.0)),
-    // left   (x-)
     (4,0,3, Vec3::new(-1.0,0.0, 0.0)), (4,3,7, Vec3::new(-1.0,0.0, 0.0)),
 ];
 
+// ─── Gizmo interaction state ─────────────────────────────────────────────────
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum GizmoAxis {
+    None,
+    X, Y, Z,
+    XY, XZ, YZ,
+    All,
+}
+
 pub struct ViewportPanel {
     pub is_focused: bool,
+    // Gizmo interaction
+    pub active_axis: GizmoAxis,
+    pub drag_start_pos: Option<glam::Vec2>,
+    pub drag_start_transform: Option<glam::Vec3>,
+    pub drag_start_scale: Option<glam::Vec3>,
+    pub drag_start_rotation: Option<glam::Quat>,
+    // View settings
+    pub view_mode: ViewMode,
+    pub shading_mode: ShadingMode,
+    pub show_stats: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ViewMode {
+    Perspective,
+    Top,
+    Front,
+    Right,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ShadingMode {
+    Solid,
+    Wireframe,
+    SolidWireframe,
 }
 
 impl ViewportPanel {
     pub fn new() -> Self {
-        Self { is_focused: false }
+        Self {
+            is_focused: false,
+            active_axis: GizmoAxis::None,
+            drag_start_pos: None,
+            drag_start_transform: None,
+            drag_start_scale: None,
+            drag_start_rotation: None,
+            view_mode: ViewMode::Perspective,
+            shading_mode: ShadingMode::SolidWireframe,
+            show_stats: true,
+        }
     }
 
     pub fn show(&mut self, ui: &mut Ui, ctx: &mut EditorContext) {
-        let rect = ui.available_rect_before_wrap();
-        let vp_size = glam::Vec2::new(rect.width(), rect.height());
-
-        // Background gradient (dark viewport)
-        let bg_top = Color32::from_rgb(38, 38, 44);
-        ui.painter().rect_filled(rect, 0.0, bg_top);
-        // Subtle gradient overlay
-        let grad_rect = Rect::from_min_max(
-            Pos2::new(rect.min.x, rect.center().y),
-            rect.max,
+        let full_rect = ui.available_rect_before_wrap();
+        
+        // Reserve space for top and bottom bars
+        let top_bar_height = 26.0;
+        let bottom_bar_height = 22.0;
+        
+        let viewport_rect = Rect::from_min_max(
+            Pos2::new(full_rect.min.x, full_rect.min.y + top_bar_height),
+            Pos2::new(full_rect.max.x, full_rect.max.y - bottom_bar_height),
         );
-        ui.painter().rect_filled(grad_rect, 0.0, Color32::from_rgba_premultiplied(0, 0, 0, 30));
+        let vp_size = glam::Vec2::new(viewport_rect.width(), viewport_rect.height());
 
-        // Allocate interactive area
-        let response = ui.allocate_rect(rect, Sense::click_and_drag());
+        // ── Top bar (UE5 style) ──────────────────────────────────────────
+        self.draw_top_bar(ui, full_rect, ctx);
+
+        // ── Viewport background ──────────────────────────────────────────
+        let bg = Color32::from_rgb(32, 32, 38);
+        ui.painter().rect_filled(viewport_rect, 0.0, bg);
+
+        // Allocate interactive area for viewport
+        let response = ui.allocate_rect(viewport_rect, Sense::click_and_drag());
         self.is_focused = response.hovered();
 
-        let painter = ui.painter_at(rect);
+        let painter = ui.painter_at(viewport_rect);
 
         // ── Draw layers ──────────────────────────────────────────────────
         if ctx.show_grid {
-            self.draw_ground_grid(&painter, rect, &ctx.camera, vp_size);
+            self.draw_ground_grid(&painter, viewport_rect, &ctx.camera, vp_size);
         }
-        self.draw_scene_entities(&painter, rect, ctx, vp_size);
-        self.draw_transform_gizmo(&painter, rect, ctx, vp_size);
-        self.draw_orientation_gizmo(&painter, rect, &ctx.camera);
-        self.draw_hud(ui, rect, ctx);
+        self.draw_scene_entities(&painter, viewport_rect, ctx, vp_size);
+        self.draw_transform_gizmo_interactive(&painter, viewport_rect, ctx, vp_size);
+        self.draw_orientation_gizmo(&painter, viewport_rect, &ctx.camera);
+        
+        if self.show_stats {
+            self.draw_stats_overlay(&painter, viewport_rect, ctx);
+        }
 
         if ctx.play_mode {
-            self.draw_play_overlay(&painter, rect);
+            self.draw_play_overlay(&painter, viewport_rect);
         }
 
+        // ── Bottom bar ───────────────────────────────────────────────────
+        self.draw_bottom_bar(ui, full_rect, ctx);
+
         // ── Input handling ───────────────────────────────────────────────
+        self.handle_gizmo_interaction(ui, &response, viewport_rect, ctx, vp_size);
         self.handle_camera_input(ui, &response, ctx);
-        self.handle_click_selection(ui, &response, rect, ctx, vp_size);
+        self.handle_click_selection(ui, &response, viewport_rect, ctx, vp_size);
+    }
+
+    // =====================================================================
+    // Top bar — UE5 style with view modes, shading, etc.
+    // =====================================================================
+    fn draw_top_bar(&mut self, ui: &mut Ui, full_rect: Rect, ctx: &mut EditorContext) {
+        let bar_rect = Rect::from_min_size(full_rect.min, Vec2::new(full_rect.width(), 26.0));
+        
+        // Pre-calculate all rects
+        let mut x = bar_rect.min.x + 8.0;
+        let y = bar_rect.center().y;
+        
+        let view_rect = Rect::from_min_size(Pos2::new(x, bar_rect.min.y + 3.0), Vec2::new(90.0, 20.0));
+        x += 96.0;
+        let sep1_x = x;
+        x += 8.0;
+        let shading_rect = Rect::from_min_size(Pos2::new(x, bar_rect.min.y + 3.0), Vec2::new(80.0, 20.0));
+        x += 86.0;
+        let sep2_x = x;
+        x += 8.0;
+        let grid_rect = Rect::from_min_size(Pos2::new(x, bar_rect.min.y + 3.0), Vec2::new(50.0, 20.0));
+        x += 56.0;
+        let stats_rect = Rect::from_min_size(Pos2::new(x, bar_rect.min.y + 3.0), Vec2::new(50.0, 20.0));
+
+        // Allocate all interactive rects first (mutable borrow)
+        let view_resp = ui.allocate_rect(view_rect, Sense::click());
+        let shading_resp = ui.allocate_rect(shading_rect, Sense::click());
+        let grid_resp = ui.allocate_rect(grid_rect, Sense::click());
+        let stats_resp = ui.allocate_rect(stats_rect, Sense::click());
+
+        // Now get painter (immutable borrow)
+        let painter = ui.painter();
+        
+        // Background
+        painter.rect_filled(bar_rect, 0.0, Color32::from_rgb(22, 22, 26));
+        painter.line_segment(
+            [Pos2::new(bar_rect.min.x, bar_rect.max.y), Pos2::new(bar_rect.max.x, bar_rect.max.y)],
+            Stroke::new(1.0, Color32::from_rgb(45, 45, 50)),
+        );
+
+        // View mode button
+        let view_label = match self.view_mode {
+            ViewMode::Perspective => "⬡ Perspective",
+            ViewMode::Top => "⬒ Top",
+            ViewMode::Front => "⬒ Front", 
+            ViewMode::Right => "⬒ Right",
+        };
+        let view_bg = if view_resp.hovered() { Color32::from_rgb(50, 50, 58) } else { Color32::from_rgb(35, 35, 42) };
+        painter.rect_filled(view_rect, 3.0, view_bg);
+        painter.text(view_rect.center(), egui::Align2::CENTER_CENTER, view_label, 
+            egui::FontId::proportional(10.0), Color32::from_rgb(200, 200, 200));
+
+        // Separator 1
+        painter.line_segment(
+            [Pos2::new(sep1_x, bar_rect.min.y + 5.0), Pos2::new(sep1_x, bar_rect.max.y - 5.0)],
+            Stroke::new(1.0, Color32::from_rgb(55, 55, 60)),
+        );
+
+        // Shading mode button
+        let shading_label = match self.shading_mode {
+            ShadingMode::Solid => "◼ Solid",
+            ShadingMode::Wireframe => "◻ Wire",
+            ShadingMode::SolidWireframe => "◧ Solid+Wire",
+        };
+        let shading_bg = if shading_resp.hovered() { Color32::from_rgb(50, 50, 58) } else { Color32::from_rgb(35, 35, 42) };
+        painter.rect_filled(shading_rect, 3.0, shading_bg);
+        painter.text(shading_rect.center(), egui::Align2::CENTER_CENTER, shading_label,
+            egui::FontId::proportional(10.0), Color32::from_rgb(200, 200, 200));
+
+        // Separator 2
+        painter.line_segment(
+            [Pos2::new(sep2_x, bar_rect.min.y + 5.0), Pos2::new(sep2_x, bar_rect.max.y - 5.0)],
+            Stroke::new(1.0, Color32::from_rgb(55, 55, 60)),
+        );
+
+        // Grid toggle
+        let grid_bg = if ctx.show_grid { Color32::from_rgb(60, 80, 100) } else { Color32::from_rgb(35, 35, 42) };
+        painter.rect_filled(grid_rect, 3.0, grid_bg);
+        painter.text(grid_rect.center(), egui::Align2::CENTER_CENTER, "⊞ Grid",
+            egui::FontId::proportional(10.0), 
+            if ctx.show_grid { Color32::from_rgb(150, 200, 255) } else { Color32::from_rgb(150, 150, 150) });
+
+        // Stats toggle
+        let stats_bg = if self.show_stats { Color32::from_rgb(60, 80, 100) } else { Color32::from_rgb(35, 35, 42) };
+        painter.rect_filled(stats_rect, 3.0, stats_bg);
+        painter.text(stats_rect.center(), egui::Align2::CENTER_CENTER, "📊 Stats",
+            egui::FontId::proportional(10.0),
+            if self.show_stats { Color32::from_rgb(150, 200, 255) } else { Color32::from_rgb(150, 150, 150) });
+
+        // Right side: Gizmo mode indicator
+        let mode_label = match ctx.gizmo_mode {
+            GizmoMode::Select => ("↖ Select", Color32::from_rgb(180, 180, 180)),
+            GizmoMode::Translate => ("↔ Move", Color32::from_rgb(100, 220, 100)),
+            GizmoMode::Rotate => ("↻ Rotate", Color32::from_rgb(100, 150, 255)),
+            GizmoMode::Scale => ("⤢ Scale", Color32::from_rgb(255, 180, 60)),
+        };
+        painter.text(
+            Pos2::new(bar_rect.max.x - 70.0, y),
+            egui::Align2::CENTER_CENTER,
+            mode_label.0,
+            egui::FontId::proportional(11.0),
+            mode_label.1,
+        );
+
+        // Handle clicks (after painting)
+        if view_resp.clicked() {
+            self.view_mode = match self.view_mode {
+                ViewMode::Perspective => ViewMode::Top,
+                ViewMode::Top => ViewMode::Front,
+                ViewMode::Front => ViewMode::Right,
+                ViewMode::Right => ViewMode::Perspective,
+            };
+            match self.view_mode {
+                ViewMode::Top => ctx.camera.set_top(),
+                ViewMode::Front => ctx.camera.set_front(),
+                ViewMode::Right => ctx.camera.set_right(),
+                ViewMode::Perspective => {},
+            }
+        }
+        if shading_resp.clicked() {
+            self.shading_mode = match self.shading_mode {
+                ShadingMode::Solid => ShadingMode::Wireframe,
+                ShadingMode::Wireframe => ShadingMode::SolidWireframe,
+                ShadingMode::SolidWireframe => ShadingMode::Solid,
+            };
+            ctx.show_wireframe = matches!(self.shading_mode, ShadingMode::Wireframe | ShadingMode::SolidWireframe);
+        }
+        if grid_resp.clicked() { ctx.show_grid = !ctx.show_grid; }
+        if stats_resp.clicked() { self.show_stats = !self.show_stats; }
+    }
+
+    // =====================================================================
+    // Bottom bar — Grid/snap settings, coordinates
+    // =====================================================================
+    fn draw_bottom_bar(&self, ui: &mut Ui, full_rect: Rect, ctx: &EditorContext) {
+        let bar_rect = Rect::from_min_max(
+            Pos2::new(full_rect.min.x, full_rect.max.y - 22.0),
+            full_rect.max,
+        );
+        let painter = ui.painter();
+        
+        // Background
+        painter.rect_filled(bar_rect, 0.0, Color32::from_rgb(22, 22, 26));
+        painter.line_segment(
+            [Pos2::new(bar_rect.min.x, bar_rect.min.y), Pos2::new(bar_rect.max.x, bar_rect.min.y)],
+            Stroke::new(1.0, Color32::from_rgb(45, 45, 50)),
+        );
+
+        let y = bar_rect.center().y;
+
+        // Left: Grid info
+        painter.text(
+            Pos2::new(bar_rect.min.x + 10.0, y),
+            egui::Align2::LEFT_CENTER,
+            format!("Grid: 1.0m  |  Snap: {:.1}m / {:.0}° / {:.1}x", 
+                ctx.snap_translate, ctx.snap_rotate, ctx.snap_scale),
+            egui::FontId::monospace(9.0),
+            Color32::from_rgb(120, 120, 130),
+        );
+
+        // Center: Selected entity position
+        if let Some(id) = ctx.selected {
+            if let Some(entity) = ctx.scene.get(id) {
+                let pos = entity.transform.position;
+                painter.text(
+                    Pos2::new(bar_rect.center().x, y),
+                    egui::Align2::CENTER_CENTER,
+                    format!("X: {:.2}  Y: {:.2}  Z: {:.2}", pos.x, pos.y, pos.z),
+                    egui::FontId::monospace(10.0),
+                    Color32::from_rgb(180, 180, 180),
+                );
+            }
+        }
+
+        // Right: Camera distance
+        painter.text(
+            Pos2::new(bar_rect.max.x - 10.0, y),
+            egui::Align2::RIGHT_CENTER,
+            format!("Dist: {:.1}m", ctx.camera.distance),
+            egui::FontId::monospace(9.0),
+            Color32::from_rgb(100, 100, 110),
+        );
+    }
+
+    // =====================================================================
+    // Stats overlay (top-left)
+    // =====================================================================
+    fn draw_stats_overlay(&self, painter: &Painter, rect: Rect, ctx: &EditorContext) {
+        let bg = Color32::from_rgba_premultiplied(15, 15, 18, 220);
+        let stats_rect = Rect::from_min_size(
+            Pos2::new(rect.min.x + 6.0, rect.min.y + 6.0),
+            Vec2::new(140.0, 52.0),
+        );
+        painter.rect_filled(stats_rect, 4.0, bg);
+        painter.rect_stroke(stats_rect, 4.0, Stroke::new(1.0, Color32::from_rgb(50, 50, 55)));
+
+        let mut y = stats_rect.min.y + 10.0;
+        let x = stats_rect.min.x + 8.0;
+
+        painter.text(Pos2::new(x, y), egui::Align2::LEFT_CENTER,
+            format!("{:.0} FPS  ({:.1}ms)", ctx.stats.fps, ctx.stats.frame_time_ms),
+            egui::FontId::monospace(10.0), Color32::from_rgb(100, 220, 100));
+        y += 14.0;
+
+        painter.text(Pos2::new(x, y), egui::Align2::LEFT_CENTER,
+            format!("{} entities  {} tris", ctx.stats.entity_count, ctx.stats.triangles),
+            egui::FontId::monospace(9.0), Color32::from_rgb(180, 180, 180));
+        y += 14.0;
+
+        painter.text(Pos2::new(x, y), egui::Align2::LEFT_CENTER,
+            format!("{} draw calls", ctx.stats.draw_calls),
+            egui::FontId::monospace(9.0), Color32::from_rgb(140, 140, 150));
     }
 
     // =====================================================================
@@ -538,9 +800,217 @@ impl ViewportPanel {
     }
 
     // =====================================================================
-    // Transform gizmo on selected entity
+    // FUNCTIONAL Gizmo Interaction — Real-time transform manipulation
     // =====================================================================
-    fn draw_transform_gizmo(
+    fn handle_gizmo_interaction(
+        &mut self, ui: &Ui, response: &egui::Response,
+        rect: Rect, ctx: &mut EditorContext, vp_size: glam::Vec2,
+    ) {
+        let Some(id) = ctx.selected else {
+            self.active_axis = GizmoAxis::None;
+            return;
+        };
+        
+        // Skip if not in a transform mode
+        if ctx.gizmo_mode == GizmoMode::Select {
+            self.active_axis = GizmoAxis::None;
+            return;
+        }
+
+        let Some(entity) = ctx.scene.get(id) else { return };
+        let entity_pos = entity.transform.position;
+        let Some(center_screen) = ctx.camera.project(entity_pos, vp_size) else { return };
+        let gizmo_center = Pos2::new(rect.min.x + center_screen.x, rect.min.y + center_screen.y);
+
+        // Get mouse position
+        let mouse_pos = ui.input(|i| i.pointer.hover_pos()).unwrap_or(Pos2::ZERO);
+        let mouse_vp = glam::Vec2::new(mouse_pos.x - rect.min.x, mouse_pos.y - rect.min.y);
+
+        let gizmo_len = 55.0;
+
+        // Check for drag start on gizmo axes
+        if response.drag_started_by(egui::PointerButton::Primary) {
+            let dx = mouse_pos.x - gizmo_center.x;
+            let dy = mouse_pos.y - gizmo_center.y;
+            
+            // Detect which axis was clicked
+            let axis = self.detect_gizmo_axis(dx, dy, gizmo_len, ctx.gizmo_mode);
+            
+            if axis != GizmoAxis::None {
+                self.active_axis = axis;
+                self.drag_start_pos = Some(mouse_vp);
+                self.drag_start_transform = Some(entity_pos);
+                self.drag_start_scale = Some(entity.transform.scale);
+                self.drag_start_rotation = Some(entity.transform.rotation);
+            }
+        }
+
+        // Handle active drag
+        if self.active_axis != GizmoAxis::None && response.dragged_by(egui::PointerButton::Primary) {
+            let Some(start_pos) = self.drag_start_pos else { return };
+            let delta = mouse_vp - start_pos;
+            
+            // Calculate world-space movement based on camera
+            let cam_right = ctx.camera.right();
+            let cam_up = ctx.camera.up();
+            
+            // Sensitivity factors
+            let translate_sensitivity = 0.02 * ctx.camera.distance;
+            let rotate_sensitivity = 0.5;
+            let scale_sensitivity = 0.01;
+
+            match ctx.gizmo_mode {
+                GizmoMode::Translate => {
+                    let Some(start_transform) = self.drag_start_transform else { return };
+                    let mut new_pos = start_transform;
+                    
+                    match self.active_axis {
+                        GizmoAxis::X => {
+                            // Project screen delta onto X axis
+                            let x_delta = delta.x * translate_sensitivity;
+                            new_pos.x = start_transform.x + x_delta;
+                        }
+                        GizmoAxis::Y => {
+                            // Y is up, so use negative screen Y
+                            let y_delta = -delta.y * translate_sensitivity;
+                            new_pos.y = start_transform.y + y_delta;
+                        }
+                        GizmoAxis::Z => {
+                            // Z uses combined screen movement
+                            let z_delta = (-delta.x * 0.5 + delta.y * 0.3) * translate_sensitivity;
+                            new_pos.z = start_transform.z + z_delta;
+                        }
+                        GizmoAxis::XY => {
+                            new_pos.x = start_transform.x + delta.x * translate_sensitivity;
+                            new_pos.y = start_transform.y - delta.y * translate_sensitivity;
+                        }
+                        GizmoAxis::XZ => {
+                            new_pos.x = start_transform.x + delta.x * translate_sensitivity;
+                            new_pos.z = start_transform.z + delta.y * translate_sensitivity;
+                        }
+                        GizmoAxis::All => {
+                            new_pos = start_transform + cam_right * delta.x * translate_sensitivity
+                                                      + cam_up * (-delta.y) * translate_sensitivity;
+                        }
+                        _ => {}
+                    }
+                    
+                    // Apply snap if enabled
+                    if ctx.snap_translate > 0.0 {
+                        new_pos.x = (new_pos.x / ctx.snap_translate).round() * ctx.snap_translate;
+                        new_pos.y = (new_pos.y / ctx.snap_translate).round() * ctx.snap_translate;
+                        new_pos.z = (new_pos.z / ctx.snap_translate).round() * ctx.snap_translate;
+                    }
+                    
+                    if let Some(e) = ctx.scene.get_mut(id) {
+                        e.transform.position = new_pos;
+                    }
+                }
+                GizmoMode::Rotate => {
+                    let Some(start_rot) = self.drag_start_rotation else { return };
+                    let angle = delta.x * rotate_sensitivity;
+                    
+                    // Apply snap
+                    let snapped_angle = if ctx.snap_rotate > 0.0 {
+                        (angle / ctx.snap_rotate).round() * ctx.snap_rotate
+                    } else {
+                        angle
+                    };
+                    
+                    let rotation = match self.active_axis {
+                        GizmoAxis::X => glam::Quat::from_rotation_x(snapped_angle.to_radians()),
+                        GizmoAxis::Y => glam::Quat::from_rotation_y(snapped_angle.to_radians()),
+                        GizmoAxis::Z => glam::Quat::from_rotation_z(snapped_angle.to_radians()),
+                        _ => glam::Quat::IDENTITY,
+                    };
+                    
+                    if let Some(e) = ctx.scene.get_mut(id) {
+                        e.transform.rotation = rotation * start_rot;
+                    }
+                }
+                GizmoMode::Scale => {
+                    let Some(start_scale) = self.drag_start_scale else { return };
+                    let scale_delta = 1.0 + delta.x * scale_sensitivity;
+                    let scale_factor = scale_delta.max(0.1);
+                    
+                    let mut new_scale = start_scale;
+                    match self.active_axis {
+                        GizmoAxis::X => new_scale.x = start_scale.x * scale_factor,
+                        GizmoAxis::Y => new_scale.y = start_scale.y * scale_factor,
+                        GizmoAxis::Z => new_scale.z = start_scale.z * scale_factor,
+                        GizmoAxis::All => new_scale = start_scale * scale_factor,
+                        _ => {}
+                    }
+                    
+                    if let Some(e) = ctx.scene.get_mut(id) {
+                        e.transform.scale = new_scale;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // End drag
+        if response.drag_stopped() {
+            self.active_axis = GizmoAxis::None;
+            self.drag_start_pos = None;
+            self.drag_start_transform = None;
+            self.drag_start_scale = None;
+            self.drag_start_rotation = None;
+        }
+    }
+
+    fn detect_gizmo_axis(&self, dx: f32, dy: f32, gizmo_len: f32, mode: GizmoMode) -> GizmoAxis {
+        let hit_radius = 12.0;
+        
+        match mode {
+            GizmoMode::Translate | GizmoMode::Scale => {
+                // X axis (right)
+                if dx > 10.0 && dx < gizmo_len + hit_radius && dy.abs() < hit_radius {
+                    return GizmoAxis::X;
+                }
+                // Y axis (up)
+                if dy < -10.0 && dy > -(gizmo_len + hit_radius) && dx.abs() < hit_radius {
+                    return GizmoAxis::Y;
+                }
+                // Z axis (diagonal)
+                let z_dx = -gizmo_len * 0.5;
+                let z_dy = gizmo_len * 0.3;
+                let dist_to_z = ((dx - z_dx * 0.5).powi(2) + (dy - z_dy * 0.5).powi(2)).sqrt();
+                if dist_to_z < gizmo_len * 0.6 && dx < 0.0 && dy > 0.0 {
+                    return GizmoAxis::Z;
+                }
+                // Center (all axes)
+                if dx.abs() < 15.0 && dy.abs() < 15.0 {
+                    return GizmoAxis::All;
+                }
+            }
+            GizmoMode::Rotate => {
+                let dist = (dx * dx + dy * dy).sqrt();
+                let r = gizmo_len * 0.8;
+                // X ring (outermost)
+                if (dist - r).abs() < hit_radius {
+                    return GizmoAxis::X;
+                }
+                // Y ring (middle)
+                if (dist - r * 0.85).abs() < hit_radius {
+                    return GizmoAxis::Y;
+                }
+                // Z ring (innermost)
+                if (dist - r * 0.7).abs() < hit_radius {
+                    return GizmoAxis::Z;
+                }
+            }
+            _ => {}
+        }
+        
+        GizmoAxis::None
+    }
+
+    // =====================================================================
+    // Interactive Transform Gizmo — with hover highlights
+    // =====================================================================
+    fn draw_transform_gizmo_interactive(
         &self, painter: &Painter, rect: Rect,
         ctx: &EditorContext, vp_size: glam::Vec2,
     ) {
@@ -552,51 +1022,125 @@ impl ViewportPanel {
 
         if !rect.contains(screen) { return; }
 
-        let gizmo_len = 45.0;
+        let gizmo_len = 55.0;
+        let active = self.active_axis;
 
         match ctx.gizmo_mode {
             GizmoMode::Select => {
-                // Selection circle
-                painter.circle_stroke(screen, 8.0, Stroke::new(1.5, Color32::from_rgb(255, 200, 60)));
+                painter.circle_stroke(screen, 10.0, Stroke::new(2.0, Color32::from_rgb(255, 200, 60)));
+                painter.circle_filled(screen, 4.0, Color32::from_rgb(255, 200, 60));
             }
             GizmoMode::Translate => {
+                // Center square (all axes)
+                let center_color = if active == GizmoAxis::All {
+                    Color32::from_rgb(255, 255, 100)
+                } else {
+                    Color32::from_rgba_premultiplied(200, 200, 200, 100)
+                };
+                painter.rect_filled(Rect::from_center_size(screen, Vec2::splat(12.0)), 2.0, center_color);
+
                 // X arrow (red)
+                let x_color = if active == GizmoAxis::X { Color32::from_rgb(255, 100, 100) } else { Color32::from_rgb(230, 50, 50) };
+                let x_width = if active == GizmoAxis::X { 4.0 } else { 3.0 };
                 let x_tip = Pos2::new(screen.x + gizmo_len, screen.y);
-                painter.line_segment([screen, x_tip], Stroke::new(2.5, Color32::from_rgb(230, 50, 50)));
-                self.draw_arrow_head(painter, x_tip, Vec2::new(1.0, 0.0), Color32::from_rgb(230, 50, 50));
-                painter.text(Pos2::new(x_tip.x + 6.0, x_tip.y), egui::Align2::LEFT_CENTER, "X", egui::FontId::proportional(10.0), Color32::from_rgb(230, 50, 50));
+                painter.line_segment([screen, x_tip], Stroke::new(x_width, x_color));
+                self.draw_arrow_head(painter, x_tip, Vec2::new(1.0, 0.0), x_color);
+                painter.text(Pos2::new(x_tip.x + 8.0, x_tip.y), egui::Align2::LEFT_CENTER, "X", egui::FontId::proportional(11.0), x_color);
 
                 // Y arrow (green)
+                let y_color = if active == GizmoAxis::Y { Color32::from_rgb(100, 255, 100) } else { Color32::from_rgb(50, 200, 50) };
+                let y_width = if active == GizmoAxis::Y { 4.0 } else { 3.0 };
                 let y_tip = Pos2::new(screen.x, screen.y - gizmo_len);
-                painter.line_segment([screen, y_tip], Stroke::new(2.5, Color32::from_rgb(50, 200, 50)));
-                self.draw_arrow_head(painter, y_tip, Vec2::new(0.0, -1.0), Color32::from_rgb(50, 200, 50));
-                painter.text(Pos2::new(y_tip.x, y_tip.y - 8.0), egui::Align2::CENTER_BOTTOM, "Y", egui::FontId::proportional(10.0), Color32::from_rgb(50, 200, 50));
+                painter.line_segment([screen, y_tip], Stroke::new(y_width, y_color));
+                self.draw_arrow_head(painter, y_tip, Vec2::new(0.0, -1.0), y_color);
+                painter.text(Pos2::new(y_tip.x, y_tip.y - 10.0), egui::Align2::CENTER_BOTTOM, "Y", egui::FontId::proportional(11.0), y_color);
 
-                // Z arrow (blue) — projected
-                let z_tip = Pos2::new(screen.x - gizmo_len * 0.5, screen.y + gizmo_len * 0.3);
-                painter.line_segment([screen, z_tip], Stroke::new(2.5, Color32::from_rgb(50, 80, 230)));
-                self.draw_arrow_head(painter, z_tip, Vec2::new(-0.5, 0.3).normalized(), Color32::from_rgb(50, 80, 230));
-                painter.text(Pos2::new(z_tip.x - 6.0, z_tip.y), egui::Align2::RIGHT_CENTER, "Z", egui::FontId::proportional(10.0), Color32::from_rgb(50, 80, 230));
+                // Z arrow (blue)
+                let z_color = if active == GizmoAxis::Z { Color32::from_rgb(100, 150, 255) } else { Color32::from_rgb(50, 80, 230) };
+                let z_width = if active == GizmoAxis::Z { 4.0 } else { 3.0 };
+                let z_tip = Pos2::new(screen.x - gizmo_len * 0.5, screen.y + gizmo_len * 0.4);
+                painter.line_segment([screen, z_tip], Stroke::new(z_width, z_color));
+                self.draw_arrow_head(painter, z_tip, Vec2::new(-0.5, 0.4).normalized(), z_color);
+                painter.text(Pos2::new(z_tip.x - 8.0, z_tip.y), egui::Align2::RIGHT_CENTER, "Z", egui::FontId::proportional(11.0), z_color);
+
+                // XY plane indicator
+                let plane_size = 18.0;
+                let xy_pts = vec![
+                    screen,
+                    Pos2::new(screen.x + plane_size, screen.y),
+                    Pos2::new(screen.x + plane_size, screen.y - plane_size),
+                    Pos2::new(screen.x, screen.y - plane_size),
+                ];
+                painter.add(egui::Shape::convex_polygon(xy_pts, Color32::from_rgba_premultiplied(255, 255, 100, 40), Stroke::NONE));
             }
             GizmoMode::Rotate => {
-                let r = gizmo_len * 0.8;
-                painter.circle_stroke(screen, r, Stroke::new(2.0, Color32::from_rgb(230, 50, 50)));
-                painter.circle_stroke(screen, r * 0.85, Stroke::new(2.0, Color32::from_rgb(50, 200, 50)));
-                painter.circle_stroke(screen, r * 0.7, Stroke::new(2.0, Color32::from_rgb(50, 80, 230)));
+                let r = gizmo_len * 0.85;
+                // X ring (red - pitch)
+                let x_color = if active == GizmoAxis::X { Color32::from_rgb(255, 100, 100) } else { Color32::from_rgb(230, 50, 50) };
+                let x_width = if active == GizmoAxis::X { 4.0 } else { 2.5 };
+                painter.circle_stroke(screen, r, Stroke::new(x_width, x_color));
+                
+                // Y ring (green - yaw)
+                let y_color = if active == GizmoAxis::Y { Color32::from_rgb(100, 255, 100) } else { Color32::from_rgb(50, 200, 50) };
+                let y_width = if active == GizmoAxis::Y { 4.0 } else { 2.5 };
+                painter.circle_stroke(screen, r * 0.85, Stroke::new(y_width, y_color));
+                
+                // Z ring (blue - roll)
+                let z_color = if active == GizmoAxis::Z { Color32::from_rgb(100, 150, 255) } else { Color32::from_rgb(50, 80, 230) };
+                let z_width = if active == GizmoAxis::Z { 4.0 } else { 2.5 };
+                painter.circle_stroke(screen, r * 0.7, Stroke::new(z_width, z_color));
+
+                // Labels
+                painter.text(Pos2::new(screen.x + r + 8.0, screen.y), egui::Align2::LEFT_CENTER, "X", egui::FontId::proportional(10.0), x_color);
+                painter.text(Pos2::new(screen.x, screen.y - r * 0.85 - 8.0), egui::Align2::CENTER_BOTTOM, "Y", egui::FontId::proportional(10.0), y_color);
             }
             GizmoMode::Scale => {
                 let s = gizmo_len;
+                
+                // Center cube (uniform scale)
+                let center_color = if active == GizmoAxis::All { Color32::from_rgb(255, 255, 100) } else { Color32::from_rgb(180, 180, 180) };
+                painter.rect_filled(Rect::from_center_size(screen, Vec2::splat(10.0)), 0.0, center_color);
+
                 // X
-                painter.line_segment([screen, Pos2::new(screen.x + s, screen.y)], Stroke::new(2.5, Color32::from_rgb(230, 50, 50)));
-                painter.rect_filled(Rect::from_center_size(Pos2::new(screen.x + s, screen.y), Vec2::splat(6.0)), 0.0, Color32::from_rgb(230, 50, 50));
+                let x_color = if active == GizmoAxis::X { Color32::from_rgb(255, 100, 100) } else { Color32::from_rgb(230, 50, 50) };
+                let x_width = if active == GizmoAxis::X { 4.0 } else { 3.0 };
+                painter.line_segment([screen, Pos2::new(screen.x + s, screen.y)], Stroke::new(x_width, x_color));
+                painter.rect_filled(Rect::from_center_size(Pos2::new(screen.x + s, screen.y), Vec2::splat(8.0)), 0.0, x_color);
+
                 // Y
-                painter.line_segment([screen, Pos2::new(screen.x, screen.y - s)], Stroke::new(2.5, Color32::from_rgb(50, 200, 50)));
-                painter.rect_filled(Rect::from_center_size(Pos2::new(screen.x, screen.y - s), Vec2::splat(6.0)), 0.0, Color32::from_rgb(50, 200, 50));
+                let y_color = if active == GizmoAxis::Y { Color32::from_rgb(100, 255, 100) } else { Color32::from_rgb(50, 200, 50) };
+                let y_width = if active == GizmoAxis::Y { 4.0 } else { 3.0 };
+                painter.line_segment([screen, Pos2::new(screen.x, screen.y - s)], Stroke::new(y_width, y_color));
+                painter.rect_filled(Rect::from_center_size(Pos2::new(screen.x, screen.y - s), Vec2::splat(8.0)), 0.0, y_color);
+
                 // Z
-                let zt = Pos2::new(screen.x - s * 0.5, screen.y + s * 0.3);
-                painter.line_segment([screen, zt], Stroke::new(2.5, Color32::from_rgb(50, 80, 230)));
-                painter.rect_filled(Rect::from_center_size(zt, Vec2::splat(6.0)), 0.0, Color32::from_rgb(50, 80, 230));
+                let z_color = if active == GizmoAxis::Z { Color32::from_rgb(100, 150, 255) } else { Color32::from_rgb(50, 80, 230) };
+                let z_width = if active == GizmoAxis::Z { 4.0 } else { 3.0 };
+                let zt = Pos2::new(screen.x - s * 0.5, screen.y + s * 0.4);
+                painter.line_segment([screen, zt], Stroke::new(z_width, z_color));
+                painter.rect_filled(Rect::from_center_size(zt, Vec2::splat(8.0)), 0.0, z_color);
             }
+        }
+
+        // Show active axis feedback
+        if active != GizmoAxis::None {
+            let axis_name = match active {
+                GizmoAxis::X => "X",
+                GizmoAxis::Y => "Y", 
+                GizmoAxis::Z => "Z",
+                GizmoAxis::XY => "XY",
+                GizmoAxis::XZ => "XZ",
+                GizmoAxis::YZ => "YZ",
+                GizmoAxis::All => "ALL",
+                GizmoAxis::None => "",
+            };
+            painter.text(
+                Pos2::new(screen.x, screen.y + gizmo_len + 20.0),
+                egui::Align2::CENTER_TOP,
+                format!("Dragging: {}", axis_name),
+                egui::FontId::proportional(10.0),
+                Color32::from_rgb(255, 220, 80),
+            );
         }
     }
 
