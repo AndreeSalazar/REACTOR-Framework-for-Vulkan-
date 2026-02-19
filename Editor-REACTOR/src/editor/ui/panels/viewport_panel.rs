@@ -71,6 +71,14 @@ pub enum GizmoAxis {
     All,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct AxisScreenData {
+    center: Pos2,
+    x_tip: Pos2,
+    y_tip: Pos2,
+    z_tip: Pos2,
+}
+
 pub struct ViewportPanel {
     pub is_focused: bool,
     // Gizmo interaction
@@ -492,7 +500,12 @@ impl ViewportPanel {
         if response.hovered() {
             let scroll = ui.input(|i| i.smooth_scroll_delta.y);
             if scroll != 0.0 {
-                ctx.camera.zoom(scroll * 0.01);
+                let precision = if ui.input(|i| i.modifiers.shift) {
+                    0.22
+                } else {
+                    1.0
+                };
+                ctx.camera.zoom(scroll * 0.01 * precision);
             }
         }
 
@@ -1116,10 +1129,9 @@ impl ViewportPanel {
             return;
         };
         let entity_pos = entity.transform.position;
-        let Some(center_screen) = ctx.camera.project(entity_pos, vp_size) else {
+        let Some(axis_screen) = self.build_axis_screen_data(ctx, entity_pos, vp_size, rect) else {
             return;
         };
-        let gizmo_center = Pos2::new(rect.min.x + center_screen.x, rect.min.y + center_screen.y);
 
         // Get mouse position
         let mouse_pos = ui.input(|i| i.pointer.hover_pos()).unwrap_or(Pos2::ZERO);
@@ -1129,11 +1141,8 @@ impl ViewportPanel {
 
         // Check for drag start on gizmo axes
         if response.drag_started_by(egui::PointerButton::Primary) {
-            let dx = mouse_pos.x - gizmo_center.x;
-            let dy = mouse_pos.y - gizmo_center.y;
-
             // Detect which axis was clicked
-            let axis = self.detect_gizmo_axis(dx, dy, gizmo_len, ctx.gizmo_mode);
+            let axis = self.detect_gizmo_axis(mouse_pos, &axis_screen, gizmo_len, ctx.gizmo_mode);
 
             if axis != GizmoAxis::None {
                 self.active_axis = axis;
@@ -1276,43 +1285,50 @@ impl ViewportPanel {
         }
     }
 
-    fn detect_gizmo_axis(&self, dx: f32, dy: f32, gizmo_len: f32, mode: GizmoMode) -> GizmoAxis {
+    fn detect_gizmo_axis(
+        &self,
+        mouse: Pos2,
+        axis_screen: &AxisScreenData,
+        gizmo_len: f32,
+        mode: GizmoMode,
+    ) -> GizmoAxis {
         let hit_radius = 12.0;
 
         match mode {
             GizmoMode::Translate | GizmoMode::Scale => {
-                // X axis (right)
-                if dx > 10.0 && dx < gizmo_len + hit_radius && dy.abs() < hit_radius {
+                if self.point_to_segment_distance(mouse, axis_screen.center, axis_screen.x_tip)
+                    < hit_radius
+                {
                     return GizmoAxis::X;
                 }
-                // Y axis (up)
-                if dy < -10.0 && dy > -(gizmo_len + hit_radius) && dx.abs() < hit_radius {
+                if self.point_to_segment_distance(mouse, axis_screen.center, axis_screen.y_tip)
+                    < hit_radius
+                {
                     return GizmoAxis::Y;
                 }
-                // Z axis (diagonal)
-                let z_dx = -gizmo_len * 0.5;
-                let z_dy = gizmo_len * 0.3;
-                let dist_to_z = ((dx - z_dx * 0.5).powi(2) + (dy - z_dy * 0.5).powi(2)).sqrt();
-                if dist_to_z < gizmo_len * 0.6 && dx < 0.0 && dy > 0.0 {
+                if self.point_to_segment_distance(mouse, axis_screen.center, axis_screen.z_tip)
+                    < hit_radius
+                {
                     return GizmoAxis::Z;
                 }
-                // Center (all axes)
-                if dx.abs() < 15.0 && dy.abs() < 15.0 {
+
+                let center_dx = mouse.x - axis_screen.center.x;
+                let center_dy = mouse.y - axis_screen.center.y;
+                if center_dx.abs() < 15.0 && center_dy.abs() < 15.0 {
                     return GizmoAxis::All;
                 }
             }
             GizmoMode::Rotate => {
+                let dx = mouse.x - axis_screen.center.x;
+                let dy = mouse.y - axis_screen.center.y;
                 let dist = (dx * dx + dy * dy).sqrt();
                 let r = gizmo_len * 0.8;
-                // X ring (outermost)
                 if (dist - r).abs() < hit_radius {
                     return GizmoAxis::X;
                 }
-                // Y ring (middle)
                 if (dist - r * 0.85).abs() < hit_radius {
                     return GizmoAxis::Y;
                 }
-                // Z ring (innermost)
                 if (dist - r * 0.7).abs() < hit_radius {
                     return GizmoAxis::Z;
                 }
@@ -1321,6 +1337,47 @@ impl ViewportPanel {
         }
 
         GizmoAxis::None
+    }
+
+    fn point_to_segment_distance(&self, p: Pos2, a: Pos2, b: Pos2) -> f32 {
+        let ab = b - a;
+        let ap = p - a;
+        let ab_len_sq = ab.x * ab.x + ab.y * ab.y;
+        if ab_len_sq <= f32::EPSILON {
+            return ap.length();
+        }
+
+        let t = ((ap.x * ab.x + ap.y * ab.y) / ab_len_sq).clamp(0.0, 1.0);
+        let closest = a + ab * t;
+        (p - closest).length()
+    }
+
+    fn build_axis_screen_data(
+        &self,
+        ctx: &EditorContext,
+        pos: Vec3,
+        vp_size: glam::Vec2,
+        rect: Rect,
+    ) -> Option<AxisScreenData> {
+        let center = ctx.camera.project(pos, vp_size)?;
+        let axis_len_world = (ctx.camera.distance * 0.16).clamp(0.5, 2.6);
+
+        let x = ctx
+            .camera
+            .project(pos + Vec3::X * axis_len_world, vp_size)?;
+        let y = ctx
+            .camera
+            .project(pos + Vec3::Y * axis_len_world, vp_size)?;
+        let z = ctx
+            .camera
+            .project(pos + Vec3::Z * axis_len_world, vp_size)?;
+
+        Some(AxisScreenData {
+            center: Pos2::new(rect.min.x + center.x, rect.min.y + center.y),
+            x_tip: Pos2::new(rect.min.x + x.x, rect.min.y + x.y),
+            y_tip: Pos2::new(rect.min.x + y.x, rect.min.y + y.y),
+            z_tip: Pos2::new(rect.min.x + z.x, rect.min.y + z.y),
+        })
     }
 
     // =====================================================================
@@ -1338,10 +1395,10 @@ impl ViewportPanel {
             return;
         };
         let pos = entity.transform.position;
-        let Some(center) = ctx.camera.project(pos, vp_size) else {
+        let Some(axis_screen) = self.build_axis_screen_data(ctx, pos, vp_size, rect) else {
             return;
         };
-        let screen = Pos2::new(rect.min.x + center.x, rect.min.y + center.y);
+        let screen = axis_screen.center;
 
         if !rect.contains(screen) {
             return;
@@ -1379,9 +1436,9 @@ impl ViewportPanel {
                     Color32::from_rgb(230, 50, 50)
                 };
                 let x_width = if active == GizmoAxis::X { 4.0 } else { 3.0 };
-                let x_tip = Pos2::new(screen.x + gizmo_len, screen.y);
+                let x_tip = axis_screen.x_tip;
                 painter.line_segment([screen, x_tip], Stroke::new(x_width, x_color));
-                self.draw_arrow_head(painter, x_tip, Vec2::new(1.0, 0.0), x_color);
+                self.draw_arrow_head(painter, x_tip, (x_tip - screen).normalized(), x_color);
                 painter.text(
                     Pos2::new(x_tip.x + 8.0, x_tip.y),
                     egui::Align2::LEFT_CENTER,
@@ -1397,9 +1454,9 @@ impl ViewportPanel {
                     Color32::from_rgb(50, 200, 50)
                 };
                 let y_width = if active == GizmoAxis::Y { 4.0 } else { 3.0 };
-                let y_tip = Pos2::new(screen.x, screen.y - gizmo_len);
+                let y_tip = axis_screen.y_tip;
                 painter.line_segment([screen, y_tip], Stroke::new(y_width, y_color));
-                self.draw_arrow_head(painter, y_tip, Vec2::new(0.0, -1.0), y_color);
+                self.draw_arrow_head(painter, y_tip, (y_tip - screen).normalized(), y_color);
                 painter.text(
                     Pos2::new(y_tip.x, y_tip.y - 10.0),
                     egui::Align2::CENTER_BOTTOM,
@@ -1415,9 +1472,9 @@ impl ViewportPanel {
                     Color32::from_rgb(50, 80, 230)
                 };
                 let z_width = if active == GizmoAxis::Z { 4.0 } else { 3.0 };
-                let z_tip = Pos2::new(screen.x - gizmo_len * 0.5, screen.y + gizmo_len * 0.4);
+                let z_tip = axis_screen.z_tip;
                 painter.line_segment([screen, z_tip], Stroke::new(z_width, z_color));
-                self.draw_arrow_head(painter, z_tip, Vec2::new(-0.5, 0.4).normalized(), z_color);
+                self.draw_arrow_head(painter, z_tip, (z_tip - screen).normalized(), z_color);
                 painter.text(
                     Pos2::new(z_tip.x - 8.0, z_tip.y),
                     egui::Align2::RIGHT_CENTER,
@@ -1706,7 +1763,7 @@ impl ViewportPanel {
 
         // Bottom-center: controls hint
         {
-            let hint = "MMB: Orbit  Shift+MMB: Pan  Scroll: Zoom  F: Focus  1/3/7: Views";
+            let hint = "MMB: Orbit  Shift+MMB: Pan  Scroll: Zoom  Shift+Wheel: Precision Zoom  F: Focus  1/3/7: Views";
             painter.text(
                 Pos2::new(rect.center().x, rect.max.y - 10.0),
                 egui::Align2::CENTER_BOTTOM,
