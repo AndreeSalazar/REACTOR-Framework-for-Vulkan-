@@ -10,6 +10,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include "core.hpp"
 
 namespace reactor {

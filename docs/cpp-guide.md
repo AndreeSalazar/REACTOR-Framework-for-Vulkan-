@@ -1,19 +1,20 @@
-# REACTOR Framework - Guia de Desarrollo en C++
+# REACTOR Framework — Guía de Desarrollo en C++
 
-**Version 1.0.5** | Para desarrolladores C++
+**Versión 1.0.5** | Para desarrolladores C++ | Powered by Salazar-interactive
 
-## Introduccion
+## Introducción
 
-Esta guia te ensena a crear juegos con REACTOR usando C++ a traves del C ABI.
+Esta guía te enseña a crear juegos con REACTOR usando C++ a través del C ABI.
+REACTOR expone **3300+ funciones** desde Rust vía `extern "C"`, y el **C++ SDK** (1477 líneas header-only) las envuelve en clases RAII idiomáticas.
 
 ## Requisitos
 
-- CMake 3.20+
+- CMake 3.16+
 - Compilador C++17 (MSVC, GCC, Clang)
 - Vulkan SDK 1.3+
-- reactor_c_api.dll (compilado desde Rust)
+- `reactor_c_api.dll` (compilado desde Rust)
 
-## Configuracion del Proyecto
+## Configuración del Proyecto
 
 ### Compilar la C API
 
@@ -27,22 +28,19 @@ Esto genera `reactor_c_api.dll` en `cpp/reactor_c_api/target/release/`.
 ### CMakeLists.txt
 
 ```cmake
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.16)
 project(MiJuego)
 
 set(CMAKE_CXX_STANDARD 17)
 
-# Incluir headers de REACTOR
 include_directories(path/to/REACTOR/cpp/reactor_cpp/include)
 
-# Ejecutable
 add_executable(mi_juego main.cpp)
 
-# Linkear contra la C API
 target_link_directories(mi_juego PRIVATE path/to/REACTOR/cpp/reactor_c_api/target/release)
 target_link_libraries(mi_juego PRIVATE reactor_c_api.dll.lib)
 
-# Copiar DLL
+# Copiar DLL al lado del ejecutable
 add_custom_command(TARGET mi_juego POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "path/to/REACTOR/cpp/reactor_c_api/target/release/reactor_c_api.dll"
@@ -50,241 +48,250 @@ add_custom_command(TARGET mi_juego POST_BUILD
 )
 ```
 
-## Patron ReactorApp
+## Patrón ReactorApp
 
 ### Estilo Clase (Recomendado)
 
 ```cpp
-#include <reactor/reactor.hpp>
+#include <reactor/application.hpp>
+using namespace reactor;
 
-class MiJuego : public reactor::Application {
+class MiJuego : public Application {
     float rotacion = 0.0f;
 
 public:
     Config config() override {
-        return Config("Mi Juego")
-            .with_size(1920, 1080)
-            .with_vsync(true)
-            .with_msaa(4);
+        return Config("Mi Juego", 1920, 1080).with_msaa(4);
     }
 
     void on_init() override {
-        // Configurar camara
-        Camera::set_position({0.0f, 2.0f, 5.0f});
-        Camera::set_target({0.0f, 0.0f, 0.0f});
-        
-        // Agregar luz
-        Lighting::add_directional({-0.5f, -1.0f, -0.3f}, {1.0f, 1.0f, 1.0f}, 1.0f);
+        Camera::set_position({0, 2, 5});
+        Camera::set_target({0, 0, 0});
+        Lighting::add_directional({-0.5f, -1, -0.3f}, {1, 1, 1}, 1.0f);
     }
 
     void on_update(float dt) override {
         rotacion += dt;
-        
-        // Input
-        if (Input::key_pressed(Key::Escape)) {
-            request_close();
-        }
+        if (Input::key_pressed(Input::KEY_ESCAPE())) Window::request_close();
     }
 };
 
-int main() {
-    return MiJuego().run();
-}
+int main() { return MiJuego().run(); }
 ```
 
-### Estilo Funcional (Lambda)
+### Estilo Lambda (Prototyping rápido)
 
 ```cpp
-#include <reactor/reactor.hpp>
+#include <reactor/application.hpp>
 
 int main() {
-    float rotacion = 0.0f;
-    
+    float rot = 0;
     return reactor::ReactorApp(
-        "Mi Juego",
-        1280, 720,
-        [&]() {
-            // on_init
-            reactor::Camera::set_position({0, 2, 5});
-        },
-        [&](float dt) {
-            // on_update
-            rotacion += dt;
-        },
-        [&]() {
-            // on_render (opcional)
-        }
+        reactor::Config("Mi Juego").with_size(1280, 720),
+        []() { reactor::Camera::set_position({0, 2, 5}); },
+        [&](float dt) { rot += dt; },
+        []() {}
     );
 }
 ```
 
-### Estilo Ultra-Simple (C API Directo)
+## API Completa del C++ SDK
+
+### Cámara
 
 ```cpp
-#include <cstdint>
-#include <cstdio>
-
-extern "C" {
-    int32_t reactor_run_simple(const char* title, uint32_t w, uint32_t h,
-        void(*init)(), void(*update)(float), void(*render)());
-    void reactor_set_camera_position(float x, float y, float z);
-    int32_t reactor_key_pressed(uint32_t key);
-    uint32_t reactor_key_escape();
-    void reactor_request_close();
-}
-
-void on_init() {
-    reactor_set_camera_position(0, 2, 5);
-}
-
-void on_update(float dt) {
-    if (reactor_key_pressed(reactor_key_escape())) {
-        reactor_request_close();
-    }
-}
-
-void on_render() {}
-
-int main() {
-    return reactor_run_simple("Mi Juego", 1280, 720, on_init, on_update, on_render);
-}
+Camera::set_position({x, y, z});
+Camera::set_target({x, y, z});
+Vec3 pos = Camera::position();
+Mat4 vp = Camera::view_projection();
 ```
 
-## API de C++ (reactor.hpp)
-
-### Camara
+### Iluminación
 
 ```cpp
-reactor::Camera::set_position({x, y, z});
-reactor::Camera::set_target({x, y, z});
-auto pos = reactor::Camera::get_position();
-```
-
-### Iluminacion
-
-```cpp
-reactor::Lighting::add_directional({dx, dy, dz}, {r, g, b}, intensity);
-reactor::Lighting::add_point({x, y, z}, {r, g, b}, intensity, range);
-reactor::Lighting::add_spot({x, y, z}, {dx, dy, dz}, {r, g, b}, intensity, range, angle);
+Lighting::add_directional({dx, dy, dz}, {r, g, b}, intensity);
+Lighting::add_point({x, y, z}, {r, g, b}, intensity, range);
+Lighting::add_spot({x, y, z}, {dx, dy, dz}, {r, g, b}, intensity, range, angle);
+Lighting::clear();
+uint32_t count = Lighting::count();
 ```
 
 ### Input
 
 ```cpp
-if (reactor::Input::key_pressed(reactor::Key::Space)) { /* una vez */ }
-if (reactor::Input::key_down(reactor::Key::W)) { /* mientras presionado */ }
-
-auto [mx, my] = reactor::Input::mouse_position();
-auto [dx, dy] = reactor::Input::mouse_delta();
+if (Input::key_pressed(Input::KEY_SPACE())) { /* una vez */ }
+if (Input::key_down(Input::KEY_W())) { /* mientras presionado */ }
+auto [mx, my] = Input::mouse_position();
+auto [dx, dy] = Input::mouse_delta();
 ```
 
 ### Escena
 
 ```cpp
-// Crear mesh y material
-auto* mesh = reactor::Mesh::create_cube();
-auto* material = reactor::Material::create_simple(1.0f, 0.5f, 0.2f);
+auto* mesh = reactor_create_cube();
+auto* mat = reactor_create_material_simple(1.0f, 0.5f, 0.2f);
+int32_t idx = Scene::add_object(mesh, mat, transform);
+Scene::set_transform(idx, new_transform);
+Scene::set_visible(idx, false);
+Scene::clear();
+```
 
-// Agregar a escena
-int32_t index = reactor::Scene::add_object(mesh, material, transform);
+### ECS — Entity Component System
 
-// Modificar
-reactor::Scene::set_transform(index, new_transform);
+```cpp
+// Crear entidad
+Entity player = Entity::create("Player");
+player.set_position(Vec3(0, 1, 0));
+player.add_mesh_renderer(mesh_id, material_id);
+
+// Componentes
+player.add_rigidbody(80.0f, false);  // mass, is_kinematic
+player.apply_force(Vec3(0, 500, 0));
+
+CLight light{};
+light.light_type = 1;  // Point
+light.color = {1, 0.8f, 0.6f};
+light.intensity = 2.0f;
+light.range = 10.0f;
+player.add_light(light);
+
+// Queries
+auto entities = ECS::query(COMPONENT_MESH_RENDERER | COMPONENT_RIGIDBODY);
+for (auto& e : entities) {
+    Vec3 pos = e.position();
+    // ...
+}
+
+// Cleanup
+player.destroy();
+```
+
+### PBR Materials
+
+```cpp
+// Crear material base
+uint32_t mat = PBRMaterial::create("Gold");
+PBRMaterial::set_base_color(mat, 1.0f, 0.84f, 0.0f, 1.0f);
+PBRMaterial::set_metallic(mat, 1.0f);
+PBRMaterial::set_roughness(mat, 0.3f);
+
+// Crear instancia con variaciones
+uint32_t inst = PBRMaterial::create_instance(mat);
+PBRMaterial::set_roughness(inst, 0.8f);
+
+// Emissive
+PBRMaterial::set_emissive(mat, 0.0f, 1.0f, 0.0f, 5.0f);
+
+PBRMaterial::destroy(mat);
+```
+
+### FrameGraph
+
+```cpp
+// Crear graph
+uint32_t graph = FrameGraph::create();
+
+// Declarar recursos
+uint32_t color = FrameGraph::create_resource(graph, "GBuffer_Color", 0, 1920, 1080);
+uint32_t depth = FrameGraph::create_resource(graph, "Depth", 1, 1920, 1080);
+
+// Declarar passes
+uint32_t geo_pass = FrameGraph::add_pass(graph, "GeometryPass", 0);
+FrameGraph::pass_write(graph, geo_pass, color);
+FrameGraph::pass_write(graph, geo_pass, depth);
+
+uint32_t light_pass = FrameGraph::add_pass(graph, "LightingPass", 1);
+FrameGraph::pass_read(graph, light_pass, color);
+
+// Compilar (auto-barriers)
+FrameGraph::compile(graph);
+
+// O usar presets
+uint32_t forward = FrameGraph::create_forward(1920, 1080);
+uint32_t deferred = FrameGraph::create_deferred(1920, 1080);
+```
+
+### Render Stats y Telemetría
+
+```cpp
+auto stats = RenderStats::get();
+printf("FPS: %.0f | Draw: %u | Tris: %u | VRAM: %u MB\n",
+    stats.fps, stats.draw_calls, stats.triangles, stats.vram_total_mb);
+
+auto budget = RenderStats::memory_budget();
+printf("Device Local: %llu MB\n", budget.device_local_budget / (1024*1024));
+
+// GPU Info
+printf("GPU: %s\n", GPUInfo::name());
+printf("VRAM: %u MB\n", GPUInfo::vram_mb());
+printf("RT: %s\n", GPUInfo::raytracing_supported() ? "YES" : "NO");
+```
+
+### PlayMode (Editor Bridge)
+
+```cpp
+PlayMode::enter();    // Snapshot scene, start play
+PlayMode::pause(true);
+PlayMode::update(dt);
+float pt = PlayMode::time();
+PlayMode::exit();     // Restore scene snapshot
+```
+
+### Scene Serialization
+
+```cpp
+std::string json = SceneSerializer::serialize();
+printf("Scene: %s\n", json.c_str());
 ```
 
 ### Tiempo
 
 ```cpp
-float dt = reactor::Time::delta();
-float total = reactor::Time::total();
-float fps = reactor::Time::fps();
-uint64_t frame = reactor::Time::frame_count();
+float dt = Time::delta();
+float total = Time::total();
+float fps = Time::fps();
+uint64_t frame = Time::frame_count();
 ```
 
-### Info
+## Ejemplos C++ (9 demos)
 
-```cpp
-const char* gpu = reactor::GPU::name();
-uint32_t msaa = reactor::GPU::msaa_samples();
-```
+Todos en `cpp/examples/3D/`:
 
-## C API Directo
+| Carpeta | Ejecutable | Qué demuestra |
+| ------- | ---------- | ------------- |
+| `main_basic.cpp` | `reactor_3d` | Lifecycle básico, cubo con material |
+| `ecs_scene/` | `reactor_ecs_scene` | Entity CRUD, components, queries |
+| `pbr_materials/` | `reactor_pbr_materials` | PBR metallic/roughness, instances, emissive |
+| `frame_graph/` | `reactor_frame_graph` | Custom render passes, forward/deferred |
+| `fps_controller/` | `reactor_fps_controller` | WASD + mouse look + jump + gravity |
+| `lighting_showcase/` | `reactor_lighting` | Directional, point, spot lights animados |
+| `telemetry_stats/` | `reactor_telemetry` | GPU stats, memory budget, serialización |
+| `play_mode/` | `reactor_play_mode` | Enter/exit/pause play mode |
+| `multi_object/` | `reactor_multi_object` | 225 objetos, wave, visibility, queries |
 
-Si prefieres usar el C API directamente:
-
-```cpp
-extern "C" {
-    // Core
-    int32_t reactor_run_simple(const char*, uint32_t, uint32_t, void(*)(), void(*)(float), void(*)());
-    void reactor_request_close();
-    
-    // Camera
-    void reactor_set_camera_position(float, float, float);
-    void reactor_set_camera_target(float, float, float);
-    
-    // Lighting
-    int32_t reactor_add_directional_light(float, float, float, float, float, float, float);
-    int32_t reactor_add_point_light(float, float, float, float, float, float, float, float);
-    
-    // Input
-    int32_t reactor_key_pressed(uint32_t);
-    int32_t reactor_key_down(uint32_t);
-    uint32_t reactor_key_w();
-    uint32_t reactor_key_escape();
-    
-    // Scene
-    void* reactor_create_cube();
-    void* reactor_create_material_simple(float, float, float);
-    int32_t reactor_add_object(void*, void*, CMat4);
-    
-    // Info
-    const char* reactor_get_gpu_name();
-    float reactor_get_fps();
-}
-```
-
-## Estructura de Proyecto
-
-```
-mi-juego/
-  CMakeLists.txt
-  src/
-    main.cpp
-    game.hpp
-    game.cpp
-  assets/
-    shaders/
-    textures/
-  libs/
-    reactor_c_api.dll
-    reactor_c_api.dll.lib
-```
-
-## Compilar y Ejecutar
+### Compilar y ejecutar todos
 
 ```bash
-mkdir build
-cd build
-cmake ..
-cmake --build . --config Release
-./Release/mi_juego.exe
+# 1. Compilar C API
+cargo build --release -p reactor-c-api
+
+# 2. Compilar ejemplos
+cd cpp/examples/3D
+cmake -B build
+cmake --build build --config Release
+
+# 3. Ejecutar cualquiera
+./build/Release/reactor_lighting.exe
 ```
 
 ## Tips
 
-1. **Copiar DLL** - Asegurate de que `reactor_c_api.dll` este junto al ejecutable
-2. **C++17** - Usa features modernas como structured bindings
-3. **RAII** - Los wrappers C++ manejan memoria automaticamente
-4. **Delta time** - Siempre multiplica movimiento por `dt`
-
-## Ejemplos
-
-Ver ejemplos en:
-
-- `cpp/examples/hello_cpp/` - Ejemplo basico
-- `cpp/examples/simple_cube/` - Cubo rotando
-- `cpp/examples/3D/` - Ejemplo completo 3D
+1. **Copiar DLL** — `reactor_c_api.dll` debe estar junto al ejecutable
+2. **C++17** — Usa structured bindings, `std::string`, etc.
+3. **RAII** — Los wrappers C++ manejan memoria automáticamente
+4. **Delta time** — Siempre multiplica movimiento por `dt`
+5. **Ownership** — Rust crea → Rust destruye. Nunca `delete` un handle
 
 ## Licencia
 
-MIT License
+MIT License — **Powered by Salazar-interactive**

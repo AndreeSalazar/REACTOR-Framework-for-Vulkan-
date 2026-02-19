@@ -164,10 +164,12 @@ fn main() { reactor::run(MiJuego); }
 ## 🔨 Compilar C++ SDK
 
 ### Requisitos Adicionales
-- CMake 3.16+
-- Compilador C++20 (MSVC 2022, GCC 11+, Clang 14+)
 
-### Compilar DLL de Rust
+- CMake 3.16+
+- Compilador C++17 (MSVC 2022, GCC 11+, Clang 14+)
+
+### Paso 1: Compilar DLL de Rust
+
 ```bash
 cd cpp/reactor_c_api
 cargo build --release
@@ -177,27 +179,56 @@ cargo build --release
 #                   target/release/libreactor_c_api.dylib (macOS)
 ```
 
-### Compilar Proyecto C++
+### Paso 2: Compilar los 9 Ejemplos C++
+
 ```bash
-cd cpp
-mkdir build && cd build
-cmake ..
-cmake --build . --config Release
+cd cpp/examples/3D
+cmake -B build
+cmake --build build --config Release
 ```
 
-### Ejemplo C++
-```cpp
-#include <reactor/reactor.hpp>
+### Paso 3: Ejecutar Ejemplos
 
-class MiJuego : public reactor::Application {
+```bash
+# Windows
+.\build\Release\reactor_3d.exe              # Cubo básico
+.\build\Release\reactor_ecs_scene.exe       # ECS entity/component CRUD
+.\build\Release\reactor_pbr_materials.exe   # PBR materials system
+.\build\Release\reactor_frame_graph.exe     # FrameGraph render passes
+.\build\Release\reactor_fps_controller.exe  # FPS controller + physics
+.\build\Release\reactor_lighting.exe        # Multi-light showcase
+.\build\Release\reactor_telemetry.exe       # GPU stats + telemetry
+.\build\Release\reactor_play_mode.exe       # Play-in-editor bridge
+.\build\Release\reactor_multi_object.exe    # 225 objects scene
+
+# Linux/macOS
+./build/reactor_3d
+./build/reactor_ecs_scene
+./build/reactor_lighting
+# ... etc
+```
+
+### Ejemplo C++ Mínimo
+
+```cpp
+#include <reactor/application.hpp>
+using namespace reactor;
+
+class MiJuego : public Application {
     float rotacion = 0.0f;
 
     Config config() override {
-        return Config("Mi Juego C++").with_size(1920, 1080);
+        return Config("Mi Juego C++", 1920, 1080).with_msaa(4);
+    }
+
+    void on_init() override {
+        Camera::set_position({0, 2, 5});
+        Lighting::add_directional({-0.5f, -1, -0.3f}, {1, 1, 1}, 1.0f);
     }
 
     void on_update(float dt) override {
         rotacion += dt;
+        if (Input::key_pressed(Input::KEY_ESCAPE())) Window::request_close();
     }
 };
 
@@ -208,28 +239,41 @@ int main() { return MiJuego().run(); }
 
 ## 📁 Estructura de Archivos
 
-```
+```text
 REACTOR-Framework-for-Vulkan-/
-├── src/                    # Código fuente Rust
-│   ├── lib.rs              # Punto de entrada de la librería
-│   ├── app.rs              # ReactorApp trait + ReactorConfig
-│   ├── reactor.rs          # Reactor principal (Vulkan)
-│   └── ...                 # Módulos core/graphics/resources/systems
+├── image.svg               # Logo REACTOR (Salazar-interactive)
+├── README.md               # Documentación principal
+├── HOW_BUILD.md            # Esta guía
+├── Cargo.toml              # Proyecto Rust (v1.0.5)
 │
-├── examples/               # Ejemplos ejecutables
-│   ├── cube.rs             # ← EMPIEZA AQUÍ (base con controles)
-│   ├── textured_cube.rs    # Demo con textura
-│   └── sandbox.rs          # Sandbox experimental
+├── src/                    # Rust Core
+│   ├── lib.rs              # Exports + Prelude
+│   ├── reactor.rs          # Vulkan rendering
+│   ├── core/               # VulkanContext, Device, Allocator
+│   ├── graphics/           # Swapchain, Pipeline, MSAA, Depth
+│   ├── raytracing/         # RT Context, BLAS/TLAS, Pipeline
+│   ├── compute/            # ComputePipeline, Dispatch
+│   ├── resources/          # Mesh, Material, Texture, Vertex
+│   ├── systems/            # Input, ECS, Scene, Camera
+│   └── utils/              # GPUDetector, Time
 │
-├── shaders/                # Shaders SPIR-V
-│   ├── vert.spv            # Vertex shader compilado
-│   └── frag.spv            # Fragment shader compilado
+├── examples/               # Ejemplos Rust (5)
+│   ├── cube.rs             # ← EMPIEZA AQUÍ
+│   ├── textured_cube.rs    # Cubo con textura
+│   ├── sandbox.rs          # Sandbox experimental
+│   ├── physics_camera.rs   # Cámara con física
+│   └── obj_loader_demo.rs  # Carga de modelos OBJ
 │
-├── cpp/                    # SDK C++
-│   ├── reactor_c_api/      # Rust → C ABI bridge
-│   └── reactor_cpp/        # C++ SDK headers
+├── shaders/                # Shaders GLSL + SPIR-V
 │
-└── Cargo.toml              # Configuración del proyecto
+├── cpp/                    # C++ SDK completo
+│   ├── reactor_c_api/      # Rust → C ABI (3300+ líneas)
+│   ├── reactor_cpp/        # C++ SDK headers (1477 líneas)
+│   └── examples/3D/        # 9 ejemplos C++ (ver arriba)
+│
+├── docs/                   # Documentación
+│
+└── Editor-REACTOR/         # Editor visual (egui + egui_dock)
 ```
 
 ---

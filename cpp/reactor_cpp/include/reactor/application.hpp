@@ -20,6 +20,7 @@
 #include <functional>
 #include <vector>
 #include <cmath>
+#include <algorithm>
 
 namespace reactor {
 
@@ -99,90 +100,7 @@ struct Camera {
     }
 };
 
-// =============================================================================
-// GPU — GPU Information
-// =============================================================================
-
-struct GPU {
-    static const char* name() { return reactor_get_gpu_name(); }
-    static uint32_t msaa_samples() { return reactor_get_msaa_samples(); }
-};
-
-// =============================================================================
-// Lighting — Light management
-// =============================================================================
-
-struct Lighting {
-    static int32_t add_directional(const Vec3& dir, const Vec3& color, float intensity) {
-        return reactor_add_directional_light(dir.x, dir.y, dir.z, color.x, color.y, color.z, intensity);
-    }
-    static int32_t add_point(const Vec3& pos, const Vec3& color, float intensity, float range) {
-        return reactor_add_point_light(pos.x, pos.y, pos.z, color.x, color.y, color.z, intensity, range);
-    }
-    static int32_t add_spot(const Vec3& pos, const Vec3& dir, const Vec3& color, float intensity, float range, float angle) {
-        return reactor_add_spot_light(pos.x, pos.y, pos.z, dir.x, dir.y, dir.z, color.x, color.y, color.z, intensity, range, angle);
-    }
-    static void clear() { reactor_clear_lights(); }
-    static uint32_t count() { return reactor_light_count(); }
-};
-
-// =============================================================================
-// MeshHandle / MaterialHandle — Opaque handles for resources
-// =============================================================================
-
-using MeshHandle = void;
-using MaterialHandle = void;
-
-// =============================================================================
-// Mesh — Mesh creation
-// =============================================================================
-
-struct Mesh {
-    static MeshHandle* create_cube() {
-        return reactor_create_cube();
-    }
-    static void destroy(MeshHandle* mesh) {
-        if (mesh) reactor_destroy_mesh(mesh);
-    }
-};
-
-// =============================================================================
-// Material — Material creation
-// =============================================================================
-
-struct Material {
-    static MaterialHandle* create_simple(float r, float g, float b) {
-        return reactor_create_material_simple(r, g, b);
-    }
-    static void destroy(MaterialHandle* material) {
-        if (material) reactor_destroy_material(material);
-    }
-};
-
-// =============================================================================
-// Scene — Scene management
-// =============================================================================
-
-struct Scene {
-    static int32_t add_object(MeshHandle* mesh, MaterialHandle* material, const Mat4& transform) {
-        return reactor_add_object(mesh, material, transform.to_c());
-    }
-    static void set_transform(uint32_t index, const Mat4& transform) {
-        reactor_set_object_transform(index, transform.to_c());
-    }
-    static Mat4 get_transform(uint32_t index) {
-        return Mat4(reactor_get_object_transform(index));
-    }
-    static void set_visible(uint32_t index, bool visible) {
-        reactor_set_object_visible(index, visible);
-    }
-    static uint32_t object_count() {
-        return reactor_object_count();
-    }
-    static void clear() {
-        reactor_clear_scene();
-    }
-};
+// (GPU, Lighting, Mesh, Material, Scene structs defined below with full implementations)
 
 // =============================================================================
 // SDF — Signed Distance Functions (ADead-GPU)
@@ -322,7 +240,8 @@ struct Scene {
 
     /// Set transform for an object
     static void set_transform(uint32_t index, const Mat4& transform) {
-        reactor_set_object_transform(index, transform.to_c());
+        CMat4 c = transform;
+        reactor_set_object_transform(index, c);
     }
 
     /// Get transform for an object
@@ -388,13 +307,13 @@ struct Lighting {
 
 class Mesh {
 private:
-    void* handle_ = nullptr;
+    MeshHandle* handle_ = nullptr;
     uint32_t vertex_count_ = 0;
     uint32_t index_count_ = 0;
 
 public:
     Mesh() = default;
-    explicit Mesh(void* handle) : handle_(handle) {}
+    explicit Mesh(MeshHandle* handle) : handle_(handle) {}
 
     /// Create a cube mesh (built-in primitive)
     static Mesh cube() {
@@ -504,7 +423,7 @@ public:
     uint32_t index_count() const { return index_count_; }
 
     /// Get raw handle
-    void* raw() const { return handle_; }
+    MeshHandle* raw() const { return handle_; }
 };
 
 // =============================================================================
@@ -512,7 +431,7 @@ public:
 // =============================================================================
 
 class Texture {
-    void* handle_ = nullptr;
+    TextureHandle* handle_ = nullptr;
     uint32_t width_ = 0;
     uint32_t height_ = 0;
 
@@ -597,7 +516,7 @@ public:
     uint32_t height() const { return height_; }
 
     /// Get raw handle (for advanced use)
-    void* raw() const { return handle_; }
+    TextureHandle* raw() const { return handle_; }
 };
 
 // =============================================================================
@@ -606,15 +525,15 @@ public:
 
 class Material {
 private:
-    void* handle_ = nullptr;
+    MaterialHandle* handle_ = nullptr;
 
 public:
     Material() = default;
-    explicit Material(void* handle) : handle_(handle) {}
+    explicit Material(MaterialHandle* handle) : handle_(handle) {}
 
     /// Create a basic material from SPIR-V shader code
     static Material from_shaders(const std::vector<uint32_t>& vert_spv, const std::vector<uint32_t>& frag_spv) {
-        void* handle = reactor_create_material(
+        MaterialHandle* handle = reactor_create_material(
             vert_spv.data(), static_cast<uint32_t>(vert_spv.size()),
             frag_spv.data(), static_cast<uint32_t>(frag_spv.size())
         );
@@ -623,7 +542,7 @@ public:
 
     /// Create a textured material from SPIR-V shader code and texture
     static Material from_texture(const std::vector<uint32_t>& vert_spv, const std::vector<uint32_t>& frag_spv, const Texture& texture) {
-        void* handle = reactor_create_textured_material(
+        MaterialHandle* handle = reactor_create_textured_material(
             vert_spv.data(), static_cast<uint32_t>(vert_spv.size()),
             frag_spv.data(), static_cast<uint32_t>(frag_spv.size()),
             texture.raw()
@@ -660,7 +579,7 @@ public:
     explicit operator bool() const { return valid(); }
 
     /// Get raw handle (for advanced use)
-    void* raw() const { return handle_; }
+    MaterialHandle* raw() const { return handle_; }
 };
 
 // =============================================================================
@@ -709,28 +628,28 @@ public:
 
     /// Set transform
     void set_transform(const Mat4& transform) {
-        if (valid()) reactor_set_object_transform(index_, transform.to_c());
+        if (valid()) { CMat4 c = transform; reactor_set_object_transform(index_, c); }
     }
 
     /// Get transform
     Mat4 transform() const {
         if (valid()) return Mat4(reactor_get_object_transform(index_));
-        return Mat4::identity();
+        return Mat4::Identity();
     }
 
     /// Set position (convenience)
     void set_position(const Vec3& pos) {
         Mat4 t = transform();
-        t.m[12] = pos.x;
-        t.m[13] = pos.y;
-        t.m[14] = pos.z;
+        t.cols[3][0] = pos.x;
+        t.cols[3][1] = pos.y;
+        t.cols[3][2] = pos.z;
         set_transform(t);
     }
 
     /// Get position
     Vec3 position() const {
         Mat4 t = transform();
-        return Vec3(t.m[12], t.m[13], t.m[14]);
+        return Vec3(t.cols[3][0], t.cols[3][1], t.cols[3][2]);
     }
 
     /// Set visibility
@@ -751,19 +670,19 @@ public:
         float cy = std::cos(yaw), sy = std::sin(yaw);
         float cr = std::cos(roll), sr = std::sin(roll);
         
-        Mat4 rot = Mat4::identity();
-        rot.m[0] = cy * cr;
-        rot.m[1] = cy * sr;
-        rot.m[2] = -sy;
-        rot.m[4] = sp * sy * cr - cp * sr;
-        rot.m[5] = sp * sy * sr + cp * cr;
-        rot.m[6] = sp * cy;
-        rot.m[8] = cp * sy * cr + sp * sr;
-        rot.m[9] = cp * sy * sr - sp * cr;
-        rot.m[10] = cp * cy;
-        rot.m[12] = pos.x;
-        rot.m[13] = pos.y;
-        rot.m[14] = pos.z;
+        Mat4 rot = Mat4::Identity();
+        rot.cols[0][0] = cy * cr;
+        rot.cols[0][1] = cy * sr;
+        rot.cols[0][2] = -sy;
+        rot.cols[1][0] = sp * sy * cr - cp * sr;
+        rot.cols[1][1] = sp * sy * sr + cp * cr;
+        rot.cols[1][2] = sp * cy;
+        rot.cols[2][0] = cp * sy * cr + sp * sr;
+        rot.cols[2][1] = cp * sy * sr - sp * cr;
+        rot.cols[2][2] = cp * cy;
+        rot.cols[3][0] = pos.x;
+        rot.cols[3][1] = pos.y;
+        rot.cols[3][2] = pos.z;
         set_transform(rot);
     }
 
@@ -776,10 +695,10 @@ public:
     void set_scale(const Vec3& scale) {
         Mat4 t = transform();
         // Extract position, apply scale to rotation part
-        Vec3 pos(t.m[12], t.m[13], t.m[14]);
-        t.m[0] *= scale.x; t.m[1] *= scale.x; t.m[2] *= scale.x;
-        t.m[4] *= scale.y; t.m[5] *= scale.y; t.m[6] *= scale.y;
-        t.m[8] *= scale.z; t.m[9] *= scale.z; t.m[10] *= scale.z;
+        Vec3 pos(t.cols[3][0], t.cols[3][1], t.cols[3][2]);
+        t.cols[0][0] *= scale.x; t.cols[0][1] *= scale.x; t.cols[0][2] *= scale.x;
+        t.cols[1][0] *= scale.y; t.cols[1][1] *= scale.y; t.cols[1][2] *= scale.y;
+        t.cols[2][0] *= scale.z; t.cols[2][1] *= scale.z; t.cols[2][2] *= scale.z;
         set_transform(t);
     }
 };
@@ -975,29 +894,7 @@ struct Physics {
     }
 };
 
-// =============================================================================
-// GPUInfo — GPU information queries
-// =============================================================================
-
-struct GPUInfo {
-    /// Get GPU name (placeholder - needs C ABI)
-    static std::string name() {
-        // TODO: reactor_get_gpu_name()
-        return "Unknown GPU";
-    }
-
-    /// Get VRAM in MB (placeholder - needs C ABI)
-    static uint32_t vram_mb() {
-        // TODO: reactor_get_vram()
-        return 0;
-    }
-
-    /// Get current MSAA sample count
-    static uint32_t msaa_samples() {
-        // TODO: reactor_get_msaa()
-        return 4;
-    }
-};
+// (GPUInfo defined below with real C ABI calls)
 
 // =============================================================================
 // Config — Application configuration
@@ -1216,15 +1113,260 @@ inline int ReactorApp(
 }
 
 // =============================================================================
-// ECS — Entity Component System
+// ECS — Entity Component System (Full CRUD)
 // =============================================================================
 
-using Entity = uint32_t;
+using EntityId = uint32_t;
+constexpr EntityId INVALID_ENTITY = 0;
+
+/// Component mask bits for queries
+enum ComponentMask : uint32_t {
+    COMPONENT_ALL           = 0,
+    COMPONENT_MESH_RENDERER = 1,
+    COMPONENT_LIGHT         = 2,
+    COMPONENT_CAMERA        = 4,
+    COMPONENT_RIGIDBODY     = 8,
+};
+
+class Entity {
+    EntityId id_ = INVALID_ENTITY;
+public:
+    Entity() = default;
+    explicit Entity(EntityId id) : id_(id) {}
+
+    /// Create a new entity
+    static Entity create(const std::string& name = "Entity") {
+        return Entity(reactor_entity_create(name.c_str()));
+    }
+
+    /// Destroy this entity
+    bool destroy() {
+        if (id_ == INVALID_ENTITY) return false;
+        bool ok = reactor_entity_destroy(id_);
+        id_ = INVALID_ENTITY;
+        return ok;
+    }
+
+    bool valid() const { return id_ != INVALID_ENTITY && reactor_entity_exists(id_); }
+    explicit operator bool() const { return valid(); }
+    EntityId id() const { return id_; }
+
+    // --- Active state ---
+    void set_active(bool active) { reactor_entity_set_active(id_, active); }
+    bool is_active() const { return reactor_entity_is_active(id_); }
+
+    // --- Transform ---
+    void set_position(const Vec3& p) { reactor_entity_set_position(id_, p.x, p.y, p.z); }
+    Vec3 position() const { return Vec3(reactor_entity_get_position(id_)); }
+    void set_rotation(const Vec3& r) { reactor_entity_set_rotation(id_, r.x, r.y, r.z); }
+    void set_scale(const Vec3& s) { reactor_entity_set_scale(id_, s.x, s.y, s.z); }
+
+    void set_transform(const Vec3& pos, const Vec3& rot, const Vec3& scl) {
+        CTransform t;
+        t.position = {pos.x, pos.y, pos.z};
+        t.rotation = {rot.x, rot.y, rot.z};
+        t.scale = {scl.x, scl.y, scl.z};
+        reactor_entity_set_transform(id_, t);
+    }
+
+    // --- Mesh Renderer ---
+    bool add_mesh_renderer(int32_t mesh_idx, int32_t mat_idx) {
+        return reactor_entity_add_mesh_renderer(id_, mesh_idx, mat_idx);
+    }
+    bool remove_mesh_renderer() { return reactor_entity_remove_mesh_renderer(id_); }
+    bool has_mesh_renderer() const { return reactor_entity_has_mesh_renderer(id_); }
+
+    // --- Light ---
+    bool add_light(const CLight& light) { return reactor_entity_add_light(id_, light); }
+    bool remove_light() { return reactor_entity_remove_light(id_); }
+    bool has_light() const { return reactor_entity_has_light(id_); }
+    void set_light(const CLight& l) { reactor_entity_set_light(id_, l); }
+
+    // --- Camera ---
+    bool add_camera(float fov = 60.f, float near_p = 0.1f, float far_p = 1000.f, bool is_main = false) {
+        return reactor_entity_add_camera(id_, fov, near_p, far_p, is_main);
+    }
+    bool remove_camera() { return reactor_entity_remove_camera(id_); }
+    bool has_camera() const { return reactor_entity_has_camera(id_); }
+
+    // --- RigidBody ---
+    bool add_rigidbody(float mass = 1.f, bool gravity = true) {
+        return reactor_entity_add_rigidbody(id_, mass, gravity);
+    }
+    bool remove_rigidbody() { return reactor_entity_remove_rigidbody(id_); }
+    void apply_force(const Vec3& f) { reactor_entity_apply_force(id_, f.x, f.y, f.z); }
+    void set_velocity(const Vec3& v) { reactor_entity_set_velocity(id_, v.x, v.y, v.z); }
+    Vec3 velocity() const { return Vec3(reactor_entity_get_velocity(id_)); }
+};
 
 struct ECS {
-    static Entity create_entity() { return reactor_ecs_create_entity(); }
-    static void destroy_entity(Entity e) { reactor_ecs_destroy_entity(e); }
+    static EntityId create_entity() { return reactor_ecs_create_entity(); }
+    static void destroy_entity(EntityId e) { reactor_ecs_destroy_entity(e); }
     static uint32_t entity_count() { return reactor_ecs_entity_count(); }
+
+    /// Query entities by component mask. Returns vector of entity IDs.
+    static std::vector<EntityId> query(uint32_t mask, uint32_t max_results = 256) {
+        std::vector<EntityId> buf(max_results);
+        uint32_t count = reactor_query_entities(mask, buf.data(), max_results);
+        buf.resize(count);
+        return buf;
+    }
+};
+
+// =============================================================================
+// PBRMaterial — PBR material system with instances
+// =============================================================================
+
+class PBRMaterial {
+    uint32_t id_ = 0;
+public:
+    PBRMaterial() = default;
+    explicit PBRMaterial(uint32_t id) : id_(id) {}
+
+    /// Create with default parameters
+    static PBRMaterial create() { return PBRMaterial(reactor_pbr_create_default()); }
+
+    /// Create with custom parameters
+    static PBRMaterial create(const Vec4& base_color, float metallic, float roughness) {
+        CPBRMaterial p{};
+        p.base_color = {base_color.x, base_color.y, base_color.z, base_color.w};
+        p.metallic = metallic;
+        p.roughness = roughness;
+        p.ao = 1.0f;
+        p.emissive = {0, 0, 0};
+        p.emissive_strength = 0;
+        p.alpha_cutoff = 0.5f;
+        p.normal_scale = 1.0f;
+        p.double_sided = false;
+        p.alpha_mode = 0;
+        return PBRMaterial(reactor_pbr_create(p));
+    }
+
+    /// Create an instance that inherits from this material
+    PBRMaterial create_instance() const { return PBRMaterial(reactor_pbr_create_instance(id_)); }
+
+    void destroy() { if (id_) { reactor_pbr_destroy(id_); id_ = 0; } }
+
+    bool valid() const { return id_ != 0; }
+    uint32_t id() const { return id_; }
+
+    void set_base_color(const Vec4& c) { reactor_pbr_set_base_color(id_, c.x, c.y, c.z, c.w); }
+    void set_metallic_roughness(float m, float r) { reactor_pbr_set_metallic_roughness(id_, m, r); }
+    void set_emissive(const Vec3& c, float strength) { reactor_pbr_set_emissive(id_, c.x, c.y, c.z, strength); }
+
+    static uint32_t count() { return reactor_pbr_count(); }
+};
+
+// =============================================================================
+// FrameGraph — Render graph configuration
+// =============================================================================
+
+/// Resource types for FrameGraph
+enum class FGResourceType : uint32_t {
+    Texture = 0, Buffer = 1, DepthBuffer = 2, RenderTarget = 3, Swapchain = 4,
+};
+
+/// Resource formats for FrameGraph
+enum class FGFormat : uint32_t {
+    RGBA8 = 0, RGBA16F = 1, RGBA32F = 2, R8 = 3, R16F = 4, R32F = 5,
+    Depth32F = 6, Depth24Stencil8 = 7,
+};
+
+class FrameGraph {
+    CFrameGraphHandle* handle_ = nullptr;
+public:
+    FrameGraph() { handle_ = reactor_frame_graph_create(); }
+    ~FrameGraph() { if (handle_) reactor_frame_graph_destroy(handle_); }
+
+    /// Create pre-built forward rendering graph
+    static FrameGraph forward(uint32_t w, uint32_t h) {
+        FrameGraph fg;
+        if (fg.handle_) reactor_frame_graph_destroy(fg.handle_);
+        fg.handle_ = reactor_frame_graph_create_forward(w, h);
+        return fg;
+    }
+
+    /// Create pre-built deferred rendering graph
+    static FrameGraph deferred(uint32_t w, uint32_t h) {
+        FrameGraph fg;
+        if (fg.handle_) reactor_frame_graph_destroy(fg.handle_);
+        fg.handle_ = reactor_frame_graph_create_deferred(w, h);
+        return fg;
+    }
+
+    uint32_t create_resource(const std::string& name, FGResourceType type,
+                             uint32_t w, uint32_t h, FGFormat fmt, bool persistent = false) {
+        return reactor_frame_graph_create_resource(handle_, name.c_str(),
+            static_cast<uint32_t>(type), w, h, static_cast<uint32_t>(fmt), persistent);
+    }
+
+    uint32_t add_pass(const std::string& name,
+                      const std::vector<uint32_t>& reads,
+                      const std::vector<uint32_t>& writes,
+                      int32_t order = 0) {
+        return reactor_frame_graph_add_pass(handle_, name.c_str(),
+            reads.data(), static_cast<uint32_t>(reads.size()),
+            writes.data(), static_cast<uint32_t>(writes.size()), order);
+    }
+
+    bool compile() { return reactor_frame_graph_compile(handle_); }
+
+    CFrameGraphStats stats() const { return reactor_frame_graph_get_stats(handle_); }
+
+    // Move only
+    FrameGraph(FrameGraph&& o) noexcept : handle_(o.handle_) { o.handle_ = nullptr; }
+    FrameGraph& operator=(FrameGraph&& o) noexcept {
+        if (this != &o) { if (handle_) reactor_frame_graph_destroy(handle_); handle_ = o.handle_; o.handle_ = nullptr; }
+        return *this;
+    }
+    FrameGraph(const FrameGraph&) = delete;
+    FrameGraph& operator=(const FrameGraph&) = delete;
+};
+
+// =============================================================================
+// RenderStats — Real-time rendering statistics
+// =============================================================================
+
+struct RenderStats {
+    static CRenderStats get() { return reactor_get_render_stats(); }
+    static CMemoryBudget memory_budget() { return reactor_get_memory_budget(); }
+
+    /// Print stats to stdout
+    static void print() {
+        auto s = get();
+        printf("FPS: %.1f | Frame: %.2fms | Draw: %u | Tris: %u | Objects: %u/%u | VRAM: %uMB\n",
+            s.fps, s.frame_time_ms, s.draw_calls, s.triangles,
+            s.visible_objects, s.scene_objects, s.vram_total_mb);
+    }
+};
+
+// =============================================================================
+// PlayMode — Runtime-Editor bridge
+// =============================================================================
+
+struct PlayMode {
+    static bool enter() { return reactor_play_enter(); }
+    static void exit() { reactor_play_exit(); }
+    static void pause(bool p) { reactor_play_pause(p); }
+    static bool is_playing() { return reactor_play_is_playing(); }
+    static bool is_paused() { return reactor_play_is_paused(); }
+    static float time() { return reactor_play_get_time(); }
+    static void update(float dt) { reactor_play_update(dt); }
+};
+
+// =============================================================================
+// SceneSerializer — Scene import/export
+// =============================================================================
+
+struct SceneSerializer {
+    /// Serialize current scene to string
+    static std::string serialize() {
+        uint32_t size = reactor_scene_serialize_size();
+        if (size == 0) return "";
+        std::vector<uint8_t> buf(size + 1, 0);
+        reactor_scene_serialize(buf.data(), size);
+        return std::string(reinterpret_cast<char*>(buf.data()), size);
+    }
 };
 
 // =============================================================================
@@ -1331,18 +1473,6 @@ struct GPUInfo {
     static void vulkan_version(uint32_t& major, uint32_t& minor, uint32_t& patch) {
         reactor_get_vulkan_version(&major, &minor, &patch);
     }
-};
-
-// =============================================================================
-// Error — Error handling
-// =============================================================================
-
-struct Error {
-    static uint32_t last_code() { return reactor_get_last_error(); }
-    static const char* last_message() { return reactor_get_error_message(); }
-    static const char* description(uint32_t code) { return reactor_error_description(code); }
-    static void clear() { reactor_clear_error(); }
-    static bool has_error() { return last_code() != 0; }
 };
 
 } // namespace reactor

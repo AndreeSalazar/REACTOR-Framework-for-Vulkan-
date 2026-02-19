@@ -1,10 +1,10 @@
-# REACTOR Framework - Guia de Desarrollo en Rust
+# REACTOR Framework — Guía de Desarrollo en Rust
 
-**Version 1.0.5** | Para desarrolladores Rust
+**Versión 1.0.5** | Para desarrolladores Rust | Powered by Salazar-interactive
 
-## Introduccion
+## Introducción
 
-Esta guia te ensena a crear juegos con REACTOR usando Rust directamente.
+Esta guía te enseña a crear juegos con REACTOR usando Rust directamente.
 
 ## Requisitos
 
@@ -224,14 +224,16 @@ let alpha = aa.compute_aa(sdf_value, screen_derivative);
 Ejecutar ejemplos incluidos:
 
 ```bash
-cargo run --example simple_cube
-cargo run --example cube
-cargo run --example sandbox
+cargo run --example cube              # Cubo 3D con controles
+cargo run --example textured_cube     # Cubo con textura
+cargo run --example sandbox           # Sandbox experimental
+cargo run --example physics_camera    # Cámara con física
+cargo run --example obj_loader_demo   # Carga de modelos OBJ
 ```
 
 ## Estructura de Proyecto Recomendada
 
-```
+```text
 mi-juego/
   Cargo.toml
   src/
@@ -247,11 +249,12 @@ mi-juego/
 
 ## Tips
 
-1. **Usa `prelude::*`** para importar todo lo comun
-2. **RAII automatico** - no necesitas limpiar recursos manualmente
-3. **Delta time** - siempre multiplica movimiento por `ctx.time.delta()`
-4. **Ownership** - Rust garantiza seguridad de memoria
+1. **Usa `prelude::*`** para importar todo lo común
+2. **RAII automático** — no necesitas limpiar recursos manualmente
+3. **Delta time** — siempre multiplica movimiento por `ctx.time.delta()`
+4. **Ownership** — Rust garantiza seguridad de memoria
+5. **C++ interop** — también puedes usar REACTOR desde C++ vía el C ABI (ver `docs/cpp-guide.md`)
 
 ## Licencia
 
-MIT License
+MIT License — **Powered by Salazar-interactive**

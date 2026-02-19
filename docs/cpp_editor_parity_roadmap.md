@@ -4,14 +4,22 @@ Objetivo: que el usuario final pueda usar **C++ como capa principal de productiv
 
 ## 1) Estado actual resumido
 
-### Ya disponible en C ABI / C++ SDK
+### Ya disponible en C ABI / C++ SDK (v1.0.5)
+
 - Lifecycle y loop (`reactor_run`, `reactor_run_simple`, init/shutdown, frame begin/end).
 - Input/Window/Time/Camera global.
-- Scene básica + mesh/material/texture base.
-- Lights básicas (directional/point/spot).
-- ECS mínimo (create/destroy/count), debug draw, animation y audio básicos.
+- Scene completa + mesh/material/texture con Vulkan context real.
+- Lights completas (directional/point/spot) con parámetros dinámicos.
+- **ECS completo**: entity CRUD, transform, mesh renderer, light, camera, rigidbody, queries con bitmask.
+- **PBR Materials**: metallic/roughness, instances, emissive, alpha modes.
+- **FrameGraph**: passes declarativos, recursos, compilación, forward/deferred presets.
+- **Telemetry**: render stats (FPS, draw calls, triangles, VRAM), memory budget, GPU info.
+- **PlayMode**: play-in-editor bridge (enter/exit/pause), scene snapshot.
+- **Scene Serialization**: export a JSON.
+- **Compute**: pipeline stubs (create/dispatch/destroy).
 - Post-process toggles simples (bloom/tonemap/vignette/fxaa).
 - Utilidades matemáticas + SDF básicos.
+- **C++ SDK**: 1477 líneas header-only, RAII wrappers, 9 ejemplos compilando.
 
 ### Qué falta para paridad real de productividad C++
 
@@ -95,7 +103,7 @@ APIs C ABI para exponer el `FrameGraph` del core:
 
 ### Runtime-Editor bridge
 - [ ] Scene snapshot diff/patch.
-- [ ] Play-in-editor bridge (start/stop/reload deterministic).
+- [x] Play-in-editor bridge (start/stop/pause) — `reactor_play_enter/exit/pause` ✅
 - [ ] Undo/redo transaccional conectado al runtime.
 - [ ] Deterministic IDs para entidades y recursos.
 
@@ -118,7 +126,25 @@ APIs C ABI para exponer el `FrameGraph` del core:
 4. ⬜ Hot reload de shaders/materiales/texturas.
 5. ⬜ Serialización versionada + migraciones.
 
-## 5) Criterio de éxito
+## 5) C++ Examples Implementados (9 total)
+
+| Ejemplo | Carpeta | Qué demuestra |
+| ------- | ------- | ------------- |
+| reactor_3d | `main_basic.cpp` | Lifecycle básico, cubo con material |
+| reactor_ecs_scene | `ecs_scene/` | Entity CRUD, components, queries |
+| reactor_pbr_materials | `pbr_materials/` | PBR metallic/roughness, instances, emissive |
+| reactor_frame_graph | `frame_graph/` | Custom render passes, forward/deferred |
+| reactor_fps_controller | `fps_controller/` | WASD + mouse look + jump + gravity |
+| reactor_lighting | `lighting_showcase/` | Directional, point, spot lights animados |
+| reactor_telemetry | `telemetry_stats/` | GPU stats, memory budget, serialización |
+| reactor_play_mode | `play_mode/` | Enter/exit/pause play mode |
+| reactor_multi_object | `multi_object/` | 225 objetos, wave, visibility, queries |
+
+CMakeLists.txt builds all 9 with `add_reactor_example()` helper function.
+
+## 6) Criterio de éxito
+
 - El equipo de herramientas puede construir features del editor en C++ sin tocar Rust para tareas comunes.
 - Rust queda como capa de rendimiento/seguridad, no como cuello de botella de productividad.
 - La UX del editor refleja 1:1 los modos de render y sistemas del runtime.
+- Los 9 ejemplos C++ demuestran todas las APIs expuestas vía C ABI.

@@ -2,44 +2,58 @@
 
 ## System Diagram
 
-```
+```text
 +------------------------------------------------------------------+
-|                        C++ Game / App                            |
-|  main_basic.cpp / main_class.cpp / your_game.cpp                 |
+|                    C++ Game / App / Editor                        |
+|  9 examples: ecs_scene, pbr_materials, frame_graph, fps_ctrl...  |
+|  Editor-REACTOR (egui + egui_dock)                               |
 +------------------------------------------------------------------+
         |                    |                    |
         | reactor_initialize | reactor_run_simple | reactor_shutdown
         | reactor_begin_frame| reactor_end_frame  |
         v                    v                    v
 +------------------------------------------------------------------+
-|                    C++ SDK (reactor.hpp)                         |
-|  reactor::Application, GPU, Mesh, Material, Scene, Lighting      |
+|              C++ SDK (application.hpp — 1477 lines)              |
+|                                                                  |
+|  reactor::Application, Entity, ECS, PBRMaterial, FrameGraph      |
+|  RenderStats, PlayMode, SceneSerializer, GPUInfo, Error          |
+|  Scene, Lighting, Camera, Input, Time, Window, Config            |
 +------------------------------------------------------------------+
         |
-        | #include <reactor/core.hpp>
+        | #include <reactor/core.hpp>  (646 C declarations)
         v
 +------------------------------------------------------------------+
 |              Stable C ABI Contract (core.hpp)                    |
 |                                                                  |
+|  3300+ extern "C" functions                                      |
 |  Opaque Handles:  MeshHandle*, MaterialHandle*, SceneHandle*     |
 |  Error Model:     ReactorResult enum (no exceptions)             |
 |  Ownership:       Rust creates -> Rust destroys                  |
 |  Lifecycle:       initialize -> run -> shutdown                  |
 |  Frame:           begin_frame -> [update/render] -> end_frame    |
+|  ECS:             entity_create/destroy, component CRUD, queries |
+|  PBR:             pbr_create/destroy, instances, parameters      |
+|  FrameGraph:      create/add_pass/compile, forward/deferred      |
+|  Telemetry:       render_stats, memory_budget, gpu_info          |
+|  PlayMode:        enter/exit/pause, scene snapshot               |
 +------------------------------------------------------------------+
         |
         | extern "C" fn reactor_*()
-        | reactor_c_api.dll / .so
+        | reactor_c_api.dll / .so  (3300+ lines Rust)
         v
 +------------------------------------------------------------------+
 |                   Rust Core (lib.rs)                             |
 |                                                                  |
 |  ReactorState (global singleton, Mutex-protected)                |
 |  - Reactor (Vulkan context)                                      |
+|  - ECS World (entities, components, queries)                     |
+|  - PBR Material registry (base + instances)                      |
+|  - FrameGraph (passes, resources, barriers)                      |
 |  - Scene, Camera, Lighting, Physics, Culling                     |
 |  - Input state (keys, mouse)                                     |
-|  - Time, frame tracking                                          |
+|  - Time, frame tracking, render stats                            |
 |  - SPIR-V shaders (embedded via include_bytes!)                  |
+|  - PlayMode bridge (snapshot, pause, time)                       |
 +------------------------------------------------------------------+
         |
         | Reactor::init(), draw_scene(), handle_event()
@@ -49,16 +63,16 @@
 |                                                                  |
 |  VulkanContext  — Instance, Device, Queues                       |
 |  Swapchain     — Triple buffering                                |
-|  RenderPass    — MSAA 4x + Depth (D32_SFLOAT)                    |
+|  RenderPass    — MSAA 4x + Depth (D32_SFLOAT)                   |
 |  Pipeline      — Vertex + Fragment shaders                       |
-|  Ray Tracing   — Auto-detected (VK_KHR_ray_tracing_pipeline)     |
-|  Memory        — VMA (Vulkan Memory Allocator)                   |
+|  Ray Tracing   — Auto-detected (VK_KHR_ray_tracing_pipeline)    |
+|  Memory        — gpu-allocator (Vulkan Memory Allocator)         |
 +------------------------------------------------------------------+
         |
         v
 +------------------------------------------------------------------+
 |                     GPU Hardware                                 |
-|  NVIDIA RTX 3060 12GB — 3000+ FPS @ 1280x720                     |
+|  NVIDIA RTX 3060 12GB — 3000+ FPS @ 1280x720                    |
 +------------------------------------------------------------------+
 ```
 

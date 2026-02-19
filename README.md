@@ -1,37 +1,60 @@
-# 🚀 REACTOR (Rust Edition) - Zero-overhead Vulkan Framework
+<p align="center">
+  <img src="image.svg" alt="REACTOR Logo" width="300"/>
+</p>
 
-**El Framework de Desarrollo de Juegos más Seguro y Fácil con Vulkan, ahora en Rust**
+<h1 align="center">REACTOR Framework for Vulkan</h1>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Vulkan](https://img.shields.io/badge/Vulkan-1.3-red.svg)](https://www.vulkan.org/)
-[![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
+<p align="center">
+  <strong>Zero-overhead Vulkan Game Framework — Rust Core + C++ SDK</strong>
+</p>
 
-**REACTOR** simplifica Vulkan usando el sistema de tipos y ownership de Rust para ofrecer **seguridad de memoria garantizada** y **zero-overhead**.
+<p align="center">
+  <em>Powered by Salazar-interactive</em>
+</p>
 
-## 🏗️ Arquitectura A → B → C
+<p align="center">
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"/></a>
+  <a href="https://www.vulkan.org/"><img src="https://img.shields.io/badge/Vulkan-1.3-red.svg" alt="Vulkan"/></a>
+  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.70+-orange.svg" alt="Rust"/></a>
+  <img src="https://img.shields.io/badge/C++-17-blue.svg" alt="C++17"/>
+  <img src="https://img.shields.io/badge/Version-1.0.5-green.svg" alt="Version 1.0.5"/>
+</p>
+
+---
+
+**REACTOR** simplifica Vulkan usando el sistema de tipos y ownership de Rust para ofrecer **seguridad de memoria garantizada** y **zero-overhead**, con un **C++ SDK completo** para productividad máxima.
+
+## 🏗️ Arquitectura
 
 ```
-A (Vulkan/Ash) → B (Reactor) → C (Game)
-  Unsafe           Safe           Simple
-  Raw bindings     RAII wrappers  ECS / Components  
+A (Vulkan/Ash) → B (Reactor Core) → C (C ABI) → D (C++ SDK / Game)
+  Unsafe           Safe + RAII         Stable        Simple + Productive
+  Raw bindings     Memory safety       ABI bridge    ECS / PBR / FrameGraph
 ```
 
 - **A (Ash)**: Bindings directos a Vulkan (`unsafe`).
-- **B (Reactor)**: Abstracciones seguras con RAII automático.
-- **C (Game)**: API de alto nivel para lógica de juego.
+- **B (Reactor)**: Abstracciones seguras con RAII automático en Rust.
+- **C (C ABI)**: Puente estable `extern "C"` — 3300+ líneas de API.
+- **D (C++ SDK)**: Wrappers RAII, ECS, PBR, FrameGraph, PlayMode.
 
 ## ✨ Características
 
 | Módulo | Características |
-|--------|-----------------|
+| ------ | --------------- |
 | **Core** | VulkanContext, Device, Allocator, CommandManager, Surface |
-| **Graphics** | Swapchain, Pipeline, RenderPass, Framebuffer, Buffer, Image, Sampler, Descriptors, DepthBuffer, MSAA, **UniformBuffers**, **DebugRenderer**, **PostProcessing** |
+| **Graphics** | Swapchain, Pipeline, RenderPass, Framebuffer, Buffer, Image, Sampler, Descriptors, DepthBuffer, MSAA, UniformBuffers, DebugRenderer, PostProcessing |
 | **Ray Tracing** | RayTracingContext, AccelerationStructure, RayTracingPipeline, ShaderBindingTable |
 | **Compute** | ComputePipeline, ComputeDispatch, Barriers |
-| **Resources** | Mesh, Material, Texture, Vertex, Model, **Primitives** (Cube, Sphere, Plane, Cylinder, Cone, Torus) |
-| **Systems** | Input, ECS, Scene, Camera, Transform, **Lighting**, **Physics**, **FrustumCulling**, **Animation**, **Particles**, **Audio** |
+| **Resources** | Mesh, Material, Texture, Vertex, Model, Primitives (Cube, Sphere, Plane, Cylinder, Cone, Torus) |
+| **ECS** | Entity CRUD, Transform, MeshRenderer, Light, Camera, RigidBody, Component Queries |
+| **PBR** | Metallic/Roughness workflow, Material Instances, Emissive, Alpha modes |
+| **FrameGraph** | Declarative render passes, Resource management, Forward/Deferred presets, Auto-barriers |
+| **Systems** | Input, Scene, Camera, Transform, Lighting, Physics, FrustumCulling, Animation, Particles, Audio |
+| **Telemetry** | RenderStats (FPS, draw calls, triangles, VRAM), MemoryBudget, GPU info |
+| **Editor Bridge** | PlayMode (enter/exit/pause), Scene serialization (JSON), Scene snapshot |
 | **Utils** | GPUDetector, CPUDetector, ResolutionDetector, Time, FixedTimestep |
-| **🔥 ADead-GPU** | **ISR** (Intelligent Shading Rate), **SDF** (Signed Distance Functions), **Ray Marching**, **Anti-Aliasing**, **Hybrid Rendering** |
+| **ADead-GPU** | ISR (Intelligent Shading Rate), SDF, Ray Marching, Anti-Aliasing, Hybrid Rendering |
+| **C++ SDK** | 1477-line header-only SDK, RAII wrappers, 9 examples, CMake build system |
 
 ## 🚀 Quick Start — ONE CALL Pattern
 
@@ -126,59 +149,61 @@ int main() { return MiJuego().run(); }
 
 ## 📁 Estructura del Proyecto
 
-```
-src/
-├── core/           # Núcleo de Vulkan
-│   ├── context.rs      # VulkanContext (Instance, Device, Queue)
-│   ├── device.rs       # DeviceInfo
-│   ├── allocator.rs    # MemoryAllocator (gpu-allocator)
-│   ├── command.rs      # CommandManager
-│   └── surface.rs      # SurfaceInfo
+```text
+REACTOR-Framework-for-Vulkan-/
+├── image.svg                   # Logo REACTOR (Salazar-interactive)
+├── README.md                   # Este archivo
+├── HOW_BUILD.md                # Guía de construcción completa
+├── Cargo.toml                  # Proyecto Rust principal (v1.0.5)
+├── build.rs                    # Auto-compilación de shaders GLSL→SPIR-V
 │
-├── graphics/       # Renderizado
-│   ├── swapchain.rs    # Swapchain
-│   ├── pipeline.rs     # Graphics Pipeline + Config
-│   ├── render_pass.rs  # RenderPass + Config
-│   ├── framebuffer.rs  # Framebuffer + FramebufferSet
-│   ├── buffer.rs       # Buffer (Vertex, Index, Uniform, Storage)
-│   ├── image.rs        # Image + Transitions
-│   ├── sampler.rs      # Sampler + Config
-│   ├── descriptors.rs  # DescriptorPool, Layout, Set
-│   ├── depth.rs        # DepthBuffer
-│   └── msaa.rs         # MSAA Target
+├── src/                        # Rust Core
+│   ├── lib.rs                  # Exports + Prelude
+│   ├── reactor.rs              # Fachada principal (Vulkan rendering)
+│   ├── core/                   # VulkanContext, Device, Allocator, FrameGraph
+│   ├── graphics/               # Swapchain, Pipeline, RenderPass, MSAA, Depth
+│   ├── raytracing/             # RT Context, BLAS/TLAS, RT Pipeline, SBT
+│   ├── compute/                # ComputePipeline, Dispatch, Barriers
+│   ├── resources/              # Mesh, Material, Texture, Vertex, Model
+│   ├── systems/                # Input, ECS, Scene, Camera, Transform
+│   ├── utils/                  # GPUDetector, CPUDetector, Time
+│   └── editor/                 # Editor panels (egui)
 │
-├── raytracing/     # Ray Tracing (RTX)
-│   ├── context.rs              # RayTracingContext
-│   ├── acceleration_structure.rs # BLAS/TLAS
-│   ├── pipeline.rs             # RT Pipeline
-│   └── shader_binding_table.rs # SBT
+├── examples/                   # Ejemplos Rust
+│   ├── cube.rs                 # Cubo 3D con controles
+│   ├── textured_cube.rs        # Cubo con textura
+│   ├── sandbox.rs              # Sandbox experimental
+│   ├── physics_camera.rs       # Cámara con física
+│   └── obj_loader_demo.rs      # Carga de modelos OBJ
 │
-├── compute/        # Compute Shaders
-│   ├── pipeline.rs     # ComputePipeline
-│   └── dispatch.rs     # ComputeDispatch + Barriers
+├── shaders/                    # Shaders GLSL + SPIR-V compilados
+│   ├── shader.vert / vert.spv
+│   ├── shader.frag / frag.spv
+│   ├── texture.vert / texture_vert.spv
+│   └── texture.frag / texture_frag.spv
 │
-├── resources/      # Assets del Juego
-│   ├── vertex.rs       # Vertex, VertexPBR, InstanceData
-│   ├── mesh.rs         # Mesh + Primitives (Cube, Quad)
-│   ├── material.rs     # Material + MaterialBuilder
-│   ├── texture.rs      # Texture + Mipmaps
-│   └── model.rs        # Model + ModelBatch
+├── cpp/                        # C++ SDK completo
+│   ├── reactor_c_api/          # Rust → C ABI bridge (3300+ líneas)
+│   │   ├── src/lib.rs          # Todas las funciones extern "C"
+│   │   └── Cargo.toml          # Dependencias (ash, glam, winit)
+│   │
+│   ├── reactor_cpp/            # C++ SDK headers
+│   │   └── include/reactor/
+│   │       ├── core.hpp        # C ABI declarations (646 líneas)
+│   │       ├── types.hpp       # Vec2/3/4, Mat4, Transform
+│   │       └── application.hpp # C++ wrappers (1477 líneas)
+│   │
+│   └── examples/3D/            # 9 ejemplos C++ (ver abajo)
 │
-├── systems/        # Sistemas de Juego
-│   ├── input.rs        # Input (Keyboard, Mouse)
-│   ├── ecs.rs          # World, Entity, Component
-│   ├── scene.rs        # Scene + SceneObject
-│   ├── camera.rs       # Camera (3D/2D)
-│   └── transform.rs    # Transform
+├── docs/                       # Documentación
+│   ├── architecture.md         # Diagrama de arquitectura
+│   ├── manual.md               # Manual general
+│   ├── rust-guide.md           # Guía Rust
+│   ├── cpp-guide.md            # Guía C++
+│   └── cpp_editor_parity_roadmap.md  # Roadmap de paridad C++
 │
-├── utils/          # Utilidades
-│   ├── gpu_detector.rs       # GPUDetector + GPUInfo
-│   ├── cpu_detector.rs       # CPUDetector + CPUInfo
-│   ├── resolution_detector.rs # ResolutionDetector
-│   └── time.rs               # Time + FixedTimestep
-│
-├── lib.rs          # Exports + Prelude
-└── reactor.rs      # Fachada principal
+└── Editor-REACTOR/             # Editor visual (egui + egui_dock)
+    └── src/                    # Viewport, Hierarchy, Inspector, Console
 ```
 
 ## 🎮 Uso Avanzado
@@ -509,67 +534,128 @@ benchmark.compare_with_dlss();
 
 ---
 
-## � Documentacion
+## 📖 Documentación
 
-La documentacion completa esta disponible en la carpeta `/docs/`:
+La documentación completa está disponible en la carpeta `/docs/`:
 
-| Documento | Descripcion |
+| Documento | Descripción |
 | --------- | ----------- |
 | [Manual General](docs/manual.md) | Manual corto y completo para uso general |
-| [Guia Rust](docs/rust-guide.md) | Desarrollo de juegos con Rust |
-| [Guia C++](docs/cpp-guide.md) | Desarrollo de juegos con C++ |
+| [Guía Rust](docs/rust-guide.md) | Desarrollo de juegos con Rust |
+| [Guía C++](docs/cpp-guide.md) | Desarrollo de juegos con C++ |
+| [Arquitectura](docs/architecture.md) | Diagrama de sistema, ABI, ownership |
+| [Roadmap C++](docs/cpp_editor_parity_roadmap.md) | Estado de paridad C++ con Rust core |
+| [Cómo Compilar](HOW_BUILD.md) | Guía paso a paso para compilar todo |
 
-### Ejemplos
+### Ejemplos Rust
 
-**Rust:**
 ```bash
-cargo run --example simple_cube
-cargo run --example cube
+cargo run --example cube              # Cubo 3D con controles
+cargo run --example textured_cube     # Cubo con textura
+cargo run --example sandbox           # Sandbox experimental
+cargo run --example physics_camera    # Cámara con física
+cargo run --example obj_loader_demo   # Carga de modelos OBJ
 ```
 
-**C++:**
+### Ejemplos C++ (9 demos)
+
 ```bash
+# 1. Compilar C API
+cargo build --release -p reactor-c-api
+
+# 2. Compilar todos los ejemplos C++
 cd cpp/examples/3D
 cmake -B build
 cmake --build build --config Release
-./build/Release/reactor_3d.exe
+
+# 3. Ejecutar
+./build/Release/reactor_3d.exe              # Cubo básico
+./build/Release/reactor_ecs_scene.exe       # ECS entity/component
+./build/Release/reactor_pbr_materials.exe   # PBR materials
+./build/Release/reactor_frame_graph.exe     # FrameGraph render passes
+./build/Release/reactor_fps_controller.exe  # FPS controller + physics
+./build/Release/reactor_lighting.exe        # Multi-light showcase
+./build/Release/reactor_telemetry.exe       # GPU stats + telemetry
+./build/Release/reactor_play_mode.exe       # Play-in-editor bridge
+./build/Release/reactor_multi_object.exe    # 225 objects scene
 ```
 
 ---
 
-## 🔄 Actualizaciones
+## 🎮 Ejemplos C++ — Escenarios
 
-### v1.0.5 (Actual)
-
-**Arquitectura Profesional:**
-- **ReactorResult enum** - Error handling ABI-safe (sin excepciones cruzando FFI)
-- **Handles opacos** - `MeshHandle*`, `MaterialHandle*`, `SceneHandle*` (C++ nunca dereferencia)
-- **Ownership claro** - Rust crea → Rust destruye (memory safety garantizado)
-- **Lifecycle formal** - `reactor_initialize()` → `reactor_run()` → `reactor_shutdown()`
-- **Frame lifecycle** - `reactor_begin_frame()` / `reactor_end_frame()` para control manual
-
-**Features:**
-- **C ABI completo** - Todas las funciones expuestas para C/C++
-- **C++ SDK** - Wrappers RAII para uso idiomatico
-- **Shaders SPIR-V embebidos** - Materiales funcionan sin archivos externos
-- **Ray Tracing automatico** - Detecta y usa RTX si disponible
-- **MSAA 4x** - Anti-aliasing por defecto
-- **3000+ FPS** - Rendimiento excepcional en RTX 3060
-- **Shutdown limpio** - Sin Vulkan validation errors
-
-**Documentacion:**
-- [Arquitectura](docs/architecture.md) - Diagrama de sistema y reglas ABI
-- [Manual General](docs/manual.md) - Uso rapido
-- [Guia Rust](docs/rust-guide.md) - Desarrollo con Rust
-- [Guia C++](docs/cpp-guide.md) - Desarrollo con C++
-
-### v0.4.x
-
-- Version inicial en Rust
-- Vulkan 1.3 base
-- Sistema ADead-GPU
+| Ejemplo | Qué demuestra |
+| ------- | ------------- |
+| **reactor_3d** | Lifecycle básico: init → run → shutdown, cubo con material |
+| **reactor_ecs_scene** | ECS completo: entities, transform, mesh renderer, light, camera, rigidbody, queries |
+| **reactor_pbr_materials** | PBR: metallic/roughness gradient, material instances, emissive pulse |
+| **reactor_frame_graph** | FrameGraph: custom passes, resources, forward/deferred presets, stats |
+| **reactor_fps_controller** | FPS: WASD + mouse look + jump + gravity, crates con rigidbody |
+| **reactor_lighting** | Luces: directional sun, 4 point lights orbitando, spot light animado |
+| **reactor_telemetry** | Telemetría: GPU info, VRAM, memory budget, render stats, serialización |
+| **reactor_play_mode** | Editor bridge: enter/exit/pause play mode, scene snapshot |
+| **reactor_multi_object** | Escala: 225 objetos, wave animation, visibility toggle, component queries |
 
 ---
 
-## �📄 Licencia
-MIT License
+## 🔄 Changelog
+
+### v1.0.5 (Actual — Febrero 2026)
+
+**C ABI Completo (3300+ líneas):**
+
+- `reactor_entity_create/destroy` — ECS entity lifecycle
+- `reactor_entity_add_mesh_renderer/light/camera/rigidbody` — Component CRUD
+- `reactor_query_entities` — Component queries con bitmask
+- `reactor_pbr_create/destroy/set_*` — PBR material system con instances
+- `reactor_frame_graph_create/add_pass/compile` — FrameGraph declarativo
+- `reactor_frame_graph_create_forward/deferred` — Presets pre-construidos
+- `reactor_get_render_stats` — FPS, draw calls, triangles, VRAM
+- `reactor_get_memory_budget` — Device local + host visible budgets
+- `reactor_scene_serialize` — Serialización JSON de escena
+- `reactor_compute_create/dispatch/destroy` — Compute pipeline stubs
+- `reactor_play_enter/exit/pause` — Play-in-editor bridge
+
+**C++ SDK (1477 líneas, header-only):**
+
+- `reactor::Entity` — RAII entity con transform, components, queries
+- `reactor::PBRMaterial` — Create, instances, metallic/roughness/emissive
+- `reactor::FrameGraph` — Resources, passes, compile, forward/deferred
+- `reactor::RenderStats` — Real-time GPU/CPU stats
+- `reactor::PlayMode` — Enter/exit/pause play mode
+- `reactor::SceneSerializer` — Scene to JSON
+
+**9 Ejemplos C++ en carpetas únicas:**
+
+- `ecs_scene/` — `pbr_materials/` — `frame_graph/` — `fps_controller/`
+- `lighting_showcase/` — `telemetry_stats/` — `play_mode/` — `multi_object/`
+
+**Arquitectura:**
+
+- ReactorResult enum — Error handling ABI-safe
+- Handles opacos — `MeshHandle*`, `MaterialHandle*`
+- Ownership: Rust crea → Rust destruye
+- Lifecycle: `reactor_initialize()` → `reactor_run()` → `reactor_shutdown()`
+- Auto-compilación de shaders via `build.rs`
+- MSAA 4x por defecto, Ray Tracing auto-detectado
+- 3000+ FPS en RTX 3060
+
+### v1.0.0 — v1.0.4
+
+- C ABI base con lifecycle, input, camera, lighting, scene
+- C++ SDK con Application class, Config, RAII wrappers
+- Shaders SPIR-V embebidos
+- Editor REACTOR (egui + egui_dock)
+- Viewport 3D, Hierarchy, Inspector, Console, Asset Browser
+
+### v0.4.x
+
+- Versión inicial en Rust
+- Vulkan 1.3 base
+- Sistema ADead-GPU (ISR, SDF, Ray Marching, Hybrid Rendering)
+
+---
+
+## 📄 Licencia
+
+MIT License — **Powered by Salazar-interactive**

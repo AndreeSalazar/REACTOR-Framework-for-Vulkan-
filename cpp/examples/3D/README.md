@@ -1,6 +1,6 @@
-# REACTOR 3D — C++ Vulkan Example
+# REACTOR C++ Examples — Vulkan Examples
 
-The **definitive** example of how to use REACTOR in C++.
+The **definitive** examples of how to use REACTOR in C++.
 
 ## 🚀 Quick Start
 
@@ -73,50 +73,46 @@ int main() {
 }
 ```
 
-## 🎯 Features Demonstrated
+## 🎯 Examples (9 total)
 
-- **Input**: Keyboard + Mouse
-- **Camera**: Position, Target, FPS-style look
-- **Lighting**: Directional + Point lights
-- **Post-Processing**: Bloom, Tone Mapping, Vignette, FXAA
-- **Debug**: Grid, Axes, Lines
-- **GPU Info**: Hardware detection
-- **Animation**: Update system
-- **Audio**: Ready to use
-
-## 📋 Controls
-
-| Key | Action |
-|-----|--------|
-| WASD | Move camera |
-| Space | Move up |
-| Shift | Move down / Sprint |
-| Mouse | Look around (click to capture) |
-| ESC | Release mouse / Exit |
+- **`main_basic.cpp`** — Basic cube lifecycle (original)
+- **`ecs_scene/`** — Full ECS: entities, transform, mesh renderer, light, camera, rigidbody, queries
+- **`pbr_materials/`** — PBR material system: metallic/roughness, instances, emissive
+- **`frame_graph/`** — FrameGraph: custom passes, resources, forward/deferred presets
+- **`fps_controller/`** — FPS character controller: WASD, mouse look, jump, gravity
+- **`lighting_showcase/`** — Multi-light: directional, point (orbiting), spot (animated)
+- **`telemetry_stats/`** — GPU stats, memory budget, scene serialization, stress test
+- **`play_mode/`** — Play-in-editor bridge: enter/exit/pause, scene snapshot
+- **`multi_object/`** — Large scene: 225 objects, wave animation, visibility toggle, queries
 
 ## 🔧 Requirements
 
-- C++17 compiler
+- C++17 compiler (MSVC, GCC, Clang)
 - Vulkan SDK
 - REACTOR C API library (`reactor_c_api.dll` / `.so`)
 
-## 📁 Files
+## 📁 Structure
 
-```
+```text
 3D/
-├── main_basic.cpp    # Example code (formal lifecycle)
-├── CMakeLists.txt    # Build configuration
-└── README.md         # This file
+├── main_basic.cpp          # Basic cube (original)
+├── ecs_scene/main.cpp      # ECS entity/component CRUD
+├── pbr_materials/main.cpp  # PBR material system
+├── frame_graph/main.cpp    # FrameGraph render passes
+├── fps_controller/main.cpp # FPS character controller
+├── lighting_showcase/main.cpp # Multi-light showcase
+├── telemetry_stats/main.cpp   # GPU stats & telemetry
+├── play_mode/main.cpp      # Play-in-editor bridge
+├── multi_object/main.cpp   # Large scene management
+├── CMakeLists.txt          # Builds all 9 examples
+└── README.md               # This file
 ```
 
-## 🌟 Why REACTOR?
+## 🌟 Rust + C++ Synergy
 
-| Feature | REACTOR | Others |
-|---------|---------|--------|
-| Setup | 1 line | 100+ lines |
-| Vulkan | Automatic | Manual |
-| RAII | Perfect | Manual |
-| Performance | Native | Overhead |
-| Control | Total | Limited |
+Each example demonstrates how **Rust** and **C++** share their strengths:
 
-**REACTOR = Vulkan power with zero boilerplate.**
+- **Rust** handles: Vulkan GPU backend, memory safety, shader pipelines, ECS storage
+- **C++** handles: Game logic, scene setup, material tweaking, physics control, UI
+
+**REACTOR = Vulkan power with zero boilerplate. Best of both worlds.**

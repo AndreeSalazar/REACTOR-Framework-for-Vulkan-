@@ -139,38 +139,60 @@ Tu Juego (C++ o Rust)
    Vulkan 1.3 (GPU)
 ```
 
-## Caracteristicas
+## Características
 
-| Modulo | Descripcion |
+| Módulo | Descripción |
 | ------ | ----------- |
-| Core | VulkanContext, Device, Allocator |
-| Graphics | Swapchain, Pipeline, MSAA, Depth |
-| Ray Tracing | RTX en GPUs compatibles |
-| Resources | Mesh, Material, Texture |
-| Systems | Input, Camera, Lighting, Physics |
-| ADead-GPU | ISR, SDF, Anti-Aliasing avanzado |
+| Core | VulkanContext, Device, Allocator, CommandManager |
+| Graphics | Swapchain, Pipeline, MSAA, Depth, PostProcessing |
+| Ray Tracing | RTX en GPUs compatibles (auto-detectado) |
+| Resources | Mesh, Material, Texture, Primitives |
+| ECS | Entity CRUD, Transform, MeshRenderer, Light, Camera, RigidBody, Queries |
+| PBR | Metallic/Roughness, Material Instances, Emissive |
+| FrameGraph | Render passes declarativos, Forward/Deferred presets |
+| Systems | Input, Camera, Lighting, Physics, Animation, Audio |
+| Telemetry | RenderStats, MemoryBudget, GPU info, VRAM |
+| Editor Bridge | PlayMode (enter/exit/pause), Scene serialization |
+| ADead-GPU | ISR, SDF, Ray Marching, Anti-Aliasing, Hybrid Rendering |
+| C++ SDK | 1477 líneas header-only, 9 ejemplos, CMake build |
 
 ## Actualizaciones
 
-### v1.0.5 (Actual)
+### v1.0.5 (Actual — Febrero 2026)
 
-- C ABI completo
-- C++ SDK con RAII
-- Shaders embebidos
-- Ray Tracing automatico
+- **C ABI completo** — 3300+ funciones `extern "C"`
+- **C++ SDK** — 1477 líneas con Entity, PBRMaterial, FrameGraph, RenderStats, PlayMode
+- **ECS** — Entity/Component CRUD, queries con bitmask
+- **PBR Materials** — Metallic/roughness, instances, emissive
+- **FrameGraph** — Render passes declarativos, forward/deferred presets
+- **Telemetry** — GPU stats, memory budget, VRAM real
+- **PlayMode** — Play-in-editor bridge
+- **9 Ejemplos C++** — ECS, PBR, FrameGraph, FPS, Lighting, Telemetry, PlayMode, MultiObject
+- **Editor REACTOR** — egui + egui_dock (Viewport, Hierarchy, Inspector, Console)
+- Shaders SPIR-V embebidos
+- Ray Tracing auto-detectado
 - MSAA 4x por defecto
+- 3000+ FPS en RTX 3060
+
+### v1.0.0 — v1.0.4
+
+- C ABI base con lifecycle, input, camera, lighting, scene
+- C++ SDK con Application class, Config, RAII wrappers
+- Editor REACTOR inicial
 
 ### v0.4.x
 
-- Version inicial Rust
+- Versión inicial Rust
 - Vulkan 1.3 base
+- Sistema ADead-GPU
 
 ## Soporte
 
-- **Issues**: GitHub Issues
 - **Docs**: `/docs/` en el repositorio
-- **Ejemplos**: `/examples/` (Rust) y `/cpp/examples/` (C++)
+- **Ejemplos Rust**: `/examples/` (5 demos)
+- **Ejemplos C++**: `/cpp/examples/3D/` (9 demos)
+- **Editor**: `/Editor-REACTOR/` (egui)
 
 ## Licencia
 
-MIT License - Uso libre para proyectos comerciales y personales.
+MIT License — **Powered by Salazar-interactive**
