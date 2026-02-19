@@ -2,8 +2,8 @@
 // AssetBrowserPanel — File/asset browser with drag & drop support
 // =============================================================================
 
-use egui::{Color32, RichText, Ui, Vec2};
 use crate::editor::core::editor_context::{AssetEntry, DragPayload, EditorContext};
+use egui::{Color32, RichText, Ui, Vec2};
 
 pub struct AssetBrowserPanel {
     pub search_filter: String,
@@ -29,12 +29,22 @@ impl AssetBrowserPanel {
     pub fn show(&mut self, ui: &mut Ui, ctx: &mut EditorContext) {
         // Header
         ui.horizontal(|ui| {
-            ui.label(RichText::new("📂 Asset Browser").strong().color(Color32::from_rgb(200, 200, 200)));
+            ui.label(
+                RichText::new("📂 Asset Browser")
+                    .strong()
+                    .color(Color32::from_rgb(200, 200, 200)),
+            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.selectable_label(self.view_mode == AssetViewMode::List, "☰").clicked() {
+                if ui
+                    .selectable_label(self.view_mode == AssetViewMode::List, "☰")
+                    .clicked()
+                {
                     self.view_mode = AssetViewMode::List;
                 }
-                if ui.selectable_label(self.view_mode == AssetViewMode::Grid, "⊞").clicked() {
+                if ui
+                    .selectable_label(self.view_mode == AssetViewMode::Grid, "⊞")
+                    .clicked()
+                {
                     self.view_mode = AssetViewMode::Grid;
                 }
             });
@@ -57,29 +67,32 @@ impl AssetBrowserPanel {
             ui.label(
                 RichText::new(format!("📁 {}", ctx.assets.current_folder))
                     .color(Color32::from_rgb(150, 150, 100))
-                    .small()
+                    .small(),
             );
         });
 
         ui.separator();
 
         // Asset list
-        let filtered: Vec<(usize, AssetEntry)> = ctx.assets.assets.iter()
+        let filtered: Vec<(usize, AssetEntry)> = ctx
+            .assets
+            .assets
+            .iter()
             .enumerate()
             .filter(|(_, a)| {
                 self.search_filter.is_empty()
-                    || a.name.to_lowercase().contains(&self.search_filter.to_lowercase())
+                    || a.name
+                        .to_lowercase()
+                        .contains(&self.search_filter.to_lowercase())
             })
             .map(|(i, a)| (i, a.clone()))
             .collect();
 
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
-            .show(ui, |ui| {
-                match self.view_mode {
-                    AssetViewMode::List => self.show_list(ui, ctx, &filtered),
-                    AssetViewMode::Grid => self.show_grid(ui, ctx, &filtered),
-                }
+            .show(ui, |ui| match self.view_mode {
+                AssetViewMode::List => self.show_list(ui, ctx, &filtered),
+                AssetViewMode::Grid => self.show_grid(ui, ctx, &filtered),
             });
 
         // Drag payload info
@@ -89,7 +102,7 @@ impl AssetBrowserPanel {
                 ui.label(
                     RichText::new(format!("Dragging: {}", payload.asset_name))
                         .color(Color32::from_rgb(255, 200, 60))
-                        .small()
+                        .small(),
                 );
             });
         }
@@ -101,7 +114,9 @@ impl AssetBrowserPanel {
 
             let label = format!("{} {}", asset.icon(), asset.name);
             let text = if is_selected {
-                RichText::new(label).color(Color32::from_rgb(255, 200, 80)).strong()
+                RichText::new(label)
+                    .color(Color32::from_rgb(255, 200, 80))
+                    .strong()
             } else {
                 RichText::new(label).color(Color32::from_rgb(200, 200, 200))
             };
@@ -125,8 +140,17 @@ impl AssetBrowserPanel {
             response.on_hover_ui(|ui| {
                 ui.label(RichText::new(format!("{} {}", asset.icon(), asset.name)).strong());
                 ui.label(RichText::new(format!("Type: {}", asset.asset_type)).small());
-                ui.label(RichText::new(format!("Path: {}", asset.path)).small().color(Color32::from_rgb(150, 150, 150)));
-                ui.label(RichText::new("Double-click to drag into viewport").small().italics().color(Color32::from_rgb(120, 180, 120)));
+                ui.label(
+                    RichText::new(format!("Path: {}", asset.path))
+                        .small()
+                        .color(Color32::from_rgb(150, 150, 150)),
+                );
+                ui.label(
+                    RichText::new("Double-click to drag into viewport")
+                        .small()
+                        .italics()
+                        .color(Color32::from_rgb(120, 180, 120)),
+                );
             });
         }
     }
@@ -155,7 +179,11 @@ impl AssetBrowserPanel {
                     // Background
                     painter.rect_filled(rect, 4.0, bg_color);
                     if is_selected {
-                        painter.rect_stroke(rect, 4.0, egui::Stroke::new(1.5, Color32::from_rgb(100, 160, 255)));
+                        painter.rect_stroke(
+                            rect,
+                            4.0,
+                            egui::Stroke::new(1.5, Color32::from_rgb(100, 160, 255)),
+                        );
                     }
 
                     // Icon (large)
@@ -194,10 +222,21 @@ impl AssetBrowserPanel {
                     }
 
                     response.on_hover_ui(|ui| {
-                        ui.label(RichText::new(format!("{} {}", asset.icon(), asset.name)).strong());
+                        ui.label(
+                            RichText::new(format!("{} {}", asset.icon(), asset.name)).strong(),
+                        );
                         ui.label(RichText::new(format!("Type: {}", asset.asset_type)).small());
-                        ui.label(RichText::new(format!("Path: {}", asset.path)).small().color(Color32::from_rgb(150, 150, 150)));
-                        ui.label(RichText::new("Double-click to drag into viewport").small().italics().color(Color32::from_rgb(120, 180, 120)));
+                        ui.label(
+                            RichText::new(format!("Path: {}", asset.path))
+                                .small()
+                                .color(Color32::from_rgb(150, 150, 150)),
+                        );
+                        ui.label(
+                            RichText::new("Double-click to drag into viewport")
+                                .small()
+                                .italics()
+                                .color(Color32::from_rgb(120, 180, 120)),
+                        );
                     });
 
                     if (col_idx + 1) % cols == 0 {

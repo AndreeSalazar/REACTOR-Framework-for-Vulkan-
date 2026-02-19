@@ -33,4 +33,14 @@ pub use raymarching::*;
 pub use antialiasing::*;
 pub use hybrid::*;
 pub use integration::*;
-pub use adead_aa::*;
+pub use adead_aa::{
+    ADeadAA,
+    ADeadAAConfig,
+    ADeadAAQuality,
+    ADeadAAStats,
+    epic_smoothstep,
+    ultra_smoothstep,
+    epic_edge_coverage,
+    epic_blend_colors,
+    epic_edge_alpha,
+};

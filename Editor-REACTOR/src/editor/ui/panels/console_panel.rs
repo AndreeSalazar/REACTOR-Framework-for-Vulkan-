@@ -2,8 +2,8 @@
 // ConsolePanel — Editor log output
 // =============================================================================
 
-use egui::{Color32, RichText, Ui};
 use crate::editor::core::editor_context::{ConsoleEntry, EditorContext, LogLevel};
+use egui::{Color32, RichText, Ui};
 
 pub struct ConsolePanel {
     pub filter_info: bool,
@@ -27,14 +27,33 @@ impl ConsolePanel {
     pub fn show(&mut self, ui: &mut Ui, ctx: &mut EditorContext) {
         // Header toolbar
         ui.horizontal(|ui| {
-            ui.label(RichText::new("🖥 Console").strong().color(Color32::from_rgb(200, 200, 200)));
+            ui.label(
+                RichText::new("🖥 Console")
+                    .strong()
+                    .color(Color32::from_rgb(200, 200, 200)),
+            );
 
             ui.separator();
 
             // Level toggles
-            ui.toggle_value(&mut self.filter_info, RichText::new("INFO").color(Color32::from_rgb(180, 220, 180)).small());
-            ui.toggle_value(&mut self.filter_warn, RichText::new("WARN").color(Color32::from_rgb(255, 200, 60)).small());
-            ui.toggle_value(&mut self.filter_error, RichText::new("ERROR").color(Color32::from_rgb(255, 80, 80)).small());
+            ui.toggle_value(
+                &mut self.filter_info,
+                RichText::new("INFO")
+                    .color(Color32::from_rgb(180, 220, 180))
+                    .small(),
+            );
+            ui.toggle_value(
+                &mut self.filter_warn,
+                RichText::new("WARN")
+                    .color(Color32::from_rgb(255, 200, 60))
+                    .small(),
+            );
+            ui.toggle_value(
+                &mut self.filter_error,
+                RichText::new("ERROR")
+                    .color(Color32::from_rgb(255, 80, 80))
+                    .small(),
+            );
 
             ui.separator();
 
@@ -53,13 +72,37 @@ impl ConsolePanel {
                 }
 
                 // Counts
-                let info_count = ctx.console_log.iter().filter(|e| e.level == LogLevel::Info).count();
-                let warn_count = ctx.console_log.iter().filter(|e| e.level == LogLevel::Warning).count();
-                let err_count  = ctx.console_log.iter().filter(|e| e.level == LogLevel::Error).count();
+                let info_count = ctx
+                    .console_log
+                    .iter()
+                    .filter(|e| e.level == LogLevel::Info)
+                    .count();
+                let warn_count = ctx
+                    .console_log
+                    .iter()
+                    .filter(|e| e.level == LogLevel::Warning)
+                    .count();
+                let err_count = ctx
+                    .console_log
+                    .iter()
+                    .filter(|e| e.level == LogLevel::Error)
+                    .count();
 
-                ui.label(RichText::new(format!("{} ✖", err_count)).color(Color32::from_rgb(255, 80, 80)).small());
-                ui.label(RichText::new(format!("{} ⚠", warn_count)).color(Color32::from_rgb(255, 200, 60)).small());
-                ui.label(RichText::new(format!("{} ℹ", info_count)).color(Color32::from_rgb(100, 200, 100)).small());
+                ui.label(
+                    RichText::new(format!("{} ✖", err_count))
+                        .color(Color32::from_rgb(255, 80, 80))
+                        .small(),
+                );
+                ui.label(
+                    RichText::new(format!("{} ⚠", warn_count))
+                        .color(Color32::from_rgb(255, 200, 60))
+                        .small(),
+                );
+                ui.label(
+                    RichText::new(format!("{} ℹ", info_count))
+                        .color(Color32::from_rgb(100, 200, 100))
+                        .small(),
+                );
             });
         });
 
@@ -71,24 +114,28 @@ impl ConsolePanel {
             .stick_to_bottom(self.auto_scroll);
 
         scroll.show(ui, |ui| {
-            let entries: Vec<ConsoleEntry> = ctx.console_log.iter()
+            let entries: Vec<ConsoleEntry> = ctx
+                .console_log
+                .iter()
                 .filter(|e| match e.level {
-                    LogLevel::Info    => self.filter_info,
+                    LogLevel::Info => self.filter_info,
                     LogLevel::Warning => self.filter_warn,
-                    LogLevel::Error   => self.filter_error,
+                    LogLevel::Error => self.filter_error,
                 })
                 .filter(|e| {
                     self.search.is_empty()
-                        || e.message.to_lowercase().contains(&self.search.to_lowercase())
+                        || e.message
+                            .to_lowercase()
+                            .contains(&self.search.to_lowercase())
                 })
                 .cloned()
                 .collect();
 
             for entry in &entries {
                 let (icon, color) = match entry.level {
-                    LogLevel::Info    => ("ℹ", Color32::from_rgb(160, 220, 160)),
+                    LogLevel::Info => ("ℹ", Color32::from_rgb(160, 220, 160)),
                     LogLevel::Warning => ("⚠", Color32::from_rgb(255, 200, 60)),
-                    LogLevel::Error   => ("✖", Color32::from_rgb(255, 100, 100)),
+                    LogLevel::Error => ("✖", Color32::from_rgb(255, 100, 100)),
                 };
 
                 ui.horizontal(|ui| {
@@ -97,7 +144,7 @@ impl ConsolePanel {
                         RichText::new(&entry.message)
                             .color(color)
                             .monospace()
-                            .small()
+                            .small(),
                     );
                 });
             }
@@ -107,7 +154,7 @@ impl ConsolePanel {
                     RichText::new("No log entries.")
                         .color(Color32::from_rgb(100, 100, 100))
                         .italics()
-                        .small()
+                        .small(),
                 );
             }
         });

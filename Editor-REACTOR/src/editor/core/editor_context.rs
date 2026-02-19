@@ -7,7 +7,7 @@
 //   - Selection, Assets, Console, Stats
 // =============================================================================
 
-use glam::{Vec2, Vec3, Vec4, Quat, Mat4};
+use glam::{Mat4, Quat, Vec2, Vec3, Vec4};
 use std::collections::HashMap;
 
 // =============================================================================
@@ -99,21 +99,43 @@ impl OrbitCamera {
         self.distance = 5.0;
     }
 
-    pub fn set_front(&mut self) { self.yaw = 0.0; self.pitch = 0.0; }
-    pub fn set_back(&mut self) { self.yaw = std::f32::consts::PI; self.pitch = 0.0; }
-    pub fn set_right(&mut self) { self.yaw = std::f32::consts::FRAC_PI_2; self.pitch = 0.0; }
-    pub fn set_left(&mut self) { self.yaw = -std::f32::consts::FRAC_PI_2; self.pitch = 0.0; }
-    pub fn set_top(&mut self) { self.yaw = 0.0; self.pitch = 1.5; }
-    pub fn set_bottom(&mut self) { self.yaw = 0.0; self.pitch = -1.5; }
+    pub fn set_front(&mut self) {
+        self.yaw = 0.0;
+        self.pitch = 0.0;
+    }
+    pub fn set_back(&mut self) {
+        self.yaw = std::f32::consts::PI;
+        self.pitch = 0.0;
+    }
+    pub fn set_right(&mut self) {
+        self.yaw = std::f32::consts::FRAC_PI_2;
+        self.pitch = 0.0;
+    }
+    pub fn set_left(&mut self) {
+        self.yaw = -std::f32::consts::FRAC_PI_2;
+        self.pitch = 0.0;
+    }
+    pub fn set_top(&mut self) {
+        self.yaw = 0.0;
+        self.pitch = 1.5;
+    }
+    pub fn set_bottom(&mut self) {
+        self.yaw = 0.0;
+        self.pitch = -1.5;
+    }
 
     /// Project 3D world point to 2D screen coordinates
     pub fn project(&self, world_pos: Vec3, viewport_size: Vec2) -> Option<Vec2> {
         let aspect = viewport_size.x / viewport_size.y;
         let vp = self.view_projection(aspect);
         let clip = vp * Vec4::new(world_pos.x, world_pos.y, world_pos.z, 1.0);
-        if clip.w <= 0.0 { return None; }
+        if clip.w <= 0.0 {
+            return None;
+        }
         let ndc = Vec3::new(clip.x / clip.w, clip.y / clip.w, clip.z / clip.w);
-        if ndc.z < 0.0 || ndc.z > 1.0 { return None; }
+        if ndc.z < 0.0 || ndc.z > 1.0 {
+            return None;
+        }
         Some(Vec2::new(
             (ndc.x * 0.5 + 0.5) * viewport_size.x,
             (ndc.y * 0.5 + 0.5) * viewport_size.y,
@@ -147,7 +169,11 @@ pub struct TransformComponent {
 
 impl Default for TransformComponent {
     fn default() -> Self {
-        Self { position: Vec3::ZERO, rotation: Quat::IDENTITY, scale: Vec3::ONE }
+        Self {
+            position: Vec3::ZERO,
+            rotation: Quat::IDENTITY,
+            scale: Vec3::ONE,
+        }
     }
 }
 
@@ -223,7 +249,11 @@ impl Default for LightComponent {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum LightType { Directional, Point, Spot }
+pub enum LightType {
+    Directional,
+    Point,
+    Spot,
+}
 
 impl std::fmt::Display for LightType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -245,7 +275,12 @@ pub struct CameraComponent {
 
 impl Default for CameraComponent {
     fn default() -> Self {
-        Self { fov: 60.0, near: 0.1, far: 1000.0, is_main: false }
+        Self {
+            fov: 60.0,
+            near: 0.1,
+            far: 1000.0,
+            is_main: false,
+        }
     }
 }
 
@@ -270,19 +305,30 @@ pub struct EditorEntity {
 impl EditorEntity {
     pub fn new(id: EntityId, name: impl Into<String>) -> Self {
         Self {
-            id, name: name.into(),
+            id,
+            name: name.into(),
             transform: TransformComponent::default(),
-            mesh: None, light: None, camera: None,
-            children: Vec::new(), parent: None,
-            visible: true, locked: false,
+            mesh: None,
+            light: None,
+            camera: None,
+            children: Vec::new(),
+            parent: None,
+            visible: true,
+            locked: false,
         }
     }
 
     pub fn icon(&self) -> &'static str {
-        if self.camera.is_some() { return "\u{1F3A5}"; }  // camera
-        if self.light.is_some() { return "\u{1F4A1}"; }   // light
-        if self.mesh.is_some() { return "\u{1F4E6}"; }    // mesh
-        "\u{2B1C}"  // empty
+        if self.camera.is_some() {
+            return "\u{1F3A5}";
+        } // camera
+        if self.light.is_some() {
+            return "\u{1F4A1}";
+        } // light
+        if self.mesh.is_some() {
+            return "\u{1F4E6}";
+        } // mesh
+        "\u{2B1C}" // empty
     }
 }
 
@@ -300,7 +346,12 @@ pub struct EditorScene {
 
 impl EditorScene {
     pub fn new(name: impl Into<String>) -> Self {
-        Self { name: name.into(), entities: HashMap::new(), root_entities: Vec::new(), next_id: 1 }
+        Self {
+            name: name.into(),
+            entities: HashMap::new(),
+            root_entities: Vec::new(),
+            next_id: 1,
+        }
     }
 
     pub fn spawn(&mut self, name: impl Into<String>) -> EntityId {
@@ -311,14 +362,20 @@ impl EditorScene {
         id
     }
 
-    pub fn get(&self, id: EntityId) -> Option<&EditorEntity> { self.entities.get(&id) }
-    pub fn get_mut(&mut self, id: EntityId) -> Option<&mut EditorEntity> { self.entities.get_mut(&id) }
+    pub fn get(&self, id: EntityId) -> Option<&EditorEntity> {
+        self.entities.get(&id)
+    }
+    pub fn get_mut(&mut self, id: EntityId) -> Option<&mut EditorEntity> {
+        self.entities.get_mut(&id)
+    }
 
     pub fn remove(&mut self, id: EntityId) {
         // Remove children recursively
         if let Some(entity) = self.entities.get(&id) {
             let children: Vec<EntityId> = entity.children.clone();
-            for child in children { self.remove(child); }
+            for child in children {
+                self.remove(child);
+            }
         }
         self.entities.remove(&id);
         self.root_entities.retain(|&e| e != id);
@@ -331,8 +388,12 @@ impl EditorScene {
         }
     }
 
-    pub fn all_entities(&self) -> impl Iterator<Item = &EditorEntity> { self.entities.values() }
-    pub fn entity_count(&self) -> usize { self.entities.len() }
+    pub fn all_entities(&self) -> impl Iterator<Item = &EditorEntity> {
+        self.entities.values()
+    }
+    pub fn entity_count(&self) -> usize {
+        self.entities.len()
+    }
 }
 
 // =============================================================================
@@ -340,14 +401,25 @@ impl EditorScene {
 // =============================================================================
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum AssetType { Mesh, Texture, Material, Shader, Scene, Audio, Script }
+pub enum AssetType {
+    Mesh,
+    Texture,
+    Material,
+    Shader,
+    Scene,
+    Audio,
+    Script,
+}
 
 impl std::fmt::Display for AssetType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Mesh => write!(f, "Mesh"), Self::Texture => write!(f, "Texture"),
-            Self::Material => write!(f, "Material"), Self::Shader => write!(f, "Shader"),
-            Self::Scene => write!(f, "Scene"), Self::Audio => write!(f, "Audio"),
+            Self::Mesh => write!(f, "Mesh"),
+            Self::Texture => write!(f, "Texture"),
+            Self::Material => write!(f, "Material"),
+            Self::Shader => write!(f, "Shader"),
+            Self::Scene => write!(f, "Scene"),
+            Self::Audio => write!(f, "Audio"),
             Self::Script => write!(f, "Script"),
         }
     }
@@ -363,9 +435,12 @@ pub struct AssetEntry {
 impl AssetEntry {
     pub fn icon(&self) -> &str {
         match self.asset_type {
-            AssetType::Mesh => "\u{1F4E6}", AssetType::Texture => "\u{1F5BC}",
-            AssetType::Material => "\u{1F3A8}", AssetType::Shader => "\u{26A1}",
-            AssetType::Scene => "\u{1F30D}", AssetType::Audio => "\u{1F50A}",
+            AssetType::Mesh => "\u{1F4E6}",
+            AssetType::Texture => "\u{1F5BC}",
+            AssetType::Material => "\u{1F3A8}",
+            AssetType::Shader => "\u{26A1}",
+            AssetType::Scene => "\u{1F30D}",
+            AssetType::Audio => "\u{1F50A}",
             AssetType::Script => "\u{1F4DC}",
         }
     }
@@ -378,14 +453,45 @@ pub struct AssetRegistry {
 
 impl AssetRegistry {
     pub fn new() -> Self {
-        let mut r = Self { assets: Vec::new(), current_folder: "assets/".into() };
-        r.assets.push(AssetEntry { name: "cube.obj".into(), path: "assets/models/cube.obj".into(), asset_type: AssetType::Mesh });
-        r.assets.push(AssetEntry { name: "pyramid.obj".into(), path: "assets/models/pyramid.obj".into(), asset_type: AssetType::Mesh });
-        r.assets.push(AssetEntry { name: "sphere.obj".into(), path: "assets/models/sphere.obj".into(), asset_type: AssetType::Mesh });
-        r.assets.push(AssetEntry { name: "container.jpg".into(), path: "assets/textures/container.jpg".into(), asset_type: AssetType::Texture });
-        r.assets.push(AssetEntry { name: "default.mat".into(), path: "assets/materials/default.mat".into(), asset_type: AssetType::Material });
-        r.assets.push(AssetEntry { name: "vert.spv".into(), path: "shaders/vert.spv".into(), asset_type: AssetType::Shader });
-        r.assets.push(AssetEntry { name: "frag.spv".into(), path: "shaders/frag.spv".into(), asset_type: AssetType::Shader });
+        let mut r = Self {
+            assets: Vec::new(),
+            current_folder: "assets/".into(),
+        };
+        r.assets.push(AssetEntry {
+            name: "cube.obj".into(),
+            path: "assets/models/cube.obj".into(),
+            asset_type: AssetType::Mesh,
+        });
+        r.assets.push(AssetEntry {
+            name: "pyramid.obj".into(),
+            path: "assets/models/pyramid.obj".into(),
+            asset_type: AssetType::Mesh,
+        });
+        r.assets.push(AssetEntry {
+            name: "sphere.obj".into(),
+            path: "assets/models/sphere.obj".into(),
+            asset_type: AssetType::Mesh,
+        });
+        r.assets.push(AssetEntry {
+            name: "container.jpg".into(),
+            path: "assets/textures/container.jpg".into(),
+            asset_type: AssetType::Texture,
+        });
+        r.assets.push(AssetEntry {
+            name: "default.mat".into(),
+            path: "assets/materials/default.mat".into(),
+            asset_type: AssetType::Material,
+        });
+        r.assets.push(AssetEntry {
+            name: "vert.spv".into(),
+            path: "shaders/vert.spv".into(),
+            asset_type: AssetType::Shader,
+        });
+        r.assets.push(AssetEntry {
+            name: "frag.spv".into(),
+            path: "shaders/frag.spv".into(),
+            asset_type: AssetType::Shader,
+        });
         r
     }
 }
@@ -412,11 +518,19 @@ pub struct ConsoleEntry {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum LogLevel { Info, Warning, Error }
+pub enum LogLevel {
+    Info,
+    Warning,
+    Error,
+}
 
 impl std::fmt::Display for LogLevel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self { Self::Info => write!(f, "INFO"), Self::Warning => write!(f, "WARN"), Self::Error => write!(f, "ERR") }
+        match self {
+            Self::Info => write!(f, "INFO"),
+            Self::Warning => write!(f, "WARN"),
+            Self::Error => write!(f, "ERR"),
+        }
     }
 }
 
@@ -425,7 +539,12 @@ impl std::fmt::Display for LogLevel {
 // =============================================================================
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum GizmoMode { Select, Translate, Rotate, Scale }
+pub enum GizmoMode {
+    Select,
+    Translate,
+    Rotate,
+    Scale,
+}
 
 // =============================================================================
 // EditorStats
@@ -464,10 +583,16 @@ pub struct EditorContext {
     pub snap_translate: f32,
     pub snap_rotate: f32,
     pub snap_scale: f32,
+    pub gizmo_translate_sensitivity: f32,
+    pub gizmo_rotate_sensitivity: f32,
+    pub gizmo_scale_sensitivity: f32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum GizmoSpace { Local, World }
+pub enum GizmoSpace {
+    Local,
+    World,
+}
 
 impl EditorContext {
     pub fn new() -> Self {
@@ -490,6 +615,9 @@ impl EditorContext {
             snap_translate: 0.0,
             snap_rotate: 0.0,
             snap_scale: 0.0,
+            gizmo_translate_sensitivity: 0.35,
+            gizmo_rotate_sensitivity: 0.22,
+            gizmo_scale_sensitivity: 0.45,
         };
         ctx.build_default_scene();
         ctx.log(LogLevel::Info, "REACTOR Editor v0.1.0 initialized");
@@ -502,7 +630,10 @@ impl EditorContext {
         let id = self.scene.spawn("Main Camera");
         if let Some(e) = self.scene.get_mut(id) {
             e.transform.position = Vec3::new(0.0, 2.0, 5.0);
-            e.camera = Some(CameraComponent { is_main: true, ..Default::default() });
+            e.camera = Some(CameraComponent {
+                is_main: true,
+                ..Default::default()
+            });
         }
 
         // Directional Light
@@ -567,18 +698,30 @@ impl EditorContext {
 
     // Logging
     pub fn log(&mut self, level: LogLevel, msg: impl Into<String>) {
-        self.console_log.push(ConsoleEntry { level, message: msg.into(), frame: self.frame_count });
+        self.console_log.push(ConsoleEntry {
+            level,
+            message: msg.into(),
+            frame: self.frame_count,
+        });
     }
 
-    pub fn log_info(&mut self, msg: impl Into<String>) { self.log(LogLevel::Info, msg); }
-    pub fn log_warn(&mut self, msg: impl Into<String>) { self.log(LogLevel::Warning, msg); }
-    pub fn log_error(&mut self, msg: impl Into<String>) { self.log(LogLevel::Error, msg); }
+    pub fn log_info(&mut self, msg: impl Into<String>) {
+        self.log(LogLevel::Info, msg);
+    }
+    pub fn log_warn(&mut self, msg: impl Into<String>) {
+        self.log(LogLevel::Warning, msg);
+    }
+    pub fn log_error(&mut self, msg: impl Into<String>) {
+        self.log(LogLevel::Error, msg);
+    }
 
     // Selection
     pub fn select(&mut self, id: Option<EntityId>) {
         self.selected = id;
         self.multi_selected.clear();
-        if let Some(id) = id { self.multi_selected.push(id); }
+        if let Some(id) = id {
+            self.multi_selected.push(id);
+        }
     }
 
     pub fn toggle_select(&mut self, id: EntityId) {
@@ -628,7 +771,10 @@ impl EditorContext {
         let id = self.spawn_entity(name);
         if let Some(e) = self.scene.get_mut(id) {
             e.transform.position = Vec3::new(0.0, 3.0, 0.0);
-            e.light = Some(LightComponent { light_type: lt, ..Default::default() });
+            e.light = Some(LightComponent {
+                light_type: lt,
+                ..Default::default()
+            });
         }
         id
     }

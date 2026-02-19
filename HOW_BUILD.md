@@ -52,10 +52,10 @@ git clone https://github.com/user/REACTOR-Framework-for-Vulkan-.git
 cd REACTOR-Framework-for-Vulkan-
 
 # Ejecutar ejemplo simple
-cargo run --example simple_cube
+cargo run --example cube
 
 # Ejecutar con optimizaciones
-cargo run --example simple_cube --release
+cargo run --example cube --release
 ```
 
 ### Compilar Librería
@@ -214,11 +214,11 @@ REACTOR-Framework-for-Vulkan-/
 │   ├── lib.rs              # Punto de entrada de la librería
 │   ├── app.rs              # ReactorApp trait + ReactorConfig
 │   ├── reactor.rs          # Reactor principal (Vulkan)
-│   └── prelude.rs          # Re-exports públicos
+│   └── ...                 # Módulos core/graphics/resources/systems
 │
 ├── examples/               # Ejemplos ejecutables
-│   ├── simple_cube.rs      # ← EMPIEZA AQUÍ (más simple)
-│   ├── cube.rs             # Demo completo con controles
+│   ├── cube.rs             # ← EMPIEZA AQUÍ (base con controles)
+│   ├── textured_cube.rs    # Demo con textura
 │   └── sandbox.rs          # Sandbox experimental
 │
 ├── shaders/                # Shaders SPIR-V

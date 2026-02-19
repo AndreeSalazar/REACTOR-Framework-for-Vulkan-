@@ -5,8 +5,8 @@
 // Proporciona una API unificada para usar todas las características de ADead
 // =============================================================================
 
-use glam::{Vec2, Vec3, Vec4};
-use crate::adead::isr::{IntelligentShadingRate, ISRConfig, ISRStats, ISRBenchmark};
+use glam::{Vec3, Vec4};
+use crate::adead::isr::{IntelligentShadingRate, ISRConfig, ISRBenchmark};
 use crate::adead::sdf::SDFPrimitive;
 use crate::adead::raymarching::{RayMarcher, RayMarchConfig, SDFScene, RayMarchHit};
 use crate::adead::antialiasing::{SDFAntiAliasing, SDFAAConfig};

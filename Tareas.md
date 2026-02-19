@@ -232,9 +232,9 @@ USUARIO (hereda y modifica desde UN archivo):
 │  reactor::Application (C++ SDK)                     │
 │  ├── Input, Time, Window, Camera                    │  ← Ya listo ✅
 │  ├── Scene, Lighting, SDF, Log                      │  ← Ya listo ✅
-│  ├── Material, Texture, Model                       │  ← FALTA ❌
-│  ├── Physics, ECS, Animation, Audio                 │  ← FALTA ❌
-│  └── Debug, PostProcess, Error                      │  ← FALTA ❌
+│  ├── Material, Texture, Model                       │  ← Ya listo ✅
+│  ├── Physics, ECS, Animation, Audio                 │  ← Ya listo ✅
+│  └── Debug, PostProcess, Error                      │  ← Ya listo ✅
 └──────────────────────┬──────────────────────────────┘
                        │ extern "C"
                        ▼
