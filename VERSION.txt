@@ -44,8 +44,8 @@ Documentation:
 
 Examples:
 - cpp/examples/3D/main_basic.cpp (C API directo)
-- cpp/examples/3D/main_class.cpp (SDK de C++)
-- Rust examples (simple_cube, cube, sandbox)
+- cpp/reactor_cpp/include/reactor/application.hpp (SDK C++ wrapper)
+- Rust examples (cube, textured_cube, sandbox, physics_camera, obj_loader_demo)
 
 Performance:
 - 3000+ FPS en NVIDIA RTX 3060

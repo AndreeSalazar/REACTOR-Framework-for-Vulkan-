@@ -104,7 +104,7 @@ impl ShadowMap {
     }
 
     /// Update shadow cascades for a camera frustum
-    pub fn update(&mut self, camera_view: Mat4, camera_proj: Mat4, near: f32, far: f32) {
+    pub fn update(&mut self, _camera_view: Mat4, _camera_proj: Mat4, near: f32, far: f32) {
         self.light_view = Mat4::look_at_rh(
             -self.light_direction * 50.0,
             Vec3::ZERO,
@@ -221,7 +221,7 @@ pub fn calculate_shadow_factor(
     }
     
     let cascade = &shadow_map.cascades[cascade_index];
-    let bias = shadow_map.get_bias(cascade_index);
+    let _bias = shadow_map.get_bias(cascade_index);
     
     // Apply normal bias
     let biased_pos = world_pos + normal * shadow_map.config.normal_bias;

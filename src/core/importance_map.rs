@@ -10,7 +10,7 @@
 // Un solo concepto, múltiples sistemas.
 // =============================================================================
 
-use glam::{Vec2, Vec3};
+use glam::Vec3;
 
 /// Tipo de importancia
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

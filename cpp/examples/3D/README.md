@@ -104,7 +104,7 @@ int main() {
 
 ```
 3D/
-├── main.cpp          # Example code (3 styles)
+├── main_basic.cpp    # Example code (formal lifecycle)
 ├── CMakeLists.txt    # Build configuration
 └── README.md         # This file
 ```
