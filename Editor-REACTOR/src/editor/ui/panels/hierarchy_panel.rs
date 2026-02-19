@@ -2,8 +2,8 @@
 // HierarchyPanel — Scene entity tree (like Unreal's Outliner)
 // =============================================================================
 
-use egui::{Color32, RichText, Ui};
 use crate::editor::core::editor_context::{EditorContext, EntityId};
+use egui::{Color32, RichText, Ui};
 
 pub struct HierarchyPanel {
     pub search_filter: String,
@@ -23,9 +23,17 @@ impl HierarchyPanel {
     pub fn show(&mut self, ui: &mut Ui, ctx: &mut EditorContext) {
         // Header toolbar
         ui.horizontal(|ui| {
-            ui.label(RichText::new("🌍 Hierarchy").strong().color(Color32::from_rgb(200, 200, 200)));
+            ui.label(
+                RichText::new("🌍 Hierarchy")
+                    .strong()
+                    .color(Color32::from_rgb(200, 200, 200)),
+            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("➕").on_hover_text("Spawn empty entity").clicked() {
+                if ui
+                    .small_button("➕")
+                    .on_hover_text("Spawn empty entity")
+                    .clicked()
+                {
                     ctx.spawn_entity("New Entity");
                 }
             });
@@ -51,12 +59,12 @@ impl HierarchyPanel {
             ui.label(
                 RichText::new(format!("📁 {}", ctx.scene.name))
                     .color(Color32::from_rgb(180, 180, 120))
-                    .small()
+                    .small(),
             );
             ui.label(
                 RichText::new(format!("({} entities)", ctx.scene.entity_count()))
                     .color(Color32::from_rgb(120, 120, 120))
-                    .small()
+                    .small(),
             );
         });
 
@@ -96,7 +104,13 @@ impl HierarchyPanel {
         }
     }
 
-    fn draw_entity_row(&mut self, ui: &mut Ui, ctx: &mut EditorContext, id: EntityId, depth: usize) {
+    fn draw_entity_row(
+        &mut self,
+        ui: &mut Ui,
+        ctx: &mut EditorContext,
+        id: EntityId,
+        depth: usize,
+    ) {
         let entity = match ctx.scene.get(id) {
             Some(e) => e.clone(),
             None => return,
@@ -104,7 +118,11 @@ impl HierarchyPanel {
 
         // Filter
         if !self.search_filter.is_empty() {
-            if !entity.name.to_lowercase().contains(&self.search_filter.to_lowercase()) {
+            if !entity
+                .name
+                .to_lowercase()
+                .contains(&self.search_filter.to_lowercase())
+            {
                 return;
             }
         }
@@ -117,7 +135,11 @@ impl HierarchyPanel {
 
             // Visibility toggle
             let vis_icon = if entity.visible { "👁" } else { "🚫" };
-            if ui.small_button(vis_icon).on_hover_text("Toggle visibility").clicked() {
+            if ui
+                .small_button(vis_icon)
+                .on_hover_text("Toggle visibility")
+                .clicked()
+            {
                 if let Some(e) = ctx.scene.get_mut(id) {
                     e.visible = !e.visible;
                 }
@@ -150,8 +172,7 @@ impl HierarchyPanel {
                         .color(Color32::from_rgb(255, 200, 80))
                         .strong()
                 } else {
-                    RichText::new(label_text)
-                        .color(Color32::from_rgb(200, 200, 200))
+                    RichText::new(label_text).color(Color32::from_rgb(200, 200, 200))
                 };
 
                 let response = ui.selectable_label(is_selected, label);

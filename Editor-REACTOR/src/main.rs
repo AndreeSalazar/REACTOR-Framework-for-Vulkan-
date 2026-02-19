@@ -27,11 +27,8 @@ use editor::core::command_system::CommandSystem;
 use editor::core::editor_context::EditorContext;
 use editor::core::event_bus::EventBus;
 use editor::ui::panels::{
-    asset_browser_panel::AssetBrowserPanel,
-    console_panel::ConsolePanel,
-    hierarchy_panel::HierarchyPanel,
-    inspector_panel::InspectorPanel,
-    toolbar_panel::ToolbarPanel,
+    asset_browser_panel::AssetBrowserPanel, console_panel::ConsolePanel,
+    hierarchy_panel::HierarchyPanel, inspector_panel::InspectorPanel, toolbar_panel::ToolbarPanel,
     viewport_panel::ViewportPanel,
 };
 
@@ -51,11 +48,11 @@ enum PanelId {
 impl std::fmt::Display for PanelId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PanelId::Viewport     => write!(f, "🖥  Viewport"),
-            PanelId::Hierarchy    => write!(f, "🌍  Hierarchy"),
-            PanelId::Inspector    => write!(f, "🔍  Inspector"),
+            PanelId::Viewport => write!(f, "🖥  Viewport"),
+            PanelId::Hierarchy => write!(f, "🌍  Hierarchy"),
+            PanelId::Inspector => write!(f, "🔍  Inspector"),
             PanelId::AssetBrowser => write!(f, "📂  Assets"),
-            PanelId::Console      => write!(f, "🖥  Console"),
+            PanelId::Console => write!(f, "🖥  Console"),
         }
     }
 }
@@ -82,11 +79,11 @@ impl<'a> TabViewer for ReactorTabViewer<'a> {
 
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
         match tab {
-            PanelId::Viewport     => self.viewport.show(ui, self.ctx),
-            PanelId::Hierarchy    => self.hierarchy.show(ui, self.ctx),
-            PanelId::Inspector    => self.inspector.show(ui, self.ctx),
+            PanelId::Viewport => self.viewport.show(ui, self.ctx),
+            PanelId::Hierarchy => self.hierarchy.show(ui, self.ctx),
+            PanelId::Inspector => self.inspector.show(ui, self.ctx),
             PanelId::AssetBrowser => self.asset_browser.show(ui, self.ctx),
-            PanelId::Console      => self.console.show(ui, self.ctx),
+            PanelId::Console => self.console.show(ui, self.ctx),
         }
     }
 
@@ -162,25 +159,36 @@ impl ReactorEditor {
     }
 
     fn apply_dark_theme(ctx: &Context) {
+        let mut style = (*ctx.style()).clone();
+        style.spacing.item_spacing = egui::Vec2::new(7.0, 6.0);
+        style.spacing.button_padding = egui::Vec2::new(10.0, 4.0);
+        style.visuals.panel_fill = Color32::from_rgb(30, 31, 36);
+
         let mut visuals = Visuals::dark();
 
-        // Custom REACTOR dark theme
-        visuals.window_fill = Color32::from_rgb(28, 28, 32);
-        visuals.panel_fill = Color32::from_rgb(32, 32, 36);
-        visuals.faint_bg_color = Color32::from_rgb(38, 38, 44);
-        visuals.extreme_bg_color = Color32::from_rgb(20, 20, 24);
+        // Dark professional style (UE-like neutral contrast)
+        visuals.window_fill = Color32::from_rgb(26, 27, 31);
+        visuals.panel_fill = Color32::from_rgb(31, 32, 37);
+        visuals.faint_bg_color = Color32::from_rgb(42, 43, 50);
+        visuals.extreme_bg_color = Color32::from_rgb(18, 19, 23);
 
-        visuals.widgets.noninteractive.bg_fill = Color32::from_rgb(38, 38, 44);
-        visuals.widgets.inactive.bg_fill = Color32::from_rgb(48, 48, 54);
-        visuals.widgets.hovered.bg_fill = Color32::from_rgb(60, 60, 70);
-        visuals.widgets.active.bg_fill = Color32::from_rgb(70, 100, 160);
+        visuals.widgets.noninteractive.bg_fill = Color32::from_rgb(34, 35, 40);
+        visuals.widgets.inactive.bg_fill = Color32::from_rgb(47, 49, 56);
+        visuals.widgets.hovered.bg_fill = Color32::from_rgb(63, 66, 78);
+        visuals.widgets.active.bg_fill = Color32::from_rgb(77, 95, 136);
+        visuals.widgets.open.bg_fill = Color32::from_rgb(57, 59, 68);
 
-        visuals.selection.bg_fill = Color32::from_rgba_premultiplied(80, 120, 200, 120);
-        visuals.selection.stroke.color = Color32::from_rgb(100, 160, 255);
+        visuals.widgets.noninteractive.fg_stroke.color = Color32::from_rgb(170, 172, 181);
+        visuals.widgets.inactive.fg_stroke.color = Color32::from_rgb(196, 198, 206);
+        visuals.widgets.hovered.fg_stroke.color = Color32::from_rgb(224, 226, 234);
+        visuals.widgets.active.fg_stroke.color = Color32::from_rgb(236, 238, 245);
 
-        visuals.override_text_color = Some(Color32::from_rgb(210, 210, 215));
+        visuals.selection.bg_fill = Color32::from_rgba_premultiplied(98, 138, 214, 120);
+        visuals.selection.stroke.color = Color32::from_rgb(114, 171, 255);
+        visuals.override_text_color = Some(Color32::from_rgb(214, 216, 224));
 
-        ctx.set_visuals(visuals);
+        style.visuals = visuals;
+        ctx.set_style(style);
     }
 
     fn handle_keyboard_shortcuts(&mut self, ctx: &Context) {
@@ -219,14 +227,16 @@ impl ReactorEditor {
         });
 
         // Undo/Redo (needs mutable borrow)
-        let (do_undo, do_redo, do_delete, do_play, do_duplicate, do_focus) = ctx.input(|i| (
-            i.modifiers.ctrl && i.key_pressed(egui::Key::Z),
-            i.modifiers.ctrl && i.key_pressed(egui::Key::Y),
-            i.key_pressed(egui::Key::Delete),
-            i.key_pressed(egui::Key::F5),
-            i.modifiers.ctrl && i.key_pressed(egui::Key::D),
-            i.key_pressed(egui::Key::F),
-        ));
+        let (do_undo, do_redo, do_delete, do_play, do_duplicate, do_focus) = ctx.input(|i| {
+            (
+                i.modifiers.ctrl && i.key_pressed(egui::Key::Z),
+                i.modifiers.ctrl && i.key_pressed(egui::Key::Y),
+                i.key_pressed(egui::Key::Delete),
+                i.key_pressed(egui::Key::F5),
+                i.modifiers.ctrl && i.key_pressed(egui::Key::D),
+                i.key_pressed(egui::Key::F),
+            )
+        });
 
         if do_undo {
             self.commands.undo(&mut self.editor_ctx);
@@ -240,7 +250,8 @@ impl ReactorEditor {
         if do_play {
             self.editor_ctx.play_mode = !self.editor_ctx.play_mode;
             if self.editor_ctx.play_mode {
-                self.editor_ctx.log_info("Play mode started (F5). Launching REACTOR Engine...");
+                self.editor_ctx
+                    .log_info("Play mode started (F5). Launching REACTOR Engine...");
                 self.launch_play_window();
             } else {
                 self.editor_ctx.log_info("Play mode stopped (F5).");
@@ -268,36 +279,50 @@ impl ReactorEditor {
     /// Launch the REACTOR engine in Play mode with the current scene
     fn launch_play_window(&mut self) {
         // Export scene to temporary file for the engine to load
-        let scene_data = self.export_scene_for_play();
-        
+        let _scene_data = self.export_scene_for_play();
+
         // For now, we'll show a message about what would happen
         // In a full implementation, this would:
         // 1. Serialize the current scene to a temp file
         // 2. Launch the REACTOR engine executable with the scene path
         // 3. Monitor the process and stop play mode when it exits
-        
+
         self.editor_ctx.log_info(format!(
             "Scene '{}' ready for play with {} entities.",
-            self.editor_ctx.scene.name,
-            self.editor_ctx.stats.entity_count
+            self.editor_ctx.scene.name, self.editor_ctx.stats.entity_count
         ));
-        
+
         // Log scene contents
-        for entity in self.editor_ctx.scene.all_entities() {
-            let entity_type = if entity.mesh.is_some() { "Mesh" }
-                else if entity.light.is_some() { "Light" }
-                else if entity.camera.is_some() { "Camera" }
-                else { "Empty" };
-            self.editor_ctx.log_info(format!(
-                "  → {} [{}] at ({:.1}, {:.1}, {:.1})",
-                entity.name, entity_type,
-                entity.transform.position.x,
-                entity.transform.position.y,
-                entity.transform.position.z
-            ));
+        let scene_lines: Vec<String> = self
+            .editor_ctx
+            .scene
+            .all_entities()
+            .map(|entity| {
+                let entity_type = if entity.mesh.is_some() {
+                    "Mesh"
+                } else if entity.light.is_some() {
+                    "Light"
+                } else if entity.camera.is_some() {
+                    "Camera"
+                } else {
+                    "Empty"
+                };
+                format!(
+                    "  → {} [{}] at ({:.1}, {:.1}, {:.1})",
+                    entity.name,
+                    entity_type,
+                    entity.transform.position.x,
+                    entity.transform.position.y,
+                    entity.transform.position.z
+                )
+            })
+            .collect();
+        for line in scene_lines {
+            self.editor_ctx.log_info(line);
         }
 
-        self.editor_ctx.log_info("Play window would launch here with Vulkan rendering.");
+        self.editor_ctx
+            .log_info("Play window would launch here with Vulkan rendering.");
         self.editor_ctx.log_info("Press F5 to stop play mode.");
     }
 
@@ -306,8 +331,11 @@ impl ReactorEditor {
         // Simple JSON-like export of scene data
         let mut output = String::new();
         output.push_str(&format!("scene: {}\n", self.editor_ctx.scene.name));
-        output.push_str(&format!("entities: {}\n", self.editor_ctx.stats.entity_count));
-        
+        output.push_str(&format!(
+            "entities: {}\n",
+            self.editor_ctx.stats.entity_count
+        ));
+
         for entity in self.editor_ctx.scene.all_entities() {
             output.push_str(&format!(
                 "entity: {} pos: {},{},{} scale: {},{},{}\n",
@@ -320,7 +348,7 @@ impl ReactorEditor {
                 entity.transform.scale.z,
             ));
         }
-        
+
         output
     }
 }
@@ -333,7 +361,7 @@ impl App for ReactorEditor {
 
         // ── Top toolbar (outside dock) ─────────────────────────────────────
         egui::TopBottomPanel::top("toolbar")
-            .exact_height(32.0)
+            .exact_height(36.0)
             .show(ctx, |ui| {
                 self.toolbar.show(ui, &mut self.editor_ctx);
             });
@@ -346,23 +374,29 @@ impl App for ReactorEditor {
                     ui.label(
                         RichText::new("⚛ REACTOR Editor  v0.1.0")
                             .color(Color32::from_rgb(100, 100, 100))
-                            .small()
+                            .small(),
                     );
                     ui.separator();
 
                     // Undo/Redo status
                     if self.commands.can_undo() {
                         ui.label(
-                            RichText::new(format!("Undo: {}  [Ctrl+Z]", self.commands.undo_description().unwrap_or("")))
-                                .color(Color32::from_rgb(120, 180, 120))
-                                .small()
+                            RichText::new(format!(
+                                "Undo: {}  [Ctrl+Z]",
+                                self.commands.undo_description().unwrap_or("")
+                            ))
+                            .color(Color32::from_rgb(120, 180, 120))
+                            .small(),
                         );
                     }
                     if self.commands.can_redo() {
                         ui.label(
-                            RichText::new(format!("Redo: {}  [Ctrl+Y]", self.commands.redo_description().unwrap_or("")))
-                                .color(Color32::from_rgb(120, 120, 180))
-                                .small()
+                            RichText::new(format!(
+                                "Redo: {}  [Ctrl+Y]",
+                                self.commands.redo_description().unwrap_or("")
+                            ))
+                            .color(Color32::from_rgb(120, 120, 180))
+                            .small(),
                         );
                     }
 
@@ -372,23 +406,23 @@ impl App for ReactorEditor {
                                 RichText::new("▶ PLAY MODE  [F5 to stop]")
                                     .color(Color32::from_rgb(255, 160, 40))
                                     .small()
-                                    .strong()
+                                    .strong(),
                             );
                         } else {
                             ui.label(
                                 RichText::new("EDITOR MODE  [F5 to play]")
                                     .color(Color32::from_rgb(100, 100, 100))
-                                    .small()
+                                    .small(),
                             );
                         }
                         ui.separator();
                         ui.label(
-                            RichText::new(format!("Scene: {}  |  {} entities",
-                                self.editor_ctx.scene.name,
-                                self.editor_ctx.stats.entity_count
+                            RichText::new(format!(
+                                "Scene: {}  |  {} entities",
+                                self.editor_ctx.scene.name, self.editor_ctx.stats.entity_count
                             ))
                             .color(Color32::from_rgb(120, 120, 120))
-                            .small()
+                            .small(),
                         );
                     });
                 });

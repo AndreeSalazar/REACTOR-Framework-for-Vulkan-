@@ -219,7 +219,7 @@ impl FrameGraph {
     }
 
     /// Crear un nuevo pass con builder
-    pub fn pass(&mut self, name: &str) -> PassBuilder {
+    pub fn pass(&mut self, name: &str) -> PassBuilder<'_> {
         let id = PassId(self.next_pass_id);
         self.next_pass_id += 1;
         self.compiled = false;
