@@ -459,4 +459,187 @@ uint32_t reactor_get_msaa_samples();
 bool reactor_is_raytracing_supported();
 void reactor_get_vulkan_version(uint32_t* major, uint32_t* minor, uint32_t* patch);
 
+// =============================================================================
+// ECS Entity/Component CRUD (Phase 1A)
+// =============================================================================
+
+struct CMeshRenderer {
+    int32_t mesh_index;
+    int32_t material_index;
+    bool cast_shadows;
+    bool receive_shadows;
+    bool visible;
+};
+
+struct CCameraComponent {
+    float fov;
+    float near_plane;
+    float far_plane;
+    bool is_main;
+    CVec4 clear_color;
+};
+
+struct CRigidBodyComponent {
+    float mass;
+    float drag;
+    float angular_drag;
+    bool use_gravity;
+    bool is_kinematic;
+    CVec3 velocity;
+    CVec3 angular_velocity;
+};
+
+// Entity lifecycle
+uint32_t reactor_entity_create(const char* name);
+bool reactor_entity_destroy(uint32_t entity);
+bool reactor_entity_exists(uint32_t entity);
+uint32_t reactor_entity_count();
+void reactor_entity_set_active(uint32_t entity, bool active);
+bool reactor_entity_is_active(uint32_t entity);
+
+// Transform component (every entity has one)
+void reactor_entity_set_transform(uint32_t entity, CTransform transform);
+CTransform reactor_entity_get_transform(uint32_t entity);
+void reactor_entity_set_position(uint32_t entity, float x, float y, float z);
+CVec3 reactor_entity_get_position(uint32_t entity);
+void reactor_entity_set_rotation(uint32_t entity, float x, float y, float z);
+void reactor_entity_set_scale(uint32_t entity, float x, float y, float z);
+
+// Mesh Renderer component
+bool reactor_entity_add_mesh_renderer(uint32_t entity, int32_t mesh_index, int32_t material_index);
+bool reactor_entity_remove_mesh_renderer(uint32_t entity);
+bool reactor_entity_has_mesh_renderer(uint32_t entity);
+
+// Light component
+bool reactor_entity_add_light(uint32_t entity, CLight light);
+bool reactor_entity_remove_light(uint32_t entity);
+bool reactor_entity_has_light(uint32_t entity);
+CLight reactor_entity_get_light(uint32_t entity);
+void reactor_entity_set_light(uint32_t entity, CLight light);
+
+// Camera component
+bool reactor_entity_add_camera(uint32_t entity, float fov, float near_plane, float far_plane, bool is_main);
+bool reactor_entity_remove_camera(uint32_t entity);
+bool reactor_entity_has_camera(uint32_t entity);
+
+// RigidBody component
+bool reactor_entity_add_rigidbody(uint32_t entity, float mass, bool use_gravity);
+bool reactor_entity_remove_rigidbody(uint32_t entity);
+void reactor_entity_apply_force(uint32_t entity, float fx, float fy, float fz);
+void reactor_entity_set_velocity(uint32_t entity, float vx, float vy, float vz);
+CVec3 reactor_entity_get_velocity(uint32_t entity);
+
+// ECS Queries (component_mask: 1=MeshRenderer, 2=Light, 4=Camera, 8=RigidBody, 0=all)
+uint32_t reactor_query_entities(uint32_t component_mask, uint32_t* out_entities, uint32_t max_results);
+
+// =============================================================================
+// PBR Material System (Phase 1C)
+// =============================================================================
+
+struct CPBRMaterial {
+    CVec4 base_color;
+    float metallic;
+    float roughness;
+    float ao;
+    CVec3 emissive;
+    float emissive_strength;
+    float alpha_cutoff;
+    float normal_scale;
+    bool double_sided;
+    uint32_t alpha_mode; // 0=Opaque, 1=Mask, 2=Blend
+};
+
+uint32_t reactor_pbr_create(CPBRMaterial params);
+uint32_t reactor_pbr_create_default();
+uint32_t reactor_pbr_create_instance(uint32_t parent_id);
+void reactor_pbr_destroy(uint32_t material_id);
+CPBRMaterial reactor_pbr_get(uint32_t material_id);
+void reactor_pbr_set_base_color(uint32_t material_id, float r, float g, float b, float a);
+void reactor_pbr_set_metallic_roughness(uint32_t material_id, float metallic, float roughness);
+void reactor_pbr_set_emissive(uint32_t material_id, float r, float g, float b, float strength);
+uint32_t reactor_pbr_count();
+
+// =============================================================================
+// FrameGraph API (Phase 2A)
+// =============================================================================
+
+typedef struct CFrameGraphHandle CFrameGraphHandle;
+
+struct CFrameGraphStats {
+    uint32_t total_passes;
+    uint32_t enabled_passes;
+    uint32_t total_resources;
+    uint32_t transient_resources;
+    uint32_t barriers_generated;
+};
+
+CFrameGraphHandle* reactor_frame_graph_create();
+void reactor_frame_graph_destroy(CFrameGraphHandle* fg);
+uint32_t reactor_frame_graph_create_resource(CFrameGraphHandle* fg, const char* name,
+    uint32_t resource_type, uint32_t width, uint32_t height, uint32_t format, bool persistent);
+uint32_t reactor_frame_graph_add_pass(CFrameGraphHandle* fg, const char* name,
+    const uint32_t* reads, uint32_t read_count, const uint32_t* writes, uint32_t write_count, int32_t order);
+bool reactor_frame_graph_compile(CFrameGraphHandle* fg);
+CFrameGraphStats reactor_frame_graph_get_stats(const CFrameGraphHandle* fg);
+CFrameGraphHandle* reactor_frame_graph_create_forward(uint32_t width, uint32_t height);
+CFrameGraphHandle* reactor_frame_graph_create_deferred(uint32_t width, uint32_t height);
+
+// =============================================================================
+// Render Stats & Telemetry (Phase 2B)
+// =============================================================================
+
+struct CRenderStats {
+    float fps;
+    float frame_time_ms;
+    uint32_t draw_calls;
+    uint32_t triangles;
+    uint32_t vertices;
+    uint32_t scene_objects;
+    uint32_t visible_objects;
+    uint32_t vram_used_mb;
+    uint32_t vram_total_mb;
+    float cpu_frame_ms;
+    float gpu_frame_ms;
+};
+
+struct CMemoryBudget {
+    uint64_t device_local_used;
+    uint64_t device_local_budget;
+    uint64_t host_visible_used;
+    uint64_t host_visible_budget;
+    uint32_t total_allocations;
+};
+
+CRenderStats reactor_get_render_stats();
+CMemoryBudget reactor_get_memory_budget();
+
+// =============================================================================
+// Scene Serialization (Phase 2C)
+// =============================================================================
+
+uint32_t reactor_scene_serialize(uint8_t* buffer, uint32_t buffer_size);
+uint32_t reactor_scene_serialize_size();
+
+// =============================================================================
+// Compute Pipeline (Phase 3)
+// =============================================================================
+
+typedef struct CComputePipelineHandle CComputePipelineHandle;
+
+CComputePipelineHandle* reactor_compute_create(const uint32_t* spv_code, uint32_t spv_len);
+void reactor_compute_destroy(CComputePipelineHandle* pipeline);
+bool reactor_compute_dispatch(CComputePipelineHandle* pipeline, uint32_t group_x, uint32_t group_y, uint32_t group_z);
+
+// =============================================================================
+// Runtime-Editor Bridge (Play Mode)
+// =============================================================================
+
+bool reactor_play_enter();
+void reactor_play_exit();
+void reactor_play_pause(bool paused);
+bool reactor_play_is_playing();
+bool reactor_play_is_paused();
+float reactor_play_get_time();
+void reactor_play_update(float dt);
+
 } // extern "C"

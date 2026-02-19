@@ -11,3 +11,4 @@ reactor = { path = "../.." }
 glam = "0.30.9"
 winit = "0.30"
 env_logger = "0.11"
+ash = "0.38.0"
