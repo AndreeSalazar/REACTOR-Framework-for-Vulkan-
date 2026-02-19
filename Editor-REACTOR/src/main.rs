@@ -267,33 +267,33 @@ impl ReactorEditor {
 
     /// Launch the REACTOR engine in Play mode with the current scene
     fn launch_play_window(&mut self) {
-        // Export scene to temporary file for the engine to load
-        let scene_data = self.export_scene_for_play();
+        // Collect scene info first to avoid borrow issues
+        let scene_name = self.editor_ctx.scene.name.clone();
+        let entity_count = self.editor_ctx.stats.entity_count;
         
-        // For now, we'll show a message about what would happen
-        // In a full implementation, this would:
-        // 1. Serialize the current scene to a temp file
-        // 2. Launch the REACTOR engine executable with the scene path
-        // 3. Monitor the process and stop play mode when it exits
+        // Collect entity info
+        let entity_info: Vec<(String, String, f32, f32, f32)> = self.editor_ctx.scene
+            .all_entities()
+            .map(|e| {
+                let entity_type = if e.mesh.is_some() { "Mesh" }
+                    else if e.light.is_some() { "Light" }
+                    else if e.camera.is_some() { "Camera" }
+                    else { "Empty" };
+                (e.name.clone(), entity_type.to_string(), 
+                 e.transform.position.x, e.transform.position.y, e.transform.position.z)
+            })
+            .collect();
         
+        // Now log everything
         self.editor_ctx.log_info(format!(
             "Scene '{}' ready for play with {} entities.",
-            self.editor_ctx.scene.name,
-            self.editor_ctx.stats.entity_count
+            scene_name, entity_count
         ));
         
-        // Log scene contents
-        for entity in self.editor_ctx.scene.all_entities() {
-            let entity_type = if entity.mesh.is_some() { "Mesh" }
-                else if entity.light.is_some() { "Light" }
-                else if entity.camera.is_some() { "Camera" }
-                else { "Empty" };
+        for (name, etype, x, y, z) in entity_info {
             self.editor_ctx.log_info(format!(
                 "  → {} [{}] at ({:.1}, {:.1}, {:.1})",
-                entity.name, entity_type,
-                entity.transform.position.x,
-                entity.transform.position.y,
-                entity.transform.position.z
+                name, etype, x, y, z
             ));
         }
 
