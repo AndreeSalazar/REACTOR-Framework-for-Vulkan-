@@ -2,8 +2,8 @@
 // InspectorPanel — Component inspector (like Unreal's Details panel)
 // =============================================================================
 
-use egui::{Color32, RichText, Ui};
 use crate::editor::core::editor_context::{EditorContext, LightType};
+use egui::{Color32, RichText, Ui};
 
 pub struct InspectorPanel;
 
@@ -14,7 +14,11 @@ impl InspectorPanel {
 
     pub fn show(&mut self, ui: &mut Ui, ctx: &mut EditorContext) {
         ui.horizontal(|ui| {
-            ui.label(RichText::new("🔍 Inspector").strong().color(Color32::from_rgb(200, 200, 200)));
+            ui.label(
+                RichText::new("🔍 Inspector")
+                    .strong()
+                    .color(Color32::from_rgb(200, 200, 200)),
+            );
         });
         ui.separator();
 
@@ -25,13 +29,13 @@ impl InspectorPanel {
                 ui.label(
                     RichText::new("No entity selected")
                         .color(Color32::from_rgb(120, 120, 120))
-                        .italics()
+                        .italics(),
                 );
                 ui.add_space(4.0);
                 ui.label(
                     RichText::new("Click an entity in the Hierarchy or Viewport to inspect it.")
                         .color(Color32::from_rgb(100, 100, 100))
-                        .small()
+                        .small(),
                 );
                 return;
             }
@@ -149,7 +153,9 @@ impl InspectorPanel {
     }
 
     fn show_transform_component(
-        &self, ui: &mut Ui, ctx: &mut EditorContext,
+        &self,
+        ui: &mut Ui,
+        ctx: &mut EditorContext,
         id: crate::editor::core::editor_context::EntityId,
         entity: &crate::editor::core::editor_context::EditorEntity,
     ) {
@@ -163,9 +169,15 @@ impl InspectorPanel {
                         // Position
                         ui.label(RichText::new("Position").color(Color32::from_rgb(180, 180, 180)));
                         let mut pos = entity.transform.position;
-                        let changed_x = ui.add(egui::DragValue::new(&mut pos.x).speed(0.01).prefix("X ")).changed();
-                        let changed_y = ui.add(egui::DragValue::new(&mut pos.y).speed(0.01).prefix("Y ")).changed();
-                        let changed_z = ui.add(egui::DragValue::new(&mut pos.z).speed(0.01).prefix("Z ")).changed();
+                        let changed_x = ui
+                            .add(egui::DragValue::new(&mut pos.x).speed(0.01).prefix("X "))
+                            .changed();
+                        let changed_y = ui
+                            .add(egui::DragValue::new(&mut pos.y).speed(0.01).prefix("Y "))
+                            .changed();
+                        let changed_z = ui
+                            .add(egui::DragValue::new(&mut pos.z).speed(0.01).prefix("Z "))
+                            .changed();
                         if changed_x || changed_y || changed_z {
                             if let Some(e) = ctx.scene.get_mut(id) {
                                 e.transform.position = pos;
@@ -175,13 +187,35 @@ impl InspectorPanel {
 
                         // Rotation (Euler degrees)
                         ui.label(RichText::new("Rotation").color(Color32::from_rgb(180, 180, 180)));
-                        let (yaw, pitch, roll) = entity.transform.rotation.to_euler(glam::EulerRot::YXZ);
+                        let (yaw, pitch, roll) =
+                            entity.transform.rotation.to_euler(glam::EulerRot::YXZ);
                         let mut yaw_deg = yaw.to_degrees();
                         let mut pitch_deg = pitch.to_degrees();
                         let mut roll_deg = roll.to_degrees();
-                        let cy = ui.add(egui::DragValue::new(&mut yaw_deg).speed(0.5).suffix("°").prefix("Y ")).changed();
-                        let cp = ui.add(egui::DragValue::new(&mut pitch_deg).speed(0.5).suffix("°").prefix("P ")).changed();
-                        let cr = ui.add(egui::DragValue::new(&mut roll_deg).speed(0.5).suffix("°").prefix("R ")).changed();
+                        let cy = ui
+                            .add(
+                                egui::DragValue::new(&mut yaw_deg)
+                                    .speed(0.5)
+                                    .suffix("°")
+                                    .prefix("Y "),
+                            )
+                            .changed();
+                        let cp = ui
+                            .add(
+                                egui::DragValue::new(&mut pitch_deg)
+                                    .speed(0.5)
+                                    .suffix("°")
+                                    .prefix("P "),
+                            )
+                            .changed();
+                        let cr = ui
+                            .add(
+                                egui::DragValue::new(&mut roll_deg)
+                                    .speed(0.5)
+                                    .suffix("°")
+                                    .prefix("R "),
+                            )
+                            .changed();
                         if cy || cp || cr {
                             if let Some(e) = ctx.scene.get_mut(id) {
                                 e.transform.rotation = glam::Quat::from_euler(
@@ -197,9 +231,15 @@ impl InspectorPanel {
                         // Scale
                         ui.label(RichText::new("Scale").color(Color32::from_rgb(180, 180, 180)));
                         let mut scale = entity.transform.scale;
-                        let sx = ui.add(egui::DragValue::new(&mut scale.x).speed(0.01).prefix("X ")).changed();
-                        let sy = ui.add(egui::DragValue::new(&mut scale.y).speed(0.01).prefix("Y ")).changed();
-                        let sz = ui.add(egui::DragValue::new(&mut scale.z).speed(0.01).prefix("Z ")).changed();
+                        let sx = ui
+                            .add(egui::DragValue::new(&mut scale.x).speed(0.01).prefix("X "))
+                            .changed();
+                        let sy = ui
+                            .add(egui::DragValue::new(&mut scale.y).speed(0.01).prefix("Y "))
+                            .changed();
+                        let sz = ui
+                            .add(egui::DragValue::new(&mut scale.z).speed(0.01).prefix("Z "))
+                            .changed();
                         if sx || sy || sz {
                             if let Some(e) = ctx.scene.get_mut(id) {
                                 e.transform.scale = scale;
@@ -225,11 +265,16 @@ impl InspectorPanel {
     }
 
     fn show_mesh_component(
-        &self, ui: &mut Ui, ctx: &mut EditorContext,
+        &self,
+        ui: &mut Ui,
+        ctx: &mut EditorContext,
         id: crate::editor::core::editor_context::EntityId,
         entity: &crate::editor::core::editor_context::EditorEntity,
     ) {
-        let mesh = match &entity.mesh { Some(m) => m.clone(), None => return };
+        let mesh = match &entity.mesh {
+            Some(m) => m.clone(),
+            None => return,
+        };
 
         egui::CollapsingHeader::new(RichText::new("📦  Mesh Renderer").strong())
             .default_open(true)
@@ -270,11 +315,16 @@ impl InspectorPanel {
     }
 
     fn show_light_component(
-        &self, ui: &mut Ui, ctx: &mut EditorContext,
+        &self,
+        ui: &mut Ui,
+        ctx: &mut EditorContext,
         id: crate::editor::core::editor_context::EntityId,
         entity: &crate::editor::core::editor_context::EditorEntity,
     ) {
-        let light = match &entity.light { Some(l) => l.clone(), None => return };
+        let light = match &entity.light {
+            Some(l) => l.clone(),
+            None => return,
+        };
 
         egui::CollapsingHeader::new(RichText::new("💡  Light").strong())
             .default_open(true)
@@ -298,9 +348,18 @@ impl InspectorPanel {
                         }
                         ui.end_row();
 
-                        ui.label(RichText::new("Intensity").color(Color32::from_rgb(180, 180, 180)));
+                        ui.label(
+                            RichText::new("Intensity").color(Color32::from_rgb(180, 180, 180)),
+                        );
                         let mut intensity = light.intensity;
-                        if ui.add(egui::DragValue::new(&mut intensity).speed(0.01).range(0.0..=100.0_f32)).changed() {
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut intensity)
+                                    .speed(0.01)
+                                    .range(0.0..=100.0_f32),
+                            )
+                            .changed()
+                        {
                             if let Some(e) = ctx.scene.get_mut(id) {
                                 if let Some(l) = &mut e.light {
                                     l.intensity = intensity;
@@ -319,11 +378,16 @@ impl InspectorPanel {
     }
 
     fn show_camera_component(
-        &self, ui: &mut Ui, ctx: &mut EditorContext,
+        &self,
+        ui: &mut Ui,
+        ctx: &mut EditorContext,
         id: crate::editor::core::editor_context::EntityId,
         entity: &crate::editor::core::editor_context::EditorEntity,
     ) {
-        let camera = match &entity.camera { Some(c) => c.clone(), None => return };
+        let camera = match &entity.camera {
+            Some(c) => c.clone(),
+            None => return,
+        };
 
         egui::CollapsingHeader::new(RichText::new("🎥  Camera").strong())
             .default_open(true)
@@ -334,7 +398,15 @@ impl InspectorPanel {
                     .show(ui, |ui| {
                         ui.label(RichText::new("FOV").color(Color32::from_rgb(180, 180, 180)));
                         let mut fov = camera.fov;
-                        if ui.add(egui::DragValue::new(&mut fov).speed(0.5).suffix("°").range(10.0..=170.0_f32)).changed() {
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut fov)
+                                    .speed(0.5)
+                                    .suffix("°")
+                                    .range(10.0..=170.0_f32),
+                            )
+                            .changed()
+                        {
                             if let Some(e) = ctx.scene.get_mut(id) {
                                 if let Some(c) = &mut e.camera {
                                     c.fov = fov;
@@ -345,18 +417,36 @@ impl InspectorPanel {
 
                         ui.label(RichText::new("Near").color(Color32::from_rgb(180, 180, 180)));
                         let mut near = camera.near;
-                        if ui.add(egui::DragValue::new(&mut near).speed(0.001).range(0.001..=10.0_f32)).changed() {
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut near)
+                                    .speed(0.001)
+                                    .range(0.001..=10.0_f32),
+                            )
+                            .changed()
+                        {
                             if let Some(e) = ctx.scene.get_mut(id) {
-                                if let Some(c) = &mut e.camera { c.near = near; }
+                                if let Some(c) = &mut e.camera {
+                                    c.near = near;
+                                }
                             }
                         }
                         ui.end_row();
 
                         ui.label(RichText::new("Far").color(Color32::from_rgb(180, 180, 180)));
                         let mut far = camera.far;
-                        if ui.add(egui::DragValue::new(&mut far).speed(1.0).range(1.0..=100000.0_f32)).changed() {
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut far)
+                                    .speed(1.0)
+                                    .range(1.0..=100000.0_f32),
+                            )
+                            .changed()
+                        {
                             if let Some(e) = ctx.scene.get_mut(id) {
-                                if let Some(c) = &mut e.camera { c.far = far; }
+                                if let Some(c) = &mut e.camera {
+                                    c.far = far;
+                                }
                             }
                         }
                         ui.end_row();
