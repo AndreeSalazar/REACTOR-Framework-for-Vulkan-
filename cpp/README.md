@@ -104,9 +104,10 @@ cpp/
 │       └── application.hpp  # Application, Input, Time, Camera, SDF, Log
 │
 └── examples/
-    └── hello_cpp/
-        ├── main.cpp         # Complete example
-        └── CMakeLists.txt
+    └── 3D/
+        ├── main_basic.cpp   # Complete C API example
+        ├── CMakeLists.txt
+        └── README.md
 ```
 
 ## Building
@@ -122,10 +123,10 @@ cargo build --release
 
 ### Step 2: Build C++ Example
 ```bash
-cd cpp/examples/hello_cpp
+cd cpp/examples/3D
 cmake -B build
 cmake --build build
-./build/hello_cpp  # or build\Debug\hello_cpp.exe on Windows
+./build/reactor_3d  # or build\Debug\reactor_3d.exe on Windows
 ```
 
 ## API Reference

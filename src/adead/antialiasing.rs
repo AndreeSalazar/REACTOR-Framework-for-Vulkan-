@@ -244,7 +244,7 @@ impl SDFAntiAliasing {
     }
 
     /// AA con análisis de cobertura subpixel
-    pub fn subpixel_aa(&self, center_dist: f32, neighbors: &[f32; 8], pixel_size: f32) -> f32 {
+    pub fn subpixel_aa(&self, center_dist: f32, neighbors: &[f32; 8], _pixel_size: f32) -> f32 {
         if !self.config.subpixel_aa {
             return self.compute_aa_simple(center_dist);
         }

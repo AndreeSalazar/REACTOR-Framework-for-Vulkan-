@@ -41,8 +41,8 @@ A (Vulkan/Ash) → B (Reactor) → C (Game)
 
 ### Ejecutar Ejemplos
 ```bash
-cargo run --example simple_cube   # Cubo 3D rotando
-cargo run --example cube          # Demo completo con controles
+cargo run --example cube          # Cubo 3D con controles
+cargo run --example textured_cube # Cubo con textura
 cargo run --example sandbox       # Sandbox experimental
 ```
 
