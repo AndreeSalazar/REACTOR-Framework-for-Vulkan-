@@ -39,6 +39,9 @@ pub mod utils;
 // Platform abstraction
 pub mod platform;
 
+// Built-in SPIR-V shaders (embedded for plug-and-play materials)
+pub mod builtin_shaders;
+
 // =============================================================================
 // App Trait System Re-exports
 // =============================================================================

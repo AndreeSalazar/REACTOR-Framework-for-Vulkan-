@@ -515,6 +515,65 @@ impl ReactorContext {
             obj.transform = transform;
         }
     }
+
+    // =========================================================================
+    // 🧱 Default Material + Primitive Spawning (UE5-style helpers)
+    // =========================================================================
+
+    /// Crea un material con los shaders SPIR-V embebidos en REACTOR
+    /// (vertex color + iluminación básica). Listo para usar sin tocar disco.
+    ///
+    /// ```rust,no_run
+    /// # fn demo(ctx: &mut reactor::ReactorContext) -> Result<(), Box<dyn std::error::Error>> {
+    /// let mat = ctx.default_material()?;
+    /// # Ok(()) }
+    /// ```
+    pub fn default_material(&self) -> Result<crate::material::Material, Box<dyn std::error::Error>> {
+        let vert = crate::builtin_shaders::vert_default();
+        let frag = crate::builtin_shaders::frag_default();
+        self.reactor.create_material(&vert, &frag)
+    }
+
+    /// Spawn-helper: crea un cubo unitario en `position` y lo añade a la escena.
+    /// Retorna el índice del objeto.
+    pub fn spawn_cube(&mut self, position: glam::Vec3) -> Result<usize, Box<dyn std::error::Error>> {
+        let (v, i) = crate::resources::primitives::Primitives::cube();
+        self.spawn_primitive(&v, &i, glam::Mat4::from_translation(position))
+    }
+
+    /// Spawn-helper: crea una esfera (32×16 segmentos) en `position` y la añade.
+    pub fn spawn_sphere(&mut self, position: glam::Vec3, _radius: f32) -> Result<usize, Box<dyn std::error::Error>> {
+        let (v, i) = crate::resources::primitives::Primitives::sphere(32, 16);
+        let xf = glam::Mat4::from_scale_rotation_translation(
+            glam::Vec3::splat(_radius.max(0.001)),
+            glam::Quat::IDENTITY,
+            position,
+        );
+        self.spawn_primitive(&v, &i, xf)
+    }
+
+    /// Spawn-helper: crea un plano (suelo) centrado en `position` con tamaño `size`.
+    pub fn spawn_plane(&mut self, position: glam::Vec3, size: f32) -> Result<usize, Box<dyn std::error::Error>> {
+        let (v, i) = crate::resources::primitives::Primitives::plane(1);
+        let xf = glam::Mat4::from_scale_rotation_translation(
+            glam::Vec3::new(size, 1.0, size),
+            glam::Quat::IDENTITY,
+            position,
+        );
+        self.spawn_primitive(&v, &i, xf)
+    }
+
+    /// Helper interno: crea mesh + material por defecto y añade a la escena.
+    fn spawn_primitive(
+        &mut self,
+        vertices: &[crate::vertex::Vertex],
+        indices: &[u32],
+        transform: glam::Mat4,
+    ) -> Result<usize, Box<dyn std::error::Error>> {
+        let mesh = std::sync::Arc::new(self.reactor.create_mesh(vertices, indices)?);
+        let material = std::sync::Arc::new(self.default_material()?);
+        Ok(self.scene.add_object(mesh, material, transform))
+    }
 }
 
 // =============================================================================

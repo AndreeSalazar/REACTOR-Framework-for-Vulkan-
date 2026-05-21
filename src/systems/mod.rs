@@ -12,6 +12,7 @@ pub mod frustum;
 pub mod animation;
 pub mod audio;
 pub mod particles;
+pub mod fps_controller;
 
 pub use input::Input;
 pub use ecs::{World, Entity, Component};
