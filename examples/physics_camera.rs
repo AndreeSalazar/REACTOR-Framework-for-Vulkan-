@@ -19,6 +19,7 @@ use winit::event::MouseButton;
 #[derive(Clone, Debug)]
 struct Collider {
     aabb: AABB,
+    #[allow(dead_code)]
     is_static: bool,
 }
 

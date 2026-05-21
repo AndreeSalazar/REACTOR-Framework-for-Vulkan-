@@ -32,10 +32,36 @@ impl Camera {
         }
     }
 
+    /// Builder-style: consume self and return with the new orientation.
+    /// Útil al construir una cámara en una sola expresión.
     pub fn look_at(mut self, eye: Vec3, target: Vec3, _up: Vec3) -> Self {
+        self.aim_at(eye, target);
+        self
+    }
+
+    /// In-place: mueve la cámara a `eye` y la apunta a `target`.
+    /// Equivalente a `look_at` pero sin consumir `self`.
+    pub fn aim_at(&mut self, eye: Vec3, target: Vec3) -> &mut Self {
         self.position = eye;
-        let forward = (target - eye).normalize();
-        self.rotation = Quat::from_rotation_arc(Vec3::NEG_Z, forward);
+        let forward = (target - eye).normalize_or_zero();
+        if forward.length_squared() > 0.0 {
+            self.rotation = Quat::from_rotation_arc(Vec3::NEG_Z, forward);
+        }
+        self
+    }
+
+    /// Sólo apunta a `target` sin mover la cámara.
+    pub fn look_toward(&mut self, target: Vec3) -> &mut Self {
+        let forward = (target - self.position).normalize_or_zero();
+        if forward.length_squared() > 0.0 {
+            self.rotation = Quat::from_rotation_arc(Vec3::NEG_Z, forward);
+        }
+        self
+    }
+
+    /// Set position via `&mut self` (no builder).
+    pub fn set_position(&mut self, position: Vec3) -> &mut Self {
+        self.position = position;
         self
     }
 

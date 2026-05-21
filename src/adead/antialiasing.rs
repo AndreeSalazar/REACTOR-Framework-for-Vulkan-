@@ -168,6 +168,7 @@ impl SDFAAConfig {
 pub struct SDFAntiAliasing {
     pub config: SDFAAConfig,
     /// Buffer temporal para AA temporal
+    #[allow(dead_code)]
     temporal_buffer: Option<Vec<Vec4>>,
     /// Frame actual
     frame_count: u64,

@@ -91,6 +91,23 @@ producir videojuegos comerciales**, manteniendo:
 - [x] Macro `reactor::game! { title, size, vsync, msaa, init, update }` — declarativa.
 - [x] Ejemplo nuevo `examples/quick.rs` con los 3 modos del API corto.
 
+### 0.6 Ergonomía del `ReactorContext` (helpers cortos)  ✅
+- [x] `Camera::aim_at(&mut self, eye, target)` y `look_toward` / `set_position` (sin consumir self).
+- [x] `ctx.look_at(eye, target)` — atajo en 1 línea para colocar la cámara.
+- [x] `ctx.move_camera_to(pos)` — mover sin reorientar.
+- [x] `ctx.add_sun()` — sol direccional con defaults agradables.
+- [x] `ctx.add_directional_light(dir, color, intensity)`.
+- [x] `ctx.add_point_light(pos, color, intensity, range)`.
+- [x] `ctx.add_spot_light(pos, dir, color, intensity, range, angle)`.
+- [x] `ctx.spawn(mesh, mat, xf)` — añadir objeto a la escena.
+- [x] `ctx.set_transform(index, xf)` — actualizar transform por índice.
+- [x] `ctx.elapsed()` — atajo a `time.elapsed()`.
+
+### 0.7 Higiene del build  ✅
+- [x] `cargo check`: **0 warnings**, 0 errors.
+- [x] `cargo build --examples`: **0 warnings**, 0 errors (6 ejemplos OK).
+- [x] `env_logger::try_init()` para no panicar si se inicializa dos veces.
+
 ---
 
 ## ⚙️ FASE 1 — Núcleo Rust + Vulkan estable

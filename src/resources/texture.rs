@@ -14,6 +14,7 @@ pub struct Texture {
     pub sampler: Sampler,
     pub width: u32,
     pub height: u32,
+    #[allow(dead_code)]
     device: ash::Device,
 }
 

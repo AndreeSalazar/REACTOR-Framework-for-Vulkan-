@@ -408,6 +408,113 @@ impl ReactorContext {
     pub fn fps(&self) -> f32 {
         self.time.fps()
     }
+
+    /// Tiempo total transcurrido desde el arranque (shortcut for ctx.time.elapsed()).
+    pub fn elapsed(&self) -> f32 {
+        self.time.elapsed()
+    }
+
+    // =========================================================================
+    // 🎥 Camera shortcuts — facilitan el uso sin tocar self.camera
+    // =========================================================================
+
+    /// Coloca la cámara en `eye` y la apunta a `target`. Forma corta.
+    ///
+    /// ```rust,no_run
+    /// # use reactor::prelude::*;
+    /// # fn demo(ctx: &mut reactor::ReactorContext) {
+    /// ctx.look_at(Vec3::new(0.0, 2.0, 5.0), Vec3::ZERO);
+    /// # }
+    /// ```
+    pub fn look_at(&mut self, eye: glam::Vec3, target: glam::Vec3) -> &mut Self {
+        self.camera.aim_at(eye, target);
+        self
+    }
+
+    /// Mueve la cámara sin cambiar su orientación.
+    pub fn move_camera_to(&mut self, position: glam::Vec3) -> &mut Self {
+        self.camera.position = position;
+        self
+    }
+
+    // =========================================================================
+    // 💡 Lighting shortcuts
+    // =========================================================================
+
+    /// Añade un sol direccional con valores por defecto agradables.
+    ///
+    /// ```rust,no_run
+    /// # fn demo(ctx: &mut reactor::ReactorContext) {
+    /// ctx.add_sun();
+    /// # }
+    /// ```
+    pub fn add_sun(&mut self) -> usize {
+        self.lighting.add_light(crate::systems::lighting::Light::sun())
+    }
+
+    /// Añade una luz direccional personalizada.
+    pub fn add_directional_light(
+        &mut self,
+        direction: glam::Vec3,
+        color: glam::Vec3,
+        intensity: f32,
+    ) -> usize {
+        self.lighting
+            .add_light(crate::systems::lighting::Light::directional(direction, color, intensity))
+    }
+
+    /// Añade una luz puntual.
+    pub fn add_point_light(
+        &mut self,
+        position: glam::Vec3,
+        color: glam::Vec3,
+        intensity: f32,
+        range: f32,
+    ) -> usize {
+        self.lighting
+            .add_light(crate::systems::lighting::Light::point(position, color, intensity, range))
+    }
+
+    /// Añade un foco (spotlight).
+    pub fn add_spot_light(
+        &mut self,
+        position: glam::Vec3,
+        direction: glam::Vec3,
+        color: glam::Vec3,
+        intensity: f32,
+        range: f32,
+        angle_degrees: f32,
+    ) -> usize {
+        self.lighting.add_light(crate::systems::lighting::Light::spot(
+            position,
+            direction,
+            color,
+            intensity,
+            range,
+            angle_degrees,
+        ))
+    }
+
+    // =========================================================================
+    // 🎬 Scene shortcuts
+    // =========================================================================
+
+    /// Añade un objeto a la escena y devuelve su índice.
+    pub fn spawn(
+        &mut self,
+        mesh: std::sync::Arc<crate::mesh::Mesh>,
+        material: std::sync::Arc<crate::material::Material>,
+        transform: glam::Mat4,
+    ) -> usize {
+        self.scene.add_object(mesh, material, transform)
+    }
+
+    /// Actualiza el transform del objeto en `index`.
+    pub fn set_transform(&mut self, index: usize, transform: glam::Mat4) {
+        if let Some(obj) = self.scene.objects.get_mut(index) {
+            obj.transform = transform;
+        }
+    }
 }
 
 // =============================================================================

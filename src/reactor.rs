@@ -1,4 +1,4 @@
-use winit::window::Window;
+﻿use winit::window::Window;
 use ash::vk;
 use crate::vulkan_context::VulkanContext;
 use crate::swapchain::Swapchain;
@@ -66,7 +66,7 @@ impl Reactor {
         
         // Get MSAA samples (4x for good quality/performance balance)
         let msaa_samples = Self::get_max_msaa_samples_static(&context);
-        println!("🔷 MSAA: {:?} samples enabled for anti-aliasing", msaa_samples);
+        println!("ðŸ”· MSAA: {:?} samples enabled for anti-aliasing", msaa_samples);
         
         // Create MSAA resources if supported
         let (msaa_image, msaa_image_view, msaa_memory) = if msaa_samples != vk::SampleCountFlags::TYPE_1 {
@@ -91,7 +91,7 @@ impl Reactor {
             depth_format,
             msaa_samples,
         )?;
-        println!("🔷 Depth buffer created: {:?}", depth_format);
+        println!("ðŸ”· Depth buffer created: {:?}", depth_format);
         
         let render_pass = Self::create_render_pass_with_depth(&context, swapchain.format, depth_format, msaa_samples)?;
         let framebuffers = Self::create_framebuffers_with_depth(&context, &swapchain, render_pass, msaa_image_view, depth_image_view, msaa_samples)?;
@@ -321,6 +321,7 @@ impl Reactor {
         )
     }
 
+    #[allow(dead_code)]
     fn create_render_pass(context: &VulkanContext, format: vk::Format) -> Result<vk::RenderPass, Box<dyn Error>> {
         // TODO: MSAA requires creating MSAA image buffers and modifying framebuffers
         // For now, use simple render pass. MSAA can be enabled by:
@@ -344,6 +345,7 @@ impl Reactor {
         else { vk::SampleCountFlags::TYPE_1 }
     }
 
+    #[allow(dead_code)]
     fn create_render_pass_simple(context: &VulkanContext, format: vk::Format) -> Result<vk::RenderPass, Box<dyn Error>> {
         let color_attachment = vk::AttachmentDescription::default()
             .format(format)
@@ -384,8 +386,9 @@ impl Reactor {
         Ok(render_pass)
     }
 
+    #[allow(dead_code)]
     fn create_render_pass_msaa(context: &VulkanContext, format: vk::Format, samples: vk::SampleCountFlags) -> Result<vk::RenderPass, Box<dyn Error>> {
-        println!("🔷 Enabling MSAA {:?} for anti-aliasing", samples);
+        println!("ðŸ”· Enabling MSAA {:?} for anti-aliasing", samples);
         
         // MSAA color attachment (multisampled)
         let msaa_attachment = vk::AttachmentDescription::default()
@@ -446,6 +449,7 @@ impl Reactor {
         Ok(render_pass)
     }
 
+    #[allow(dead_code)]
     fn create_framebuffers(
         context: &VulkanContext, 
         swapchain: &Swapchain, 
@@ -527,6 +531,7 @@ impl Reactor {
     }
 
     /// Create render pass with MSAA support
+    #[allow(dead_code)]
     fn create_render_pass_with_msaa(
         context: &VulkanContext, 
         format: vk::Format,
@@ -597,6 +602,7 @@ impl Reactor {
     }
 
     /// Create framebuffers with MSAA support
+    #[allow(dead_code)]
     fn create_framebuffers_msaa(
         context: &VulkanContext, 
         swapchain: &Swapchain, 
@@ -604,23 +610,23 @@ impl Reactor {
         msaa_view: Option<vk::ImageView>,
         samples: vk::SampleCountFlags,
     ) -> Result<Vec<vk::Framebuffer>, Box<dyn Error>> {
-        println!("🔷 Creating framebuffers: samples={:?}, msaa_view={:?}", samples, msaa_view.is_some());
+        println!("ðŸ”· Creating framebuffers: samples={:?}, msaa_view={:?}", samples, msaa_view.is_some());
         
         if samples == vk::SampleCountFlags::TYPE_1 {
             // No MSAA - use simple framebuffers
-            println!("🔷 Using simple framebuffers (no MSAA)");
+            println!("ðŸ”· Using simple framebuffers (no MSAA)");
             return Self::create_framebuffers(context, swapchain, render_pass);
         }
 
         let msaa_view = match msaa_view {
             Some(view) => view,
             None => {
-                println!("⚠️ MSAA requested but no MSAA view available, falling back to simple");
+                println!("âš ï¸ MSAA requested but no MSAA view available, falling back to simple");
                 return Self::create_framebuffers(context, swapchain, render_pass);
             }
         };
         
-        println!("🔷 Creating MSAA framebuffers with 2 attachments");
+        println!("ðŸ”· Creating MSAA framebuffers with 2 attachments");
 
         swapchain.image_views
             .iter()

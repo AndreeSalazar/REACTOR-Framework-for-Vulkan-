@@ -27,6 +27,7 @@ const PI: f32 = std::f32::consts::PI;
 const EPS: f32 = 1e-6;
 
 /// Número áureo (para patrones de sampling)
+#[allow(dead_code)]
 const PHI: f32 = 1.618033988749895;
 
 // =============================================================================
@@ -255,6 +256,7 @@ pub struct ADeadAA {
     /// Frame actual (para AA temporal)
     frame_count: u64,
     /// Buffer temporal del frame anterior
+    #[allow(dead_code)]
     temporal_buffer: Option<Vec<Vec4>>,
     /// Jitter offset para TAA
     jitter_offset: Vec2,
