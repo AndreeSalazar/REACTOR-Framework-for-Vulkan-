@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"/></a>
+  <a href="https://opensource.org/licenses/TECHNE"><img src="https://img.shields.io/badge/License-TECHNE-yellow.svg" alt="License: TECHNE"/></a>
   <a href="https://www.vulkan.org/"><img src="https://img.shields.io/badge/Vulkan-1.3-red.svg" alt="Vulkan"/></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.70+-orange.svg" alt="Rust"/></a>
   <img src="https://img.shields.io/badge/Version-1.1.0--rust-green.svg" alt="Version 1.1.0-rust"/>
@@ -381,4 +381,4 @@ cargo run --example obj_loader_demo   # Carga de modelos OBJ
 
 ## 📄 Licencia
 
-MIT License — **Powered by Salazar-interactive**
+TECHNE License — **Powered by Salazar-interactive**
