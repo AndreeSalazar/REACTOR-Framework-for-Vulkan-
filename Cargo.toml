@@ -6,7 +6,7 @@ description = "Zero-overhead Vulkan framework — control total, API de 1 línea
 license-file = "LICENSE"
 repository = "https://github.com/AndreeSalazar/REACTOR-Framework-for-Vulkan-"
 keywords = ["vulkan", "gamedev", "graphics", "framework", "rendering"]
-categories = ["game-engines", "graphics::gpu","rendering"]
+categories = ["game-engines", "rendering"]
 readme = "README.md"
 authors = ["Eddi Andreé Salazar Matos"]
 
