@@ -45,7 +45,74 @@ pub mod adead;
 // =============================================================================
 // App Trait System Re-exports
 // =============================================================================
-pub use app::{ReactorApp, ReactorContext, ReactorConfig, RendererMode, run};
+pub use app::{ReactorApp, ReactorContext, ReactorConfig, RendererMode, run, quick, quick_with};
+
+// =============================================================================
+// `reactor::game!` macro — ultra-short game declaration
+// =============================================================================
+
+/// Macro de una sola línea para crear y lanzar un juego REACTOR.
+///
+/// # Ejemplos
+///
+/// Mínimo:
+/// ```rust,no_run
+/// reactor::game! {
+///     title: "Mi Juego",
+///     update: |ctx| {
+///         let _ = ctx.time.delta();
+///     }
+/// }
+/// ```
+///
+/// Completo:
+/// ```rust,no_run
+/// reactor::game! {
+///     title: "Mi Juego",
+///     size: (1920, 1080),
+///     vsync: true,
+///     msaa: 4,
+///     init: |ctx| {
+///         ctx.camera.position = reactor::prelude::Vec3::new(0.0, 2.0, 5.0);
+///     },
+///     update: |ctx| {
+///         let _ = ctx.time.delta();
+///     }
+/// }
+/// ```
+#[macro_export]
+macro_rules! game {
+    (
+        title: $title:expr
+        $(, size: ($w:expr, $h:expr))?
+        $(, vsync: $vsync:expr)?
+        $(, msaa: $msaa:expr)?
+        $(, fullscreen: $fs:expr)?
+        $(, init: $init:expr)?
+        , update: $update:expr
+        $(,)?
+    ) => {{
+        fn __reactor_main() {
+            #[allow(unused_mut)]
+            let mut __cfg = $crate::ReactorConfig::new($title);
+            $( __cfg = __cfg.with_size($w, $h); )?
+            $( __cfg = __cfg.with_vsync($vsync); )?
+            $( __cfg = __cfg.with_msaa($msaa); )?
+            $( __cfg = __cfg.with_fullscreen($fs); )?
+
+            #[allow(unused_assignments, unused_mut)]
+            let mut __init_fn: Option<fn(&mut $crate::ReactorContext)> = None;
+            $( __init_fn = Some($init); )?
+
+            if let Some(init) = __init_fn {
+                $crate::quick_with(__cfg, init, $update);
+            } else {
+                $crate::quick_with(__cfg, |_ctx: &mut $crate::ReactorContext| {}, $update);
+            }
+        }
+        __reactor_main();
+    }};
+}
 
 // =============================================================================
 // Legacy Re-exports (backwards compatibility)

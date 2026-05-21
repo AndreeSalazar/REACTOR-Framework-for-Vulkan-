@@ -1,7 +1,9 @@
 [package]
 name = "reactor"
-version = "1.0.5"
+version = "1.1.0"
 edition = "2021"
+description = "Zero-overhead Vulkan game framework in pure Rust"
+license = "MIT"
 
 [dependencies]
 ash = "0.38.0"
@@ -34,3 +36,7 @@ path = "examples/physics_camera.rs"
 [[example]]
 name = "obj_loader_demo"
 path = "examples/obj_loader_demo.rs"
+
+[[example]]
+name = "quick"
+path = "examples/quick.rs"

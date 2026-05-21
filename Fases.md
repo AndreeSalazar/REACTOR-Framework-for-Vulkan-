@@ -27,7 +27,7 @@ producir videojuegos comerciales**, manteniendo:
 
 | Fase | Nombre                         | Objetivo principal                                          | Estado        |
 |:----:|--------------------------------|-------------------------------------------------------------|:-------------:|
-| **0**| Limpieza y consolidación       | Eliminar C / C++ / CMake. Unificar `src/`.                  | 🚧 En curso   |
+| **0**| Limpieza y consolidación       | Eliminar C / C++ / CMake. Unificar `src/`.                  | ✅ **Hecho**  |
 | **1**| Núcleo Rust + Vulkan estable   | Reescribir core con `Arc<Device>`, `Drop` correcto.         | 🚧 En curso   |
 | **2**| Pipeline gráfico moderno       | Bindless, dynamic rendering, PSO cache.                     | ⏳ Pendiente  |
 | **3**| Asset Pipeline                 | glTF 2.0, KTX2, hot-reload, asset DB.                       | ⏳ Pendiente  |
@@ -47,13 +47,14 @@ producir videojuegos comerciales**, manteniendo:
 
 > **Meta:** dejar el repo 100 % Rust, sin rastro de C / C++ / CMake / vcpkg.
 
-### 0.1 Eliminar capas C / C++
-- [ ] Archivar `cpp/reactor_c_api/` en una rama `legacy/cpp-abi` y borrar de `main`.
-- [ ] Archivar `cpp/reactor_cpp/` (header-only SDK) idem.
-- [ ] Borrar `cpp/examples/3D/` (CMake + 9 ejemplos C++).
-- [ ] Borrar `vcpkg.json`.
-- [ ] Borrar artefactos de build: `cpp/examples/3D/build/`.
-- [ ] Quitar referencias a C++ en `HOW_BUILD.md`, `docs/cpp-guide.md`, `docs/cpp_editor_parity_roadmap.md`.
+### 0.1 Eliminar capas C / C++  ✅
+- [x] Borrado `cpp/reactor_c_api/` (3300 LOC) — eliminado del repo.
+- [x] Borrado `cpp/reactor_cpp/` (1477 LOC header-only SDK).
+- [x] Borrado `cpp/examples/3D/` + carpeta `build/` (~2 GB de artefactos CMake).
+- [x] Borrado `vcpkg.json`.
+- [x] Borrado `docs/cpp-guide.md` y `docs/cpp_editor_parity_roadmap.md`.
+- [x] Reescritos `README.md`, `HOW_BUILD.md`, `docs/manual.md`, `docs/architecture.md` (100 % Rust).
+- [x] Bump versión `Cargo.toml`: `1.0.5` → **`1.1.0`** + `description` + `license`.
 
 ### 0.2 Consolidar `src/` (eliminar duplicidad legacy ↔ modular)
 - [ ] Borrar módulos legacy redundantes en `src/`:
@@ -83,6 +84,12 @@ producir videojuegos comerciales**, manteniendo:
 - [ ] Build matricial: Windows + Linux + macOS (Vulkan / MoltenVK).
 
 **Entregable F0:** repo limpio, workspace Cargo, CI verde, cero código C/C++.
+
+### 0.5 API corto (facilitar y acortar)  ✅
+- [x] `reactor::quick(title, w, h, |ctx| { … })` — arrancar un juego en una línea.
+- [x] `reactor::quick_with(config, init, update)` — closures init + update.
+- [x] Macro `reactor::game! { title, size, vsync, msaa, init, update }` — declarativa.
+- [x] Ejemplo nuevo `examples/quick.rs` con los 3 modos del API corto.
 
 ---
 

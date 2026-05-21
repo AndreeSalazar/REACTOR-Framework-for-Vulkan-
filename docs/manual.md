@@ -1,52 +1,40 @@
-# REACTOR Framework - Manual General
+# REACTOR Framework — Manual General
 
-**Version 1.0.5** | Vulkan 1.3 | Rust + C++
+**Version 1.1.0-rust** | Vulkan 1.3 | 100 % Rust puro
 
-## Que es REACTOR?
+## ¿Qué es REACTOR?
 
-REACTOR es un framework de desarrollo de juegos que simplifica Vulkan usando Rust para seguridad y C++ para facilidad de uso.
+REACTOR es un framework de desarrollo de **videojuegos en Rust puro** sobre Vulkan 1.3.
+Aprovecha el sistema de ownership y RAII de Rust para **seguridad de memoria** y
+**zero-overhead**, exponiendo una API declarativa estilo `ReactorApp`.
 
-## Instalacion
+## Instalación
 
 ### Requisitos
 
-- **Vulkan SDK 1.3+** - [vulkan.lunarg.com](https://vulkan.lunarg.com/)
-- **Rust 1.70+** (para desarrollo Rust)
-- **CMake 3.20+** (para desarrollo C++)
+- **Rust 1.70+** ([rustup](https://rustup.rs/))
+- **Vulkan SDK 1.3+** ([vulkan.lunarg.com](https://vulkan.lunarg.com/))
 - **GPU compatible con Vulkan**
 
-### Clonar Repositorio
+### Clonar y compilar
 
 ```bash
 git clone https://github.com/user/REACTOR-Framework-for-Vulkan.git
 cd REACTOR-Framework-for-Vulkan
-```
-
-### Compilar
-
-```bash
-# Rust core
 cargo build --release
-
-# C API (para C++)
-cargo build --release --manifest-path cpp/reactor_c_api/Cargo.toml
 ```
 
-## Uso Basico
+## Uso Básico
 
-### Patron ReactorApp()
-
-El patron principal es **heredar, configurar, ejecutar**:
+### Patrón `ReactorApp`
 
 ```
-1. Crear clase/struct que herede de Application/ReactorApp
-2. Implementar config() - configuracion inicial
-3. Implementar on_init() - setup de escena
-4. Implementar on_update() - logica de juego
-5. Llamar run() - ejecutar
+1. Crear struct con tu estado de juego.
+2. Implementar `ReactorApp` (config / init / update).
+3. Llamar `reactor::run(MiJuego { ... })`.
 ```
 
-### Ejemplo Minimo (Rust)
+### Ejemplo Mínimo
 
 ```rust
 use reactor::prelude::*;
@@ -57,142 +45,127 @@ impl ReactorApp for MiJuego {
     fn config(&self) -> ReactorConfig {
         ReactorConfig::new("Mi Juego").with_size(1280, 720)
     }
+    fn init(&mut self, _ctx: &mut ReactorContext) {}
+    fn update(&mut self, _ctx: &mut ReactorContext) {}
 }
 
+fn main() { reactor::run(MiJuego); }
+```
+
+### Forma SUPER corta (`reactor::quick`)
+
+```rust
+use reactor::prelude::*;
+
 fn main() {
-    reactor::run(MiJuego);
+    reactor::quick("Mi Juego", 1280, 720, |ctx| {
+        ctx.camera.position.x = ctx.time.elapsed().sin() * 5.0;
+    });
 }
 ```
 
-### Ejemplo Minimo (C++)
+### Macro `reactor::game!`
 
-```cpp
-#include <reactor/reactor.hpp>
-
-class MiJuego : public reactor::Application {
-    Config config() override {
-        return Config("Mi Juego").with_size(1280, 720);
+```rust
+reactor::game! {
+    title: "Mi Juego",
+    size: (1280, 720),
+    update: |ctx| {
+        ctx.camera.position.x = ctx.time.elapsed().sin() * 5.0;
     }
-};
-
-int main() {
-    return MiJuego().run();
 }
 ```
 
 ## Funciones Principales
 
-### Camara
+### Cámara
 
-```cpp
-reactor_set_camera_position(x, y, z);
-reactor_set_camera_target(x, y, z);
+```rust
+ctx.camera.position = Vec3::new(0.0, 2.0, 5.0);
+ctx.camera.look_at(Vec3::ZERO, Vec3::Y);
 ```
 
-### Iluminacion
+### Iluminación
 
-```cpp
-reactor_add_directional_light(dx, dy, dz, r, g, b, intensity);
-reactor_add_point_light(x, y, z, r, g, b, intensity, range);
+```rust
+ctx.lighting.add_light(Light::directional(Vec3::NEG_Y, Vec3::ONE, 1.0));
+ctx.lighting.add_light(Light::point(Vec3::new(0.0, 5.0, 0.0), Vec3::ONE, 2.0, 20.0));
 ```
 
 ### Escena
 
-```cpp
-void* mesh = reactor_create_cube();
-void* material = reactor_create_material_simple(r, g, b);
-int32_t index = reactor_add_object(mesh, material, transform);
-reactor_set_object_transform(index, new_transform);
+```rust
+let mesh = Arc::new(reactor.create_mesh(&vertices, &indices)?);
+let mat  = Arc::new(reactor.create_material()?);
+ctx.scene.add_object(mesh, mat, Mat4::IDENTITY);
 ```
 
 ### Input
 
-```cpp
-if (reactor_key_pressed(reactor_key_escape())) {
-    reactor_request_close();
+```rust
+if ctx.reactor.input.key_pressed(KeyCode::Escape) {
+    // cerrar...
 }
 ```
 
-### Info
+### Telemetría
 
-```cpp
-const char* gpu = reactor_get_gpu_name();
-float fps = reactor_get_fps();
-uint32_t msaa = reactor_get_msaa_samples();
+```rust
+let fps = ctx.time.fps();
+let dt  = ctx.time.delta();
 ```
 
 ## Arquitectura
 
-```
-Tu Juego (C++ o Rust)
-        |
-        v
-   REACTOR SDK
-        |
-        v
-   reactor.dll (C ABI)
-        |
-        v
-   Rust Core (safe)
-        |
-        v
-   Vulkan 1.3 (GPU)
+```diagram
+╭──────────────╮     ╭──────────────╮     ╭──────────────╮
+│  Ash / Vulkan│────▶│ Reactor Core │────▶│  Tu Juego    │
+│   (unsafe)   │     │ (safe + RAII)│     │ (ReactorApp) │
+╰──────────────╯     ╰──────────────╯     ╰──────────────╯
 ```
 
 ## Características
 
-| Módulo | Descripción |
-| ------ | ----------- |
-| Core | VulkanContext, Device, Allocator, CommandManager |
-| Graphics | Swapchain, Pipeline, MSAA, Depth, PostProcessing |
-| Ray Tracing | RTX en GPUs compatibles (auto-detectado) |
-| Resources | Mesh, Material, Texture, Primitives |
-| ECS | Entity CRUD, Transform, MeshRenderer, Light, Camera, RigidBody, Queries |
-| PBR | Metallic/Roughness, Material Instances, Emissive |
-| FrameGraph | Render passes declarativos, Forward/Deferred presets |
-| Systems | Input, Camera, Lighting, Physics, Animation, Audio |
-| Telemetry | RenderStats, MemoryBudget, GPU info, VRAM |
-| Editor Bridge | PlayMode (enter/exit/pause), Scene serialization |
-| ADead-GPU | ISR, SDF, Ray Marching, Anti-Aliasing, Hybrid Rendering |
-| C++ SDK | 1477 líneas header-only, 9 ejemplos, CMake build |
+| Módulo        | Descripción |
+|---------------|-------------|
+| Core          | `VulkanContext`, `Device`, `Allocator`, `CommandManager` |
+| Graphics      | Swapchain, Pipeline, MSAA, Depth, PostProcessing, Shadows |
+| Ray Tracing   | RTX en GPUs compatibles (auto-detectado) |
+| Compute       | `ComputePipeline`, `ComputeDispatch`, Barriers |
+| Resources     | Mesh, Material, Texture, Primitives, glTF/OBJ |
+| ECS           | Entity CRUD, Transform, MeshRenderer, Light, Camera, RigidBody, Queries |
+| PBR           | Metallic/Roughness, Material Instances, Emissive |
+| FrameGraph    | Render passes declarativos, presets Forward/Deferred |
+| Systems       | Input, Camera, Lighting, Physics, Animation, Audio, Particles |
+| Telemetry     | `RenderStats`, `MemoryBudget`, GPU info, VRAM |
+| ADead-GPU     | ISR, SDF, Ray Marching, Anti-Aliasing, Hybrid Rendering |
+| Editor        | `egui` + `egui_dock` (Viewport, Hierarchy, Inspector, Console) |
 
 ## Actualizaciones
 
-### v1.0.5 (Actual — Febrero 2026)
+### v1.1.0-rust (Mayo 2026)
 
-- **C ABI completo** — 3300+ funciones `extern "C"`
-- **C++ SDK** — 1477 líneas con Entity, PBRMaterial, FrameGraph, RenderStats, PlayMode
-- **ECS** — Entity/Component CRUD, queries con bitmask
-- **PBR Materials** — Metallic/roughness, instances, emissive
-- **FrameGraph** — Render passes declarativos, forward/deferred presets
-- **Telemetry** — GPU stats, memory budget, VRAM real
-- **PlayMode** — Play-in-editor bridge
-- **9 Ejemplos C++** — ECS, PBR, FrameGraph, FPS, Lighting, Telemetry, PlayMode, MultiObject
-- **Editor REACTOR** — egui + egui_dock (Viewport, Hierarchy, Inspector, Console)
-- Shaders SPIR-V embebidos
-- Ray Tracing auto-detectado
-- MSAA 4x por defecto
-- 3000+ FPS en RTX 3060
+- Migración a **Rust puro** — eliminado C ABI y C++ SDK.
+- Nueva API corta: `reactor::quick(...)` y macro `reactor::game!`.
+- [`Fases.md`](../Fases.md): roadmap completo hasta SDK v2.0.
 
-### v1.0.0 — v1.0.4
+### v1.0.5 (Febrero 2026)
 
-- C ABI base con lifecycle, input, camera, lighting, scene
-- C++ SDK con Application class, Config, RAII wrappers
-- Editor REACTOR inicial
+- ECS con queries (bitmask), PBR Materials, FrameGraph, Telemetría, PlayMode.
+- Editor REACTOR (`egui` + `egui_dock`).
+- Shaders SPIR-V embebidos, Ray Tracing auto-detectado, MSAA 4x.
+- 3000+ FPS en RTX 3060.
 
 ### v0.4.x
 
-- Versión inicial Rust
-- Vulkan 1.3 base
-- Sistema ADead-GPU
+- Versión inicial Rust, Vulkan 1.3 base, sistema ADead-GPU.
 
 ## Soporte
 
-- **Docs**: `/docs/` en el repositorio
-- **Ejemplos Rust**: `/examples/` (5 demos)
-- **Ejemplos C++**: `/cpp/examples/3D/` (9 demos)
-- **Editor**: `/Editor-REACTOR/` (egui)
+- **Docs:** `/docs/` (manual, rust-guide, architecture, Tareas).
+- **Ejemplos:** `/examples/` (5 demos).
+- **Editor:** `/Editor-REACTOR/` (`egui`).
 
 ## Licencia
 
-MIT License — **Powered by Salazar-interactive**
+MIT — **Powered by Salazar-interactive**

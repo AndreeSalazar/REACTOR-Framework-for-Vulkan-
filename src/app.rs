@@ -568,7 +568,8 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
 /// }
 /// ```
 pub fn run<A: ReactorApp + 'static>(app: A) {
-    env_logger::init();
+    // env_logger::init() panics if called twice (eg in tests).
+    let _ = env_logger::try_init();
 
     let event_loop = EventLoop::new().expect("Failed to create event loop");
     event_loop.set_control_flow(ControlFlow::Poll);
@@ -579,4 +580,84 @@ pub fn run<A: ReactorApp + 'static>(app: A) {
     };
 
     event_loop.run_app(&mut runner).expect("Event loop error");
+}
+
+// =============================================================================
+// SHORT API — minimal-boilerplate helpers
+// =============================================================================
+
+/// Closure-based app generated on the fly from `quick(...)` / `quick_with(...)`.
+struct QuickApp<I, U>
+where
+    I: FnMut(&mut ReactorContext) + 'static,
+    U: FnMut(&mut ReactorContext) + 'static,
+{
+    config: ReactorConfig,
+    init: Option<I>,
+    update: U,
+}
+
+impl<I, U> ReactorApp for QuickApp<I, U>
+where
+    I: FnMut(&mut ReactorContext) + 'static,
+    U: FnMut(&mut ReactorContext) + 'static,
+{
+    fn config(&self) -> ReactorConfig {
+        self.config.clone()
+    }
+
+    fn init(&mut self, ctx: &mut ReactorContext) {
+        if let Some(mut f) = self.init.take() {
+            f(ctx);
+        }
+    }
+
+    fn update(&mut self, ctx: &mut ReactorContext) {
+        (self.update)(ctx);
+    }
+}
+
+/// **One-call game launcher** — el camino MÁS corto para arrancar un juego REACTOR.
+///
+/// ```rust,no_run
+/// reactor::quick("Mi Juego", 1280, 720, |ctx| {
+///     // se ejecuta cada frame
+///     ctx.camera.position.x = ctx.time.elapsed().sin() * 5.0;
+/// });
+/// ```
+pub fn quick<U>(title: &str, width: u32, height: u32, update: U)
+where
+    U: FnMut(&mut ReactorContext) + 'static,
+{
+    run(QuickApp {
+        config: ReactorConfig::new(title).with_size(width, height),
+        init: None::<fn(&mut ReactorContext)>,
+        update,
+    });
+}
+
+/// Como [`quick`] pero con un closure de inicialización adicional.
+///
+/// ```rust,no_run
+/// reactor::quick_with(
+///     ReactorConfig::new("Mi Juego").with_size(1280, 720).with_msaa(4),
+///     |ctx| {
+///         ctx.camera.position = reactor::prelude::Vec3::new(0.0, 2.0, 5.0);
+///     },
+///     |ctx| {
+///         // update cada frame
+///         let _dt = ctx.time.delta();
+///     },
+/// );
+/// ```
+pub fn quick_with<I, U>(config: ReactorConfig, init: I, update: U)
+where
+    I: FnMut(&mut ReactorContext) + 'static,
+    U: FnMut(&mut ReactorContext) + 'static,
+{
+    run(QuickApp {
+        config,
+        init: Some(init),
+        update,
+    });
 }
