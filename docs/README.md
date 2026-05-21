@@ -59,7 +59,6 @@ int main() { return MiJuego().run(); }
 - **Scene Serialization** — Export a JSON
 - **9 Ejemplos C++** — Cada uno en carpeta propia con escenario único
 - **Editor REACTOR** — egui + egui_dock (Viewport, Hierarchy, Inspector, Console)
-- **ADead-GPU** — ISR, SDF, Ray Marching, Hybrid Rendering
 
 ## Arquitectura
 
