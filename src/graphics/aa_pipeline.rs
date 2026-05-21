@@ -201,12 +201,12 @@ impl AAGlobalPipeline {
         println!("╔══════════════════════════════════════════════════════════════════╗");
         println!("║                    AA Pipeline Stats                             ║");
         println!("╠══════════════════════════════════════════════════════════════════╣");
-        println!("║ Quality:          {:20}                         ║", self.stats.current_quality);
-        println!("║ Enabled:          {:20}                         ║", if self.enabled { "Yes" } else { "No" });
-        println!("║ Resolution:       {:4}x{:<4}                                      ║", self.width, self.height);
-        println!("║ Pixels Processed: {:10}                                    ║", self.stats.pixels_processed);
-        println!("║ Edges Detected:   {:10}                                    ║", self.stats.edges_detected);
-        println!("║ Pixels Smoothed:  {:10}                                    ║", self.stats.pixels_smoothed);
+        println!("║ Quality:          {:20}                                          ║", self.stats.current_quality);
+        println!("║ Enabled:          {:20}                                          ║", if self.enabled { "Yes" } else { "No" });
+        println!("║ Resolution:       {:4}x{:<4}                                     ║", self.width, self.height);
+        println!("║ Pixels Processed: {:10}                                          ║", self.stats.pixels_processed);
+        println!("║ Edges Detected:   {:10}                                          ║", self.stats.edges_detected);
+        println!("║ Pixels Smoothed:  {:10}                                          ║", self.stats.pixels_smoothed);
         println!("╚══════════════════════════════════════════════════════════════════╝");
     }
 }
