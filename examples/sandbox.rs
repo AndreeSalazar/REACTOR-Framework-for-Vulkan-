@@ -1,4 +1,4 @@
-use reactor::{Reactor, Vertex, ResolutionDetector, CPUDetector, Scene};
+use reactor_vulkan::{Reactor, Vertex, ResolutionDetector, CPUDetector, Scene};
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,

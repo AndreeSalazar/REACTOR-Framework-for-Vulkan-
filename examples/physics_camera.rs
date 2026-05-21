@@ -4,10 +4,10 @@
 // Demonstrates CharacterController with gravity, jumping, and ground collision.
 // =============================================================================
 
-use reactor::prelude::*;
-use reactor::Vertex;
-use reactor::resources::texture::Texture;
-use reactor::systems::physics::{CharacterController, AABB};
+use reactor_vulkan::prelude::*;
+use reactor_vulkan::Vertex;
+use reactor_vulkan::resources::texture::Texture;
+use reactor_vulkan::systems::physics::{CharacterController, AABB};
 use std::sync::Arc;
 use winit::keyboard::KeyCode;
 use winit::event::MouseButton;
@@ -292,7 +292,7 @@ impl ReactorApp for PhysicsCameraDemo {
 // =============================================================================
 
 fn main() {
-    reactor::run(PhysicsCameraDemo::default());
+    reactor_vulkan::run(PhysicsCameraDemo::default());
 }
 
 // =============================================================================

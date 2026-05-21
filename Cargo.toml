@@ -1,5 +1,5 @@
 [package]
-name = "reactor"
+name = "reactor-vulkan"
 version = "1.1.0"
 edition = "2021"
 description = "Zero-overhead Vulkan framework — control total, API de 1 línea"

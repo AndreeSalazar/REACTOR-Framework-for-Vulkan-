@@ -5,9 +5,9 @@
 // This example shows the texture API in action.
 // =============================================================================
 
-use reactor::prelude::*;
-use reactor::Vertex;
-use reactor::resources::texture::Texture;
+use reactor_vulkan::prelude::*;
+use reactor_vulkan::Vertex;
+use reactor_vulkan::resources::texture::Texture;
 use std::sync::Arc;
 
 // =============================================================================
@@ -98,7 +98,7 @@ impl ReactorApp for TexturedCube {
 // =============================================================================
 
 fn main() {
-    reactor::run(TexturedCube { rotation: 0.0, texture: None });
+    reactor_vulkan::run(TexturedCube { rotation: 0.0, texture: None });
 }
 
 // =============================================================================

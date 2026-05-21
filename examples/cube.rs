@@ -12,8 +12,8 @@
 //   - Cambios
 // =============================================================================
 
-use reactor::prelude::*;
-use reactor::Vertex;
+use reactor_vulkan::prelude::*;
+use reactor_vulkan::Vertex;
 use std::sync::Arc;
 use winit::keyboard::KeyCode;
 
@@ -181,5 +181,5 @@ impl ReactorApp for CubeDemo {
 
 fn main() {
     println!("\n🚀 Starting REACTOR Cube Demo...\n");
-    reactor::run(CubeDemo::new());
+    reactor_vulkan::run(CubeDemo::new());
 }
