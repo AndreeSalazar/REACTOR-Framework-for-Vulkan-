@@ -60,7 +60,6 @@ Aprovecha el sistema de tipos, ownership y RAII de Rust para garantizar **seguri
 | **Systems** | Input, Scene, Camera, Transform, Lighting, Physics, FrustumCulling, Animation, Particles, Audio |
 | **Telemetry** | RenderStats (FPS, draw calls, triangles, VRAM), MemoryBudget, GPU info |
 | **Utils** | GPUDetector, CPUDetector, ResolutionDetector, Time, FixedTimestep |
-| **ADead-GPU** | ISR (Intelligent Shading Rate), SDF, Ray Marching, Anti-Aliasing, Hybrid Rendering |
 | **Editor** | Editor visual con `egui` + `egui_dock` (Viewport, Hierarchy, Inspector, Console) |
 
 ## 🚀 Quick Start — Patrón `ReactorApp`
@@ -146,7 +145,6 @@ REACTOR-Framework-for-Vulkan-/
 │   ├── resources/              # Mesh, Material (PBR), Texture, Vertex, Model, Primitives
 │   ├── systems/                # Input, ECS, Scene, Camera, Transform, Lighting,
 │   │                           # Physics, Frustum, Animation, Particles, Audio
-│   ├── adead/                  # ADead-GPU (ISR, SDF, RayMarching, AA, Hybrid)
 │   ├── platform/               # Window + Config
 │   └── utils/                  # GPUDetector, CPUDetector, ResolutionDetector, Time
 │
@@ -318,24 +316,6 @@ camera.move_forward(speed * delta);
 
 ---
 
-## 🔥 ADead-GPU Integration
-
-REACTOR integra **ADead-GPU**, un sistema que compite con DLSS pero **funciona en cualquier GPU**.
-
-### ADead-ISR — Intelligent Shading Rate 2.0
-
-> *"Adaptive Resolution Shading sin AI ni Tensor Cores. Matemáticas puras."*
-
-```
-TRADICIONAL (todos 1x1):          ADEAD-ISR (inteligente):
-┌─┬─┬─┬─┬─┬─┬─┬─┐                ┌───────┬─┬─┬───┐
-├─┼─┼─┼─┼─┼─┼─┼─┤                │       ├─┼─┤   │
-├─┼─┼─┼─┼─┼─┼─┼─┤  ────────►     │  4x4  ├─┼─┤2x2│
-├─┼─┼─┼─┼─┼─┼─┼─┤                │       ├─┼─┤   │
-└─┴─┴─┴─┴─┴─┴─┴─┘                └───────┴─┴─┴───┘
-100% GPU                          40% GPU, MISMA calidad
-```
-
 ```rust
 use reactor::{IntelligentShadingRate, ISRConfig};
 
@@ -350,16 +330,6 @@ let stats = isr.stats();
 println!("GPU Savings: {:.1}%", stats.savings_percent * 100.0);
 ```
 
-### ADead-ISR vs DLSS
-
-| Aspecto        | DLSS              | ADead-ISR             |
-|----------------|-------------------|-----------------------|
-| **Hardware**   | Solo RTX (Tensor) | **Cualquier GPU**     |
-| **Calidad**    | 85% (artifacts)   | **95% (nativo)**      |
-| **Latencia**   | +2–4 ms (temporal)| **0 ms**              |
-| **Ghosting**   | Sí (movimiento)   | **No**                |
-| **GPU Savings**| ~50%              | **~75%**              |
-| **Complejidad**| AI training       | **Matemáticas puras** |
 
 ### ADead-SDF — Signed Distance Functions
 
@@ -409,24 +379,6 @@ renderer.add_cube  ("Building", Vec3::new(5.0, 0.0, 0.0), Vec3::new(1.0, 3.0, 1.
 renderer.update(camera_pos, delta_time);
 ```
 
-### Benchmark Completo
-
-```
-╔═══════════════════════════════════════════════════════════════╗
-║                 ADead-GPU Complete Suite                      ║
-╠═══════════════════════════════════════════════════════════════╣
-║  1. ADead-GPU Core    → 3.7x faster command submission        ║
-║  2. ADead-AA (SDF)    → Perfect edges, zero memory            ║
-║  3. ADead-Vec3D       → Infinite detail, minimal memory       ║
-║  4. ADead-RT          → Ray Tracing sin RT Cores              ║
-║  5. ADead-ISR         → 3x performance sin AI                 ║
-╠═══════════════════════════════════════════════════════════════╣
-║  EFECTO COMBINADO:                                            ║
-║  Pipeline Tradicional:  16.6ms (60 FPS)                       ║
-║  ADead-GPU Full Stack:   1.5ms (666 FPS)                      ║
-║  MEJORA: 11x más rápido                                       ║
-╚═══════════════════════════════════════════════════════════════╝
-```
 
 ---
 
@@ -488,7 +440,6 @@ cargo run --example obj_loader_demo   # Carga de modelos OBJ
 
 - Versión inicial en Rust.
 - Vulkan 1.3 base.
-- Sistema ADead-GPU (ISR, SDF, Ray Marching, Hybrid Rendering).
 
 ---
 

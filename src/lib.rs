@@ -39,9 +39,6 @@ pub mod utils;
 // Platform abstraction
 pub mod platform;
 
-// ADead-GPU Integration (ISR, SDF, Ray Marching, AA)
-pub mod adead;
-
 // =============================================================================
 // App Trait System Re-exports
 // =============================================================================
@@ -203,13 +200,6 @@ pub use graphics::debug_renderer::{DebugRenderer, DebugLine, DebugAABB, DebugSph
 // Post-processing
 pub use graphics::post_process::{PostProcessEffect, PostProcessSettings, PostProcessPipeline, PostProcessPreset, AAQualityPreset, AASettings};
 
-// AA Global Pipeline (Anti-Aliasing con matemáticas SDF puras)
-pub use graphics::aa_pipeline::{
-    AAGlobalPipeline, AAStats,
-    sdf_edge_coverage, sdf_blend_colors, sdf_edge_alpha, smooth_normal, smooth_fresnel,
-    aa_preset_ui, aa_preset_realtime_3d, aa_preset_offline,
-};
-
 // Lighting System
 pub use systems::lighting::{Light, LightType, LightingSystem};
 
@@ -230,47 +220,6 @@ pub use systems::particles::{ParticleSystem, Particle, ParticleSystemConfig, Emi
 
 // Primitives
 pub use resources::primitives::Primitives;
-
-// =============================================================================
-// ADead-GPU Integration (ISR, SDF, Ray Marching, AA)
-// =============================================================================
-
-// ADead-ISR: Intelligent Shading Rate
-pub use adead::isr::{IntelligentShadingRate, ISRConfig, ImportanceLevel, ImportanceMap as ISRImportanceMap, ISRStats, ISRBenchmark};
-
-// ADead-SDF: Signed Distance Functions
-pub use adead::sdf::{
-    SDFPrimitive, SDFPrimitiveType,
-    sd_sphere, sd_box, sd_round_box, sd_cylinder, sd_torus, sd_capsule, sd_cone, sd_plane, sd_ellipsoid, sd_pyramid,
-    op_union, op_subtract, op_intersect, op_smooth_union, op_smooth_subtract, op_smooth_intersect,
-    op_translate, op_rotate, op_scale, op_repeat, op_repeat_limited, op_twist, op_bend,
-    calc_normal, calc_ao, calc_soft_shadow,
-};
-
-// ADead-RT: Ray Marching Engine
-pub use adead::raymarching::{RayMarcher, RayMarchConfig, RayMarchHit, SDFScene, RayMarchStats};
-
-// ADead-AA: Anti-Aliasing Avanzado
-pub use adead::antialiasing::{
-    SDFAntiAliasing, SDFAAConfig, SDFEdgeDetector, AAComparison, AAQuality,
-    smoothstep, smootherstep, smootherstep_ultra, linearstep, exp_smoothstep,
-    fwidth_approx, fwidth_vec2, fwidth_vec3,
-    halton, halton_2d,
-    gamma_to_linear, linear_to_gamma, gamma_to_linear_vec4, linear_to_gamma_vec4,
-};
-
-// ADead-Hybrid: Hybrid Rendering
-pub use adead::hybrid::{HybridRenderer, HybridObject, HybridStats, RenderMode, LODLevel, LODThresholds, ADeadBenchmark};
-
-// ADead-Integration: Sistema unificado
-pub use adead::integration::{ADeadSystem, ADeadConfig, ADeadStats, ADeadBenchmarkResult, QualityPreset};
-
-// ADead-AA: Sistema de Anti-Aliasing Avanzado (Epic-Liasing)
-pub use adead::adead_aa::{
-    ADeadAA, ADeadAAConfig, ADeadAAQuality, ADeadAAStats,
-    epic_smoothstep, ultra_smoothstep,
-    epic_edge_coverage, epic_blend_colors, epic_edge_alpha,
-};
 
 // =============================================================================
 // Prelude - Import everything commonly needed
