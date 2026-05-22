@@ -1029,14 +1029,13 @@ impl Xenofall {
 // =============================================================================
 // REACTOR APP — Lifecycle del juego
 // =============================================================================
-
 impl ReactorApp for Xenofall {
     // ── Configuración ────────────────────────────────────────────────────────
     fn config(&self) -> ReactorConfig {
         ReactorConfig::new("⚡ XENOFALL — Rail Shooter")
             .with_size(1920, 1080)
             .with_vsync(true)
-            .with_msaa(4)
+            .with_msaa(1)  // ✅ 1 sample = MSAA desactivado (el core aún no soporta Resolve Attachments)
             .with_renderer(RendererMode::Forward)
             .with_physics_hz(60)
     }

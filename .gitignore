@@ -97,3 +97,6 @@ site/
 # Added by cargo
 
 /target
+
+# Assets generados/descargados localmente
+assets/textures/

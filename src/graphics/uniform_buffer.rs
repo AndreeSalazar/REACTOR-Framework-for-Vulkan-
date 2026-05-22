@@ -5,7 +5,7 @@ use ash::vk;
 use bytemuck::{Pod, Zeroable};
 use gpu_allocator::vulkan::Allocator;
 use gpu_allocator::MemoryLocation;
-use std::error::Error;
+
 use std::sync::{Arc, Mutex};
 
 /// Global scene data passed to shaders

@@ -1,7 +1,7 @@
 use crate::graphics::buffer::Buffer;
 use crate::resources::vertex::Vertex;
 use crate::core::VulkanContext;
-use crate::core::error::{ReactorResult, ReactorError};
+use crate::core::error::ReactorResult;
 use ash::vk;
 use gpu_allocator::vulkan::Allocator;
 use gpu_allocator::MemoryLocation;

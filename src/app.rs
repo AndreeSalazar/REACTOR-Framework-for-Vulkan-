@@ -795,6 +795,12 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
                 // Render
                 self.app.render(ctx);
 
+                // Si el dispositivo Vulkan se perdió, detenemos el loop para evitar spam de errores
+                if ctx.reactor.device_lost {
+                    event_loop.exit();
+                    return;
+                }
+
                 // Request next frame
                 ctx.window.request_redraw();
             }
@@ -810,8 +816,9 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
             // Ensures all pending GPU work completes before the process exits,
             // preventing validation layer errors from premature resource destruction.
             // The device is guaranteed valid here as ReactorContext is still alive.
+            // We ignore errors (like DEVICE_LOST) to allow graceful cleanup.
             unsafe {
-                ctx.reactor.context.device.device_wait_idle().unwrap();
+                let _ = ctx.reactor.context.device.device_wait_idle();
             }
         }
     }

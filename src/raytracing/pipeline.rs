@@ -1,5 +1,5 @@
 use crate::core::context::VulkanContext;
-use crate::core::error::{ReactorResult, ReactorError};
+use crate::core::error::ReactorResult;
 use crate::raytracing::context::RayTracingContext;
 use ash::vk;
 use std::ffi::CStr;

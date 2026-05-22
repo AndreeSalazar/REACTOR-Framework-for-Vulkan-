@@ -28,6 +28,7 @@ pub struct Reactor {
     pub world: World,
     pub ray_tracing: Option<RayTracingContext>,
     pub resized: bool,
+    pub device_lost: bool,
     pub context: VulkanContext,
 
     // MSAA Anti-Aliasing
@@ -158,6 +159,7 @@ impl Reactor {
             world: World::new(),
             ray_tracing,
             resized: false,
+            device_lost: false,
             // MSAA Anti-Aliasing
             msaa_samples,
             msaa_image,
@@ -750,17 +752,29 @@ impl Reactor {
         scene: &crate::systems::scene::Scene,
         view_projection: &glam::Mat4,
     ) -> ReactorResult<()> {
+        if self.device_lost {
+            return Ok(());
+        }
+
         if self.resized {
             self.recreate_swapchain()?;
             self.resized = false;
         }
 
         unsafe {
-            self.context.device.wait_for_fences(
+            match self.context.device.wait_for_fences(
                 &[self.in_flight_fences[self.current_frame]],
                 true,
                 u64::MAX,
-            ).map_err(|e| ReactorError::with_source(ErrorCode::VulkanSynchronization, "wait_for_fences failed", e))?;
+            ) {
+                Ok(_) => {},
+                Err(vk::Result::ERROR_DEVICE_LOST) => {
+                    eprintln!("REACTOR FATAL: Dispositivo Vulkan perdido (device_wait_idle/wait_for_fences). El driver puede haber crasheado.");
+                    self.device_lost = true;
+                    return Err(ReactorError::new(ErrorCode::VulkanSynchronization, "Device lost"));
+                }
+                Err(e) => return Err(ReactorError::with_source(ErrorCode::VulkanSynchronization, "wait_for_fences failed", e)),
+            }
         }
 
         let (image_index, _) = unsafe {
@@ -829,6 +843,50 @@ impl Reactor {
                 .layer_count(1)
                 .color_attachments(std::slice::from_ref(&color_attachment))
                 .depth_attachment(&mut depth_attachment);
+
+            // ── BARRERAS DE INICIO: Transición de Swapchain y Depth a Attachments ──
+            let swapchain_image = self.swapchain.images[image_index as usize];
+            let depth_img = self.depth_image.unwrap();
+
+            let color_barrier = vk::ImageMemoryBarrier::default()
+                .old_layout(vk::ImageLayout::UNDEFINED)
+                .new_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .src_access_mask(vk::AccessFlags::empty())
+                .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                .image(swapchain_image)
+                .subresource_range(vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                });
+
+            let depth_barrier = vk::ImageMemoryBarrier::default()
+                .old_layout(vk::ImageLayout::UNDEFINED)
+                .new_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+                .src_access_mask(vk::AccessFlags::empty())
+                .dst_access_mask(vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE)
+                .image(depth_img)
+                .subresource_range(vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::DEPTH,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                });
+
+            let start_barriers = [color_barrier, depth_barrier];
+
+            self.context.device.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &start_barriers,
+            );
 
             self.context.device.cmd_begin_rendering(command_buffer, &rendering_info);
 
@@ -922,6 +980,31 @@ impl Reactor {
 
             self.context.device.cmd_end_rendering(command_buffer);
 
+            // ── BARRERA 2: Transición de Color Attachment a Present ──
+            let image_barrier = vk::ImageMemoryBarrier::default()
+                .old_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .new_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+                .src_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                .dst_access_mask(vk::AccessFlags::MEMORY_READ)
+                .image(swapchain_image)
+                .subresource_range(vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                });
+
+            self.context.device.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[image_barrier],
+            );
+
             self.context.device.end_command_buffer(command_buffer)
                 .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "end_command_buffer failed", e))?;
         }
@@ -978,17 +1061,29 @@ impl Reactor {
         material: &Material,
         transform: &glam::Mat4,
     ) -> ReactorResult<()> {
+        if self.device_lost {
+            return Ok(());
+        }
+
         if self.resized {
             self.recreate_swapchain()?;
             self.resized = false;
         }
 
         unsafe {
-            self.context.device.wait_for_fences(
+            match self.context.device.wait_for_fences(
                 &[self.in_flight_fences[self.current_frame]],
                 true,
                 u64::MAX,
-            ).map_err(|e| ReactorError::with_source(ErrorCode::VulkanSynchronization, "wait_for_fences failed", e))?;
+            ) {
+                Ok(_) => {},
+                Err(vk::Result::ERROR_DEVICE_LOST) => {
+                    eprintln!("REACTOR FATAL: Dispositivo Vulkan perdido (device_wait_idle/wait_for_fences). El driver puede haber crasheado.");
+                    self.device_lost = true;
+                    return Err(ReactorError::new(ErrorCode::VulkanSynchronization, "Device lost"));
+                }
+                Err(e) => return Err(ReactorError::with_source(ErrorCode::VulkanSynchronization, "wait_for_fences failed", e)),
+            }
         }
 
         let (image_index, _) = unsafe {
@@ -1058,6 +1153,50 @@ impl Reactor {
                 .color_attachments(std::slice::from_ref(&color_attachment))
                 .depth_attachment(&mut depth_attachment);
 
+            // ── BARRERAS DE INICIO: Transición de Swapchain y Depth a Attachments ──
+            let swapchain_image = self.swapchain.images[image_index as usize];
+            let depth_img = self.depth_image.unwrap();
+
+            let color_barrier = vk::ImageMemoryBarrier::default()
+                .old_layout(vk::ImageLayout::UNDEFINED)
+                .new_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .src_access_mask(vk::AccessFlags::empty())
+                .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                .image(swapchain_image)
+                .subresource_range(vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                });
+
+            let depth_barrier = vk::ImageMemoryBarrier::default()
+                .old_layout(vk::ImageLayout::UNDEFINED)
+                .new_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+                .src_access_mask(vk::AccessFlags::empty())
+                .dst_access_mask(vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE)
+                .image(depth_img)
+                .subresource_range(vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::DEPTH,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                });
+
+            let start_barriers = [color_barrier, depth_barrier];
+
+            self.context.device.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &start_barriers,
+            );
+
             self.context.device.cmd_begin_rendering(command_buffer, &rendering_info);
 
             self.context.device.cmd_bind_pipeline(
@@ -1120,6 +1259,31 @@ impl Reactor {
                 .cmd_draw_indexed(command_buffer, mesh.index_count, 1, 0, 0, 0);
 
             self.context.device.cmd_end_rendering(command_buffer);
+
+            // ── BARRERA 2: Transición de Color Attachment a Present ──
+            let image_barrier = vk::ImageMemoryBarrier::default()
+                .old_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .new_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+                .src_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                .dst_access_mask(vk::AccessFlags::MEMORY_READ)
+                .image(swapchain_image)
+                .subresource_range(vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                });
+
+            self.context.device.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[image_barrier],
+            );
 
             self.context.device.end_command_buffer(command_buffer)
                 .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "end_command_buffer failed", e))?;

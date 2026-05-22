@@ -185,8 +185,8 @@ producir videojuegos comerciales**, manteniendo:
 > **Meta:** rendering moderno con bindless, dynamic rendering y PSO cache.
 
 ### 2.1 Dynamic Rendering (Vulkan 1.3)
-- [ ] Reemplazar `VkRenderPass` + `VkFramebuffer` por `VK_KHR_dynamic_rendering`.
-- [ ] Eliminar todo el código de `subpasses` heredado.
+- [x] ✅ Reemplazar `VkRenderPass` + `VkFramebuffer` por `VK_KHR_dynamic_rendering`.
+- [x] ✅ Eliminar todo el código de `subpasses` heredado.
 
 ### 2.2 Descriptor Indexing / Bindless
 - [ ] Habilitar `VK_EXT_descriptor_indexing`.

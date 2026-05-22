@@ -2,7 +2,7 @@ use crate::graphics::pipeline::{Pipeline, PipelineConfig};
 use crate::resources::texture::Texture;
 use crate::core::VulkanContext;
 use crate::core::arc_handle::ArcDevice;
-use crate::core::error::{ReactorResult, ReactorError};
+use crate::core::error::ReactorResult;
 use ash::vk;
 use std::sync::Arc;
 

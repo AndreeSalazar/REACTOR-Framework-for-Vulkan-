@@ -50,14 +50,14 @@ use crate::utils::gpu_detector::GPUDetector;
 /// ```
 #[derive(Clone)]
 pub struct VulkanContext {
-    /// Arc-wrapped VkInstance (RAII, destroyed last).
-    pub instance: ArcInstance,
-
-    /// Arc-wrapped VkDevice (RAII, destroyed before instance).
+    /// Arc-wrapped VkDevice (RAII, destroyed FIRST - depends on instance).
     pub device: ArcDevice,
 
-    /// Arc-wrapped VkSurfaceKHR (RAII, destroyed before instance).
+    /// Arc-wrapped VkSurfaceKHR (RAII, destroyed SECOND - depends on instance).
     pub surface: ArcSurface,
+
+    /// Arc-wrapped VkInstance (RAII, destroyed LAST).
+    pub instance: ArcInstance,
 
     /// Selected physical device (does not need RAII — owned by Instance).
     pub physical_device: vk::PhysicalDevice,
