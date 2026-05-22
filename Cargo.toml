@@ -45,3 +45,7 @@ path = "examples/obj_loader_demo.rs"
 [[example]]
 name = "quick"
 path = "examples/quick.rs"
+
+[[example]]
+name = "XENOFALL"
+path = "examples/XENOFALL.rs"
