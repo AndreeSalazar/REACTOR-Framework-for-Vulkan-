@@ -296,7 +296,24 @@ impl FrameGraph {
         sorted: &mut Vec<PassId>,
     ) {
         if temp_visited.contains(&pass_id) {
-            // Ciclo detectado - ignorar (o panic en debug)
+            // Ciclo detectado — esto es un error de configuración
+            let pass_name = passes.iter()
+                .find(|p| p.id == pass_id)
+                .map(|p| p.name.as_str())
+                .unwrap_or("unknown");
+            log::error!(
+                "FrameGraph cycle detected involving pass '{}' (id: {:?}). \
+                 This indicates a circular dependency in resource reads/writes. \
+                 Please review your pass configuration.",
+                pass_name,
+                pass_id
+            );
+            #[cfg(debug_assertions)]
+            panic!(
+                "FrameGraph cycle detected! Pass '{}' (id: {:?}) creates a circular dependency.",
+                pass_name, pass_id
+            );
+            #[cfg(not(debug_assertions))]
             return;
         }
         if visited.contains(&pass_id) {

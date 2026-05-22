@@ -6,6 +6,8 @@ use glam::Vec2;
 #[derive(Default)]
 pub struct Input {
     pressed_keys: HashSet<KeyCode>,
+    just_pressed_keys: HashSet<KeyCode>,
+    just_released_keys: HashSet<KeyCode>,
     pressed_mouse: HashSet<MouseButton>,
     mouse_pos: Vec2,
     mouse_delta: Vec2,
@@ -16,6 +18,8 @@ impl Input {
     pub fn new() -> Self {
         Self {
             pressed_keys: HashSet::new(),
+            just_pressed_keys: HashSet::new(),
+            just_released_keys: HashSet::new(),
             pressed_mouse: HashSet::new(),
             mouse_pos: Vec2::ZERO,
             mouse_delta: Vec2::ZERO,
@@ -24,6 +28,8 @@ impl Input {
     }
 
     pub fn begin_frame(&mut self) {
+        self.just_pressed_keys.clear();
+        self.just_released_keys.clear();
         self.mouse_delta = Vec2::ZERO;
         self.scroll_delta = 0.0;
     }
@@ -39,8 +45,16 @@ impl Input {
                 ..
             } => {
                 match state {
-                    ElementState::Pressed => { self.pressed_keys.insert(*keycode); }
-                    ElementState::Released => { self.pressed_keys.remove(keycode); }
+                    ElementState::Pressed => {
+                        if !self.pressed_keys.contains(keycode) {
+                            self.just_pressed_keys.insert(*keycode);
+                        }
+                        self.pressed_keys.insert(*keycode);
+                    }
+                    ElementState::Released => {
+                        self.pressed_keys.remove(keycode);
+                        self.just_released_keys.insert(*keycode);
+                    }
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
@@ -68,12 +82,27 @@ impl Input {
         }
     }
 
+    // Keyboard
     pub fn is_key_down(&self, key: KeyCode) -> bool {
         self.pressed_keys.contains(&key)
     }
 
+    pub fn is_key_just_pressed(&self, key: KeyCode) -> bool {
+        self.just_pressed_keys.contains(&key)
+    }
+
+    pub fn is_key_just_released(&self, key: KeyCode) -> bool {
+        self.just_released_keys.contains(&key)
+    }
+
+    // Mouse
     pub fn is_mouse_down(&self, button: MouseButton) -> bool {
         self.pressed_mouse.contains(&button)
+    }
+
+    /// Alias de `is_mouse_down` — compatibilidad con el nuevo Input.
+    pub fn is_mouse_button_down(&self, button: MouseButton) -> bool {
+        self.is_mouse_down(button)
     }
 
     pub fn mouse_position(&self) -> Vec2 {

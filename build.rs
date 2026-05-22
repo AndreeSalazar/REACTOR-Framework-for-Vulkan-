@@ -46,9 +46,36 @@ fn compile_shader(src: &str, dst: &str) {
 }
 
 fn main() {
-    // Core shaders used by examples and C API
-    compile_shader("shaders/shader.vert", "shaders/vert.spv");
-    compile_shader("shaders/shader.frag", "shaders/frag.spv");
-    compile_shader("shaders/texture.vert", "shaders/texture_vert.spv");
-    compile_shader("shaders/texture.frag", "shaders/texture_frag.spv");
+    // Compilar recursivamente TODOS los shaders GLSL en el directorio shaders/
+    let shaders_dir = Path::new("shaders");
+    
+    if !shaders_dir.exists() {
+        eprintln!("cargo:warning=Shaders directory not found: shaders/");
+        return;
+    }
+    
+    // Recorrer recursivamente todos los archivos .vert y .frag
+    let mut compiled = 0;
+    let mut failed = 0;
+    
+    for entry in walkdir::WalkDir::new(shaders_dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        
+        // Solo procesar archivos con extensión .vert o .frag
+        if let Some(ext) = path.extension() {
+            let ext_str = ext.to_string_lossy();
+            if ext_str == "vert" || ext_str == "frag" {
+                let src = path.to_string_lossy().to_string();
+                let dst = src.replace(&format!(".{}", ext_str), ".spv");
+                
+                compile_shader(&src, &dst);
+                compiled += 1;
+            }
+        }
+    }
+    
+    println!("cargo:warning=Compiled {} shaders", compiled);
 }

@@ -21,6 +21,10 @@ image = "0.25"
 log = "0.4.29"
 raw-window-handle = "0.6.2"
 winit = "0.30.12"
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+walkdir = "2.5"
 
 [[example]]
 name = "cube"
@@ -47,5 +51,5 @@ name = "quick"
 path = "examples/quick.rs"
 
 [[example]]
-name = "XENOFALL"
-path = "examples/XENOFALL.rs"
+name = "xenofall"
+path = "examples/xenofall.rs"

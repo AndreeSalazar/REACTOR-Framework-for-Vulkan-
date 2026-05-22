@@ -249,7 +249,11 @@ impl Drop for ReactorContext {
         // that need the allocator (which is inside reactor) to be freed
         self.scene.clear();
         
-        // Wait for GPU to finish before cleanup
+        // SAFETY: device_wait_idle() blocks until all GPU operations complete.
+        // This is safe to call at any time and has no aliasing requirements.
+        // We call it here to ensure all GPU operations complete before
+        // Vulkan resources are dropped by the Reactor destructor.
+        // The device handle is still valid at this point (Drop hasn't run yet).
         unsafe {
             let _ = self.reactor.context.device.device_wait_idle();
         }
@@ -293,28 +297,28 @@ impl ReactorContext {
     // =========================================================================
 
     /// Create a mesh from vertices and indices
-    pub fn create_mesh(&self, vertices: &[crate::vertex::Vertex], indices: &[u32]) -> Result<crate::mesh::Mesh, Box<dyn std::error::Error>> {
-        self.reactor.create_mesh(vertices, indices)
+    pub fn create_mesh(&self, vertices: &[crate::vertex::Vertex], indices: &[u32]) -> crate::core::error::ReactorResult<crate::mesh::Mesh> {
+        self.reactor.create_mesh(vertices, indices).map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
     }
 
     /// Create a material from SPIR-V shader code
-    pub fn create_material(&self, vert_code: &[u32], frag_code: &[u32]) -> Result<crate::material::Material, Box<dyn std::error::Error>> {
-        self.reactor.create_material(vert_code, frag_code)
+    pub fn create_material(&self, vert_code: &[u32], frag_code: &[u32]) -> crate::core::error::ReactorResult<crate::material::Material> {
+        self.reactor.create_material(vert_code, frag_code).map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
     }
 
     /// Load texture from file (PNG, JPG, BMP, etc.)
-    pub fn load_texture(&self, path: &str) -> Result<crate::resources::texture::Texture, Box<dyn std::error::Error>> {
-        self.reactor.load_texture(path)
+    pub fn load_texture(&self, path: &str) -> crate::core::error::ReactorResult<crate::resources::texture::Texture> {
+        self.reactor.load_texture(path).map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
     }
 
     /// Load texture from embedded bytes
-    pub fn load_texture_bytes(&self, bytes: &[u8]) -> Result<crate::resources::texture::Texture, Box<dyn std::error::Error>> {
-        self.reactor.load_texture_bytes(bytes)
+    pub fn load_texture_bytes(&self, bytes: &[u8]) -> crate::core::error::ReactorResult<crate::resources::texture::Texture> {
+        self.reactor.load_texture_bytes(bytes).map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
     }
 
     /// Create a solid color texture
-    pub fn create_solid_texture(&self, r: u8, g: u8, b: u8, a: u8) -> Result<crate::resources::texture::Texture, Box<dyn std::error::Error>> {
-        self.reactor.create_solid_texture(r, g, b, a)
+    pub fn create_solid_texture(&self, r: u8, g: u8, b: u8, a: u8) -> crate::core::error::ReactorResult<crate::resources::texture::Texture> {
+        self.reactor.create_solid_texture(r, g, b, a).map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
     }
 
     /// Create a textured material with a diffuse texture
@@ -323,8 +327,8 @@ impl ReactorContext {
         vert_code: &[u32],
         frag_code: &[u32],
         texture: &crate::resources::texture::Texture,
-    ) -> Result<crate::material::Material, Box<dyn std::error::Error>> {
-        self.reactor.create_textured_material(vert_code, frag_code, texture)
+    ) -> crate::core::error::ReactorResult<crate::material::Material> {
+        self.reactor.create_textured_material(vert_code, frag_code, texture).map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
     }
 
     // =========================================================================
@@ -332,17 +336,17 @@ impl ReactorContext {
     // =========================================================================
 
     /// Load an OBJ file and return the mesh
-    pub fn load_obj(&self, path: &str) -> Result<crate::mesh::Mesh, Box<dyn std::error::Error>> {
+    pub fn load_obj(&self, path: &str) -> crate::core::error::ReactorResult<crate::mesh::Mesh> {
         use crate::resources::model::ObjData;
         
-        let obj = ObjData::load(path)?;
+        let obj = ObjData::load(path).map_err(|_e| crate::core::error::ReactorError::file_not_found(path))?;
         if obj.vertices.is_empty() {
-            return Err("OBJ file contains no vertices".into());
+            return Err(crate::core::error::ReactorError::invalid_format("OBJ file contains no vertices"));
         }
         
         println!("📦 Loaded OBJ: {} vertices, {} triangles", obj.vertex_count(), obj.triangle_count());
         
-        self.reactor.create_mesh(&obj.vertices, &obj.indices)
+        self.reactor.create_mesh(&obj.vertices, &obj.indices).map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
     }
 
     /// Load an OBJ file and create a mesh with material, returning a scene object index
@@ -350,7 +354,7 @@ impl ReactorContext {
         &mut self,
         path: &str,
         material: std::sync::Arc<crate::material::Material>,
-    ) -> Result<u32, Box<dyn std::error::Error>> {
+    ) -> crate::core::error::ReactorResult<u32> {
         let mesh = self.load_obj(path)?;
         let mesh_arc = std::sync::Arc::new(mesh);
         let index = self.scene.objects.len() as u32;
@@ -524,25 +528,25 @@ impl ReactorContext {
     /// (vertex color + iluminación básica). Listo para usar sin tocar disco.
     ///
     /// ```rust,no_run
-    /// # fn demo(ctx: &mut reactor::ReactorContext) -> Result<(), Box<dyn std::error::Error>> {
+    /// # fn demo(ctx: &mut reactor::ReactorContext) -> Result<(), reactor::core::error::ReactorError> {
     /// let mat = ctx.default_material()?;
     /// # Ok(()) }
     /// ```
-    pub fn default_material(&self) -> Result<crate::material::Material, Box<dyn std::error::Error>> {
+    pub fn default_material(&self) -> crate::core::error::ReactorResult<crate::material::Material> {
         let vert = crate::builtin_shaders::vert_default();
         let frag = crate::builtin_shaders::frag_default();
-        self.reactor.create_material(&vert, &frag)
+        self.reactor.create_material(&vert, &frag).map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
     }
 
     /// Spawn-helper: crea un cubo unitario en `position` y lo añade a la escena.
     /// Retorna el índice del objeto.
-    pub fn spawn_cube(&mut self, position: glam::Vec3) -> Result<usize, Box<dyn std::error::Error>> {
+    pub fn spawn_cube(&mut self, position: glam::Vec3) -> crate::core::error::ReactorResult<usize> {
         let (v, i) = crate::resources::primitives::Primitives::cube();
         self.spawn_primitive(&v, &i, glam::Mat4::from_translation(position))
     }
 
     /// Spawn-helper: crea una esfera (32×16 segmentos) en `position` y la añade.
-    pub fn spawn_sphere(&mut self, position: glam::Vec3, _radius: f32) -> Result<usize, Box<dyn std::error::Error>> {
+    pub fn spawn_sphere(&mut self, position: glam::Vec3, _radius: f32) -> crate::core::error::ReactorResult<usize> {
         let (v, i) = crate::resources::primitives::Primitives::sphere(32, 16);
         let xf = glam::Mat4::from_scale_rotation_translation(
             glam::Vec3::splat(_radius.max(0.001)),
@@ -553,7 +557,7 @@ impl ReactorContext {
     }
 
     /// Spawn-helper: crea un plano (suelo) centrado en `position` con tamaño `size`.
-    pub fn spawn_plane(&mut self, position: glam::Vec3, size: f32) -> Result<usize, Box<dyn std::error::Error>> {
+    pub fn spawn_plane(&mut self, position: glam::Vec3, size: f32) -> crate::core::error::ReactorResult<usize> {
         let (v, i) = crate::resources::primitives::Primitives::plane(1);
         let xf = glam::Mat4::from_scale_rotation_translation(
             glam::Vec3::new(size, 1.0, size),
@@ -569,11 +573,11 @@ impl ReactorContext {
         vertices: &[crate::resources::vertex::Vertex],
         indices: &[u32],
         transform: glam::Mat4,
-    ) -> Result<usize, Box<dyn std::error::Error>> {
+    ) -> crate::core::error::ReactorResult<usize> {
         // Las dos definiciones de Vertex (legacy + nueva) son ABI-idénticas
         // (repr(C) Pod con position/color/uv). Re-interpretamos sin copia.
         let legacy: &[crate::vertex::Vertex] = bytemuck::cast_slice(vertices);
-        let mesh = std::sync::Arc::new(self.reactor.create_mesh(legacy, indices)?);
+        let mesh = std::sync::Arc::new(self.reactor.create_mesh(legacy, indices).map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))?);
         let material = std::sync::Arc::new(self.default_material()?);
         Ok(self.scene.add_object(mesh, material, transform))
     }
@@ -708,6 +712,10 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
         if let Some(ctx) = &mut self.context {
             self.app.on_exit(ctx);
+            // SAFETY: device_wait_idle() is safe to call at any time.
+            // Ensures all pending GPU work completes before the process exits,
+            // preventing validation layer errors from premature resource destruction.
+            // The device is guaranteed valid here as ReactorContext is still alive.
             unsafe {
                 ctx.reactor.context.device.device_wait_idle().unwrap();
             }
