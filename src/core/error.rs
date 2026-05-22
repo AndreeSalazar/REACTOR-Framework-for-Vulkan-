@@ -44,6 +44,14 @@ pub enum ErrorCode {
     VulkanDescriptorSet = 112,
     /// Vulkan validation layer error
     VulkanValidation = 113,
+    /// Vulkan command pool creation failed
+    VulkanCommandPool = 114,
+    /// Vulkan render pass error
+    VulkanRenderPass = 115,
+    /// Vulkan framebuffer error
+    VulkanFramebuffer = 116,
+    /// Vulkan swapchain error
+    VulkanSwapchain = 117,
 
     // Resource errors (200-299)
     /// File not found
@@ -110,6 +118,10 @@ impl ErrorCode {
             ErrorCode::VulkanShaderCompilation => "Failed to compile shader",
             ErrorCode::VulkanDescriptorSet => "Vulkan descriptor set error",
             ErrorCode::VulkanValidation => "Vulkan validation layer error",
+            ErrorCode::VulkanCommandPool => "Failed to create Vulkan command pool",
+            ErrorCode::VulkanRenderPass => "Vulkan render pass error",
+            ErrorCode::VulkanFramebuffer => "Vulkan framebuffer error",
+            ErrorCode::VulkanSwapchain => "Vulkan swapchain error",
             ErrorCode::FileNotFound => "File not found",
             ErrorCode::InvalidFormat => "Invalid file format",
             ErrorCode::TextureLoadFailed => "Failed to load texture",
@@ -324,6 +336,80 @@ impl From<ash::vk::Result> for ReactorError {
             _ => ErrorCode::InternalError,
         };
         ReactorError::new(code, format!("Vulkan error: {:?}", result))
+    }
+}
+
+/// Catch-all conversion from any boxed error to ReactorError.
+impl From<Box<dyn std::error::Error + Send + Sync>> for ReactorError {
+    fn from(err: Box<dyn std::error::Error + Send + Sync>) -> Self {
+        ReactorError::internal(err.to_string())
+    }
+}
+
+/// Conversion from String errors (e.g. from legacy code).
+impl From<String> for ReactorError {
+    fn from(msg: String) -> Self {
+        ReactorError::internal(msg)
+    }
+}
+
+/// Conversion from &str errors.
+impl From<&str> for ReactorError {
+    fn from(msg: &str) -> Self {
+        ReactorError::internal(msg)
+    }
+}
+
+// =============================================================================
+// Conversion traits for external error types
+// =============================================================================
+
+use std::num::{ParseFloatError, ParseIntError};
+
+/// Convert ParseFloatError to ReactorError
+impl From<ParseFloatError> for ReactorError {
+    fn from(err: ParseFloatError) -> Self {
+        ReactorError::internal(format!("Error parseando número: {}", err))
+    }
+}
+
+/// Convert ParseIntError to ReactorError
+impl From<ParseIntError> for ReactorError {
+    fn from(err: ParseIntError) -> Self {
+        ReactorError::internal(format!("Error parseando entero: {}", err))
+    }
+}
+
+/// Convert gltf::Error to ReactorError
+impl From<gltf::Error> for ReactorError {
+    fn from(err: gltf::Error) -> Self {
+        ReactorError::with_source(
+            ErrorCode::ModelLoadFailed,
+            format!("Error cargando modelo GLTF: {}", err),
+            err,
+        )
+    }
+}
+
+/// Convert winit::error::OsError to ReactorError
+impl From<winit::error::OsError> for ReactorError {
+    fn from(err: winit::error::OsError) -> Self {
+        ReactorError::with_source(
+            ErrorCode::WindowCreation,
+            format!("Error de sistema/ventana: {}", err),
+            err,
+        )
+    }
+}
+
+/// Convert gpu_allocator::vulkan::AllocationError to ReactorError
+impl From<gpu_allocator::AllocationError> for ReactorError {
+    fn from(err: gpu_allocator::AllocationError) -> Self {
+        ReactorError::with_source(
+            ErrorCode::VulkanMemoryAllocation,
+            format!("Fallo de asignación de memoria Vulkan: {}", err),
+            err,
+        )
     }
 }
 

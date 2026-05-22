@@ -1,8 +1,9 @@
 use crate::graphics::pipeline::{Pipeline, PipelineConfig};
 use crate::resources::texture::Texture;
 use crate::core::VulkanContext;
+use crate::core::arc_handle::ArcDevice;
+use crate::core::error::{ReactorResult, ReactorError};
 use ash::vk;
-use std::error::Error;
 use std::sync::Arc;
 
 pub struct Material {
@@ -10,7 +11,7 @@ pub struct Material {
     pub descriptor_set: Option<vk::DescriptorSet>,
     pub descriptor_pool: Option<vk::DescriptorPool>,
     pub descriptor_layout: Option<vk::DescriptorSetLayout>,
-    device: Option<ash::Device>,
+    device: Option<ArcDevice>,
 }
 
 
@@ -25,7 +26,7 @@ impl Material {
         width: u32,
         height: u32,
         msaa_samples: vk::SampleCountFlags,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         let config = PipelineConfig {
             samples: msaa_samples,
             ..PipelineConfig::default()
@@ -49,7 +50,7 @@ impl Material {
         frag_code: &[u32],
         width: u32,
         height: u32,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         let pipeline = Pipeline::new(
             &ctx.device,
             render_pass,
@@ -77,7 +78,7 @@ impl Material {
         height: u32,
         config: &PipelineConfig,
         descriptor_layouts: &[vk::DescriptorSetLayout],
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         let pipeline = Pipeline::with_config(
             &ctx.device,
             render_pass,
@@ -108,7 +109,7 @@ impl Material {
         height: u32,
         texture: &Texture,
         msaa_samples: vk::SampleCountFlags,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         // Create descriptor set layout for texture sampler
         let sampler_binding = vk::DescriptorSetLayoutBinding::default()
             .binding(0)
@@ -291,7 +292,7 @@ impl MaterialBuilder {
         render_pass: vk::RenderPass,
         width: u32,
         height: u32,
-    ) -> Result<Material, Box<dyn Error>> {
+    ) -> ReactorResult<Material> {
         Material::with_config(
             ctx,
             render_pass,

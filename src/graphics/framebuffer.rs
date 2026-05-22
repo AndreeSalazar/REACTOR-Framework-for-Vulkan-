@@ -1,6 +1,6 @@
 use crate::core::VulkanContext;
+use crate::core::error::ReactorResult;
 use ash::vk;
-use std::error::Error;
 
 pub struct Framebuffer {
     pub handle: vk::Framebuffer,
@@ -16,7 +16,7 @@ impl Framebuffer {
         attachments: &[vk::ImageView],
         width: u32,
         height: u32,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         let framebuffer_info = vk::FramebufferCreateInfo::default()
             .render_pass(render_pass)
             .attachments(attachments)
@@ -24,13 +24,14 @@ impl Framebuffer {
             .height(height)
             .layers(1);
 
-        let handle = unsafe { ctx.device.create_framebuffer(&framebuffer_info, None)? };
+        let device = ctx.ash_device();
+        let handle = unsafe { device.create_framebuffer(&framebuffer_info, None)? };
 
         Ok(Self {
             handle,
             width,
             height,
-            device: ctx.device.clone(),
+            device: device.clone(),
         })
     }
 
@@ -41,7 +42,7 @@ impl Framebuffer {
         depth_view: Option<vk::ImageView>,
         width: u32,
         height: u32,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         let mut attachments = vec![swapchain_view];
         if let Some(depth) = depth_view {
             attachments.push(depth);
@@ -70,7 +71,7 @@ impl FramebufferSet {
         depth_view: Option<vk::ImageView>,
         width: u32,
         height: u32,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         let framebuffers = swapchain_views
             .iter()
             .map(|&view| {

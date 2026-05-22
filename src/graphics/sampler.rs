@@ -1,10 +1,11 @@
 use crate::core::VulkanContext;
+use crate::core::arc_handle::ArcDevice;
+use crate::core::error::{ReactorResult, ReactorError, ErrorCode};
 use ash::vk;
-use std::error::Error;
 
 pub struct Sampler {
     pub handle: vk::Sampler,
-    device: ash::Device,
+    device: ArcDevice,
 }
 
 #[derive(Clone, Copy)]
@@ -38,14 +39,14 @@ impl Default for SamplerConfig {
             min_filter: FilterMode::Linear,
             mipmap_mode: FilterMode::Linear,
             address_mode: WrapMode::Repeat,
-            anisotropy: None, // Disabled by default - requires samplerAnisotropy feature
+            anisotropy: None,
             max_lod: 12.0,
         }
     }
 }
 
 impl Sampler {
-    pub fn new(ctx: &VulkanContext, config: &SamplerConfig) -> Result<Self, Box<dyn Error>> {
+    pub fn new(ctx: &VulkanContext, config: &SamplerConfig) -> ReactorResult<Self> {
         let mag_filter = match config.mag_filter {
             FilterMode::Nearest => vk::Filter::NEAREST,
             FilterMode::Linear | FilterMode::Cubic => vk::Filter::LINEAR,
@@ -90,16 +91,20 @@ impl Sampler {
             .max_lod(config.max_lod)
             .mip_lod_bias(0.0);
 
-        let handle = unsafe { ctx.device.create_sampler(&sampler_info, None)? };
+        let handle = unsafe {
+            ctx.ash_device()
+                .create_sampler(&sampler_info, None)
+                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanImageCreation, "create_sampler failed", e))?
+        };
 
         Ok(Self { handle, device: ctx.device.clone() })
     }
 
-    pub fn linear(ctx: &VulkanContext) -> Result<Self, Box<dyn Error>> {
+    pub fn linear(ctx: &VulkanContext) -> ReactorResult<Self> {
         Self::new(ctx, &SamplerConfig::default())
     }
 
-    pub fn nearest(ctx: &VulkanContext) -> Result<Self, Box<dyn Error>> {
+    pub fn nearest(ctx: &VulkanContext) -> ReactorResult<Self> {
         Self::new(
             ctx,
             &SamplerConfig {

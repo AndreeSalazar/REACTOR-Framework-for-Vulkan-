@@ -2,10 +2,11 @@ use crate::graphics::buffer::Buffer;
 use crate::graphics::image::Image;
 use crate::graphics::sampler::Sampler;
 use crate::core::VulkanContext;
+use crate::core::arc_handle::ArcDevice;
+use crate::core::error::{ReactorResult, ReactorError, ErrorCode};
 use ash::vk;
 use gpu_allocator::vulkan::Allocator;
 use gpu_allocator::MemoryLocation;
-use std::error::Error;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -15,7 +16,7 @@ pub struct Texture {
     pub width: u32,
     pub height: u32,
     #[allow(dead_code)]
-    device: ash::Device,
+    device: ArcDevice,
 }
 
 impl Texture {
@@ -25,8 +26,9 @@ impl Texture {
         allocator: Arc<Mutex<Allocator>>,
         path: P,
         generate_mipmaps: bool,
-    ) -> Result<Self, Box<dyn Error>> {
-        let img = image::open(path)?;
+    ) -> ReactorResult<Self> {
+        let path_ref = path.as_ref();
+        let img = image::open(path_ref).map_err(|e| ReactorError::with_source(ErrorCode::TextureLoadFailed, format!("Failed to open texture: {}", path_ref.display()), e))?;
         let rgba = img.to_rgba8();
         let (width, height) = rgba.dimensions();
         let data = rgba.into_raw();
@@ -40,8 +42,8 @@ impl Texture {
         allocator: Arc<Mutex<Allocator>>,
         bytes: &[u8],
         generate_mipmaps: bool,
-    ) -> Result<Self, Box<dyn Error>> {
-        let img = image::load_from_memory(bytes)?;
+    ) -> ReactorResult<Self> {
+        let img = image::load_from_memory(bytes).map_err(|e| ReactorError::with_source(ErrorCode::TextureLoadFailed, "Failed to load texture from bytes", e))?;
         let rgba = img.to_rgba8();
         let (width, height) = rgba.dimensions();
         let data = rgba.into_raw();
@@ -57,7 +59,7 @@ impl Texture {
         g: u8,
         b: u8,
         a: u8,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         let data = [r, g, b, a];
         Self::from_rgba(ctx, allocator, &data, 1, 1, false)
     }
@@ -66,7 +68,7 @@ impl Texture {
     pub fn white(
         ctx: &VulkanContext,
         allocator: Arc<Mutex<Allocator>>,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         Self::solid_color(ctx, allocator, 255, 255, 255, 255)
     }
 
@@ -74,7 +76,7 @@ impl Texture {
     pub fn black(
         ctx: &VulkanContext,
         allocator: Arc<Mutex<Allocator>>,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         Self::solid_color(ctx, allocator, 0, 0, 0, 255)
     }
 
@@ -82,7 +84,7 @@ impl Texture {
     pub fn default_normal(
         ctx: &VulkanContext,
         allocator: Arc<Mutex<Allocator>>,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         Self::solid_color(ctx, allocator, 128, 128, 255, 255)
     }
 
@@ -93,7 +95,7 @@ impl Texture {
         width: u32,
         height: u32,
         generate_mipmaps: bool,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         let mip_levels = if generate_mipmaps {
             ((width.max(height) as f32).log2().floor() as u32) + 1
         } else {
@@ -151,7 +153,7 @@ impl Texture {
         image: vk::Image,
         width: u32,
         height: u32,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> ReactorResult<()> {
         let pool_info = vk::CommandPoolCreateInfo::default()
             .queue_family_index(ctx.queue_family_index)
             .flags(vk::CommandPoolCreateFlags::TRANSIENT);
@@ -239,7 +241,7 @@ impl Texture {
         ctx: &VulkanContext,
         image: vk::Image,
         mip_levels: u32,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> ReactorResult<()> {
         let pool_info = vk::CommandPoolCreateInfo::default()
             .queue_family_index(ctx.queue_family_index)
             .flags(vk::CommandPoolCreateFlags::TRANSIENT);
@@ -305,7 +307,7 @@ impl Texture {
         width: u32,
         height: u32,
         mip_levels: u32,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> ReactorResult<()> {
         let pool_info = vk::CommandPoolCreateInfo::default()
             .queue_family_index(ctx.queue_family_index)
             .flags(vk::CommandPoolCreateFlags::TRANSIENT);

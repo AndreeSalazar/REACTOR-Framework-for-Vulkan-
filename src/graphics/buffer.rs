@@ -1,15 +1,18 @@
 use crate::core::VulkanContext;
+use crate::core::arc_handle::ArcDevice;
+use crate::core::error::{ReactorResult, ReactorError, ErrorCode};
 use ash::vk;
-use gpu_allocator::vulkan::*;
+use gpu_allocator::vulkan::{
+    Allocator, Allocation, AllocationCreateDesc, AllocationScheme,
+};
 use gpu_allocator::MemoryLocation;
-use std::error::Error;
 use std::sync::{Arc, Mutex};
 
 pub struct Buffer {
     pub handle: vk::Buffer,
     pub allocation: Option<Allocation>,
     pub size: u64,
-    device: ash::Device,
+    device: ArcDevice,
     allocator: Arc<Mutex<Allocator>>,
 }
 
@@ -20,14 +23,19 @@ impl Buffer {
         size: u64,
         usage: vk::BufferUsageFlags,
         location: MemoryLocation,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
+        let device = ctx.ash_device();
         let create_info = vk::BufferCreateInfo::default()
             .size(size)
             .usage(usage)
             .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
-        let handle = unsafe { ctx.device.create_buffer(&create_info, None)? };
-        let requirements = unsafe { ctx.device.get_buffer_memory_requirements(handle) };
+        let handle = unsafe {
+            device
+                .create_buffer(&create_info, None)
+                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanBufferCreation, "create_buffer failed", e))?
+        };
+        let requirements = unsafe { device.get_buffer_memory_requirements(handle) };
 
         let allocation = allocator.lock().unwrap().allocate(&AllocationCreateDesc {
             name: "buffer",
@@ -35,11 +43,12 @@ impl Buffer {
             location,
             linear: true,
             allocation_scheme: AllocationScheme::GpuAllocatorManaged,
-        })?;
+        }).map_err(|e| ReactorError::with_source(ErrorCode::VulkanMemoryAllocation, "buffer allocation failed", e))?;
 
         unsafe {
-            ctx.device
-                .bind_buffer_memory(handle, allocation.memory(), allocation.offset())?;
+            device
+                .bind_buffer_memory(handle, allocation.memory(), allocation.offset())
+                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanBufferCreation, "bind_buffer_memory failed", e))?;
         }
 
         Ok(Self {
@@ -55,7 +64,7 @@ impl Buffer {
         ctx: &VulkanContext,
         allocator: Arc<Mutex<Allocator>>,
         size: u64,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         Self::new(
             ctx,
             allocator,
@@ -69,7 +78,7 @@ impl Buffer {
         ctx: &VulkanContext,
         allocator: Arc<Mutex<Allocator>>,
         size: u64,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         Self::new(
             ctx,
             allocator,
@@ -83,7 +92,7 @@ impl Buffer {
         ctx: &VulkanContext,
         allocator: Arc<Mutex<Allocator>>,
         size: u64,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         Self::new(
             ctx,
             allocator,
@@ -97,7 +106,7 @@ impl Buffer {
         ctx: &VulkanContext,
         allocator: Arc<Mutex<Allocator>>,
         size: u64,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         Self::new(
             ctx,
             allocator,
@@ -111,7 +120,7 @@ impl Buffer {
         ctx: &VulkanContext,
         allocator: Arc<Mutex<Allocator>>,
         size: u64,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         Self::new(
             ctx,
             allocator,

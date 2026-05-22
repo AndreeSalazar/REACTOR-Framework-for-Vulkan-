@@ -1,9 +1,9 @@
 use crate::resources::material::Material;
+use crate::core::error::ReactorResult;
 use crate::resources::mesh::Mesh;
 use crate::Vertex;
 use glam::{Mat4, Vec2, Vec3};
 use gltf;
-use std::error::Error;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
@@ -24,7 +24,7 @@ pub struct ObjData {
 
 impl ObjData {
     /// Load OBJ file from path
-    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn Error>> {
+    pub fn load<P: AsRef<Path>>(path: P) -> ReactorResult<Self> {
         let file = File::open(path.as_ref())?;
         let reader = BufReader::new(file);
 
@@ -268,7 +268,7 @@ pub struct GltfData {
 
 impl GltfData {
     /// Load glTF/GLB file from path
-    pub fn load<P: AsRef<Path>>(path: P) -> Result<Vec<Self>, Box<dyn Error>> {
+    pub fn load<P: AsRef<Path>>(path: P) -> ReactorResult<Vec<Self>> {
         let (document, buffers, _images) = gltf::import(path.as_ref())?;
         let mut meshes = Vec::new();
 
@@ -326,7 +326,7 @@ impl GltfData {
     }
 
     /// Load first mesh from glTF file
-    pub fn load_first<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn Error>> {
+    pub fn load_first<P: AsRef<Path>>(path: P) -> ReactorResult<Self> {
         let meshes = Self::load(path)?;
         meshes
             .into_iter()

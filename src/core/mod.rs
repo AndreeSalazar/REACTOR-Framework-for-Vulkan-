@@ -7,6 +7,7 @@
 
 // Vulkan abstractions
 pub mod allocator;
+pub mod arc_handle;
 pub mod command;
 pub mod context;
 pub mod device;
@@ -43,6 +44,7 @@ pub mod linear_allocator;
 // =============================================================================
 
 pub use allocator::MemoryAllocator;
+pub use arc_handle::{ArcDevice, ArcInstance, ArcSurface};
 pub use command::CommandManager;
 pub use context::VulkanContext;
 pub use device::DeviceInfo;

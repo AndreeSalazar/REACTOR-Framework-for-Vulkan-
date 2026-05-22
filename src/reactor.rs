@@ -2,9 +2,9 @@ use crate::resources::material::Material;
 use crate::resources::mesh::Mesh;
 use crate::graphics::swapchain::Swapchain;
 use crate::core::VulkanContext;
+use crate::core::error::{ReactorError, ReactorResult, ErrorCode};
 use ash::vk;
-use gpu_allocator::vulkan::*;
-use std::error::Error;
+use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
 use std::sync::{Arc, Mutex};
 use winit::window::Window;
 
@@ -48,17 +48,18 @@ pub struct Reactor {
 const MAX_FRAMES_IN_FLIGHT: usize = 3;
 
 impl Reactor {
-    pub fn init(window: &Window) -> Result<Self, Box<dyn Error>> {
+    pub fn init(window: &Window) -> ReactorResult<Self> {
         let context = VulkanContext::new(window)?;
 
         let allocator = Allocator::new(&AllocatorCreateDesc {
-            instance: context.instance.clone(),
-            device: context.device.clone(),
+            instance: context.ash_instance().clone(),
+            device: context.ash_device().clone(),
             physical_device: context.physical_device,
             debug_settings: Default::default(),
             buffer_device_address: true, // Enabled for RT
             allocation_sizes: Default::default(),
-        })?;
+        })
+        .map_err(|e| ReactorError::with_source(ErrorCode::VulkanMemoryAllocation, "Failed to create GPU allocator", e))?;
         let allocator = Arc::new(Mutex::new(allocator));
 
         let inner_size = window.inner_size();
@@ -119,7 +120,8 @@ impl Reactor {
         let command_pool = unsafe {
             context
                 .device
-                .create_command_pool(&pool_create_info, None)?
+                .create_command_pool(&pool_create_info, None)
+                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "Failed to create command pool", e))?
         };
 
         // Command Buffers
@@ -127,7 +129,7 @@ impl Reactor {
             .command_pool(command_pool)
             .level(vk::CommandBufferLevel::PRIMARY)
             .command_buffer_count(MAX_FRAMES_IN_FLIGHT as u32);
-        let command_buffers = unsafe { context.device.allocate_command_buffers(&alloc_info)? };
+        let command_buffers = unsafe { context.device.allocate_command_buffers(&alloc_info).map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "Failed to allocate command buffers", e))? };
 
         // Sync Objects
         let semaphore_info = vk::SemaphoreCreateInfo::default();
@@ -140,10 +142,10 @@ impl Reactor {
         for _ in 0..MAX_FRAMES_IN_FLIGHT {
             unsafe {
                 image_available_semaphores
-                    .push(context.device.create_semaphore(&semaphore_info, None)?);
+                    .push(context.device.create_semaphore(&semaphore_info, None).map_err(|e| ReactorError::with_source(ErrorCode::VulkanSynchronization, "Failed to create semaphore", e))?);
                 render_finished_semaphores
-                    .push(context.device.create_semaphore(&semaphore_info, None)?);
-                in_flight_fences.push(context.device.create_fence(&fence_info, None)?);
+                    .push(context.device.create_semaphore(&semaphore_info, None).map_err(|e| ReactorError::with_source(ErrorCode::VulkanSynchronization, "Failed to create semaphore", e))?);
+                in_flight_fences.push(context.device.create_fence(&fence_info, None).map_err(|e| ReactorError::with_source(ErrorCode::VulkanSynchronization, "Failed to create fence", e))?);
             }
         }
 
@@ -216,17 +218,17 @@ impl Reactor {
         }
     }
 
-    pub fn recreate_swapchain(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn recreate_swapchain(&mut self) -> ReactorResult<()> {
         unsafe {
-            self.context.device.device_wait_idle()?;
+            self.context.device.device_wait_idle().map_err(|e| ReactorError::with_source(ErrorCode::VulkanSynchronization, "device_wait_idle failed", e))?;
         }
 
         let capabilities = unsafe {
             self.context
-                .surface_loader
+                .surface_loader()
                 .get_physical_device_surface_capabilities(
                     self.context.physical_device,
-                    self.context.surface,
+                    self.context.surface_khr(),
                 )?
         };
 
@@ -275,7 +277,7 @@ impl Reactor {
             }
         }
 
-        self.swapchain.destroy(&self.context.device);
+        self.swapchain.destroy(self.context.ash_device());
 
         self.swapchain = Swapchain::new(
             &self.context,
@@ -326,7 +328,7 @@ impl Reactor {
         &self,
         vertices: &[crate::resources::vertex::Vertex],
         indices: &[u32],
-    ) -> Result<Mesh, Box<dyn Error>> {
+    ) -> ReactorResult<Mesh> {
         Mesh::new(&self.context, &self.allocator, vertices, indices)
     }
 
@@ -334,7 +336,7 @@ impl Reactor {
     pub fn load_texture(
         &self,
         path: &str,
-    ) -> Result<crate::resources::texture::Texture, Box<dyn Error>> {
+    ) -> ReactorResult<crate::resources::texture::Texture> {
         crate::resources::texture::Texture::from_file(
             &self.context,
             self.allocator.clone(),
@@ -347,7 +349,7 @@ impl Reactor {
     pub fn load_texture_bytes(
         &self,
         bytes: &[u8],
-    ) -> Result<crate::resources::texture::Texture, Box<dyn Error>> {
+    ) -> ReactorResult<crate::resources::texture::Texture> {
         crate::resources::texture::Texture::from_bytes(
             &self.context,
             self.allocator.clone(),
@@ -363,7 +365,7 @@ impl Reactor {
         g: u8,
         b: u8,
         a: u8,
-    ) -> Result<crate::resources::texture::Texture, Box<dyn Error>> {
+    ) -> ReactorResult<crate::resources::texture::Texture> {
         crate::resources::texture::Texture::solid_color(
             &self.context,
             self.allocator.clone(),
@@ -378,7 +380,7 @@ impl Reactor {
         &self,
         vert_code: &[u32],
         frag_code: &[u32],
-    ) -> Result<Material, Box<dyn Error>> {
+    ) -> ReactorResult<Material> {
         Material::new_with_msaa(
             &self.context,
             self.render_pass,
@@ -396,7 +398,7 @@ impl Reactor {
         vert_code: &[u32],
         frag_code: &[u32],
         texture: &crate::resources::texture::Texture,
-    ) -> Result<Material, Box<dyn Error>> {
+    ) -> ReactorResult<Material> {
         Material::with_texture(
             &self.context,
             self.render_pass,
@@ -413,7 +415,7 @@ impl Reactor {
     fn create_render_pass(
         context: &VulkanContext,
         format: vk::Format,
-    ) -> Result<vk::RenderPass, Box<dyn Error>> {
+    ) -> ReactorResult<vk::RenderPass> {
         // TODO: MSAA requires creating MSAA image buffers and modifying framebuffers
         // For now, use simple render pass. MSAA can be enabled by:
         // 1. Creating MSAA color buffer with MsaaTarget
@@ -446,7 +448,7 @@ impl Reactor {
     fn create_render_pass_simple(
         context: &VulkanContext,
         format: vk::Format,
-    ) -> Result<vk::RenderPass, Box<dyn Error>> {
+    ) -> ReactorResult<vk::RenderPass> {
         let color_attachment = vk::AttachmentDescription::default()
             .format(format)
             .samples(vk::SampleCountFlags::TYPE_1)
@@ -482,7 +484,7 @@ impl Reactor {
             .subpasses(&subpasses)
             .dependencies(&dependencies);
 
-        let render_pass = unsafe { context.device.create_render_pass(&render_pass_info, None)? };
+        let render_pass = unsafe { context.device.create_render_pass(&render_pass_info, None).map_err(|e| ReactorError::with_source(ErrorCode::VulkanRenderPass, "Failed to create render pass", e))? };
         Ok(render_pass)
     }
 
@@ -491,7 +493,7 @@ impl Reactor {
         context: &VulkanContext,
         format: vk::Format,
         samples: vk::SampleCountFlags,
-    ) -> Result<vk::RenderPass, Box<dyn Error>> {
+    ) -> ReactorResult<vk::RenderPass> {
         println!("ðŸ”· Enabling MSAA {:?} for anti-aliasing", samples);
 
         // MSAA color attachment (multisampled)
@@ -549,7 +551,7 @@ impl Reactor {
             .subpasses(&subpasses)
             .dependencies(&dependencies);
 
-        let render_pass = unsafe { context.device.create_render_pass(&render_pass_info, None)? };
+        let render_pass = unsafe { context.device.create_render_pass(&render_pass_info, None).map_err(|e| ReactorError::with_source(ErrorCode::VulkanRenderPass, "Failed to create MSAA render pass", e))? };
         Ok(render_pass)
     }
 
@@ -558,7 +560,7 @@ impl Reactor {
         context: &VulkanContext,
         swapchain: &Swapchain,
         render_pass: vk::RenderPass,
-    ) -> Result<Vec<vk::Framebuffer>, Box<dyn Error>> {
+    ) -> ReactorResult<Vec<vk::Framebuffer>> {
         swapchain
             .image_views
             .iter()
@@ -574,7 +576,7 @@ impl Reactor {
                     context
                         .device
                         .create_framebuffer(&framebuffer_info, None)
-                        .map_err(|e| e.into())
+                        .map_err(|e| ReactorError::with_source(ErrorCode::VulkanFramebuffer, "Failed to create framebuffer", e))
                 }
             })
             .collect()
@@ -587,7 +589,7 @@ impl Reactor {
         height: u32,
         format: vk::Format,
         samples: vk::SampleCountFlags,
-    ) -> Result<(vk::Image, vk::ImageView, vk::DeviceMemory), Box<dyn Error>> {
+    ) -> ReactorResult<(vk::Image, vk::ImageView, vk::DeviceMemory)> {
         // Create MSAA image
         let image_info = vk::ImageCreateInfo::default()
             .image_type(vk::ImageType::TYPE_2D)
@@ -603,7 +605,7 @@ impl Reactor {
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .samples(samples);
 
-        let image = unsafe { context.device.create_image(&image_info, None)? };
+        let image = unsafe { context.device.create_image(&image_info, None).map_err(|e| ReactorError::with_source(ErrorCode::VulkanImageCreation, "Failed to create MSAA image", e))? };
         let requirements = unsafe { context.device.get_image_memory_requirements(image) };
 
         // Find memory type
@@ -621,14 +623,14 @@ impl Reactor {
                         .property_flags
                         .contains(vk::MemoryPropertyFlags::DEVICE_LOCAL)
             })
-            .ok_or("Failed to find suitable memory type for MSAA")?;
+            .ok_or_else(|| ReactorError::new(ErrorCode::VulkanMemoryAllocation, "Failed to find suitable memory type for MSAA"))?;
 
         let alloc_info = vk::MemoryAllocateInfo::default()
             .allocation_size(requirements.size)
             .memory_type_index(memory_type_index);
 
-        let memory = unsafe { context.device.allocate_memory(&alloc_info, None)? };
-        unsafe { context.device.bind_image_memory(image, memory, 0)? };
+        let memory = unsafe { context.device.allocate_memory(&alloc_info, None).map_err(|e| ReactorError::with_source(ErrorCode::VulkanMemoryAllocation, "Failed to allocate MSAA memory", e))? };
+        unsafe { context.device.bind_image_memory(image, memory, 0).map_err(|e| ReactorError::with_source(ErrorCode::VulkanImageCreation, "Failed to bind MSAA memory", e))? };
 
         // Create image view
         let view_info = vk::ImageViewCreateInfo::default()
@@ -644,7 +646,7 @@ impl Reactor {
                     .layer_count(1),
             );
 
-        let view = unsafe { context.device.create_image_view(&view_info, None)? };
+        let view = unsafe { context.device.create_image_view(&view_info, None).map_err(|e| ReactorError::with_source(ErrorCode::VulkanImageCreation, "Failed to create MSAA image view", e))? };
 
         Ok((image, view, memory))
     }
@@ -655,7 +657,7 @@ impl Reactor {
         context: &VulkanContext,
         format: vk::Format,
         samples: vk::SampleCountFlags,
-    ) -> Result<vk::RenderPass, Box<dyn Error>> {
+    ) -> ReactorResult<vk::RenderPass> {
         if samples == vk::SampleCountFlags::TYPE_1 {
             // No MSAA - use simple render pass
             return Self::create_render_pass_simple(context, format);
@@ -716,7 +718,7 @@ impl Reactor {
             .subpasses(&subpasses)
             .dependencies(&dependencies);
 
-        let render_pass = unsafe { context.device.create_render_pass(&render_pass_info, None)? };
+        let render_pass = unsafe { context.device.create_render_pass(&render_pass_info, None).map_err(|e| ReactorError::with_source(ErrorCode::VulkanRenderPass, "Failed to create MSAA render pass", e))? };
         Ok(render_pass)
     }
 
@@ -728,7 +730,7 @@ impl Reactor {
         render_pass: vk::RenderPass,
         msaa_view: Option<vk::ImageView>,
         samples: vk::SampleCountFlags,
-    ) -> Result<Vec<vk::Framebuffer>, Box<dyn Error>> {
+    ) -> ReactorResult<Vec<vk::Framebuffer>> {
         println!(
             "ðŸ”· Creating framebuffers: samples={:?}, msaa_view={:?}",
             samples,
@@ -769,7 +771,7 @@ impl Reactor {
                     context
                         .device
                         .create_framebuffer(&framebuffer_info, None)
-                        .map_err(|e| e.into())
+                        .map_err(|e| ReactorError::with_source(ErrorCode::VulkanFramebuffer, "Failed to create MSAA framebuffer", e))
                 }
             })
             .collect()
@@ -779,7 +781,7 @@ impl Reactor {
         &mut self,
         scene: &crate::systems::scene::Scene,
         view_projection: &glam::Mat4,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> ReactorResult<()> {
         if self.resized {
             self.recreate_swapchain()?;
             self.resized = false;
@@ -790,7 +792,7 @@ impl Reactor {
                 &[self.in_flight_fences[self.current_frame]],
                 true,
                 u64::MAX,
-            )?;
+            ).map_err(|e| ReactorError::with_source(ErrorCode::VulkanSynchronization, "wait_for_fences failed", e))?;
         }
 
         let (image_index, _) = unsafe {
@@ -803,14 +805,15 @@ impl Reactor {
                 Ok(result) => {
                     self.context
                         .device
-                        .reset_fences(&[self.in_flight_fences[self.current_frame]])?;
+                        .reset_fences(&[self.in_flight_fences[self.current_frame]])
+                        .map_err(|e| ReactorError::with_source(ErrorCode::VulkanSynchronization, "reset_fences failed", e))?;
                     result
                 }
                 Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
                     self.recreate_swapchain()?;
                     return Ok(());
                 }
-                Err(e) => return Err(Box::new(e)),
+                Err(e) => return Err(ReactorError::with_source(ErrorCode::VulkanSwapchain, "acquire_next_image failed", e)),
             }
         };
 
@@ -819,7 +822,8 @@ impl Reactor {
         unsafe {
             self.context
                 .device
-                .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
+                .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())
+                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "reset_command_buffer failed", e))?;
         }
 
         let begin_info = vk::CommandBufferBeginInfo::default();
@@ -849,7 +853,8 @@ impl Reactor {
         unsafe {
             self.context
                 .device
-                .begin_command_buffer(command_buffer, &begin_info)?;
+                .begin_command_buffer(command_buffer, &begin_info)
+                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "begin_command_buffer failed", e))?;
 
             self.context.device.cmd_begin_render_pass(
                 command_buffer,
@@ -947,7 +952,8 @@ impl Reactor {
 
             self.context.device.cmd_end_render_pass(command_buffer);
 
-            self.context.device.end_command_buffer(command_buffer)?;
+            self.context.device.end_command_buffer(command_buffer)
+                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "end_command_buffer failed", e))?;
         }
 
         // Submit
@@ -967,7 +973,7 @@ impl Reactor {
                 self.context.graphics_queue,
                 &[submit_info],
                 self.in_flight_fences[self.current_frame],
-            )?;
+            ).map_err(|e| ReactorError::with_source(ErrorCode::VulkanSynchronization, "queue_submit failed", e))?;
         }
 
         let swapchains = [self.swapchain.handle];
@@ -988,7 +994,7 @@ impl Reactor {
             Err(vk::Result::ERROR_OUT_OF_DATE_KHR) | Err(vk::Result::SUBOPTIMAL_KHR) => {
                 self.resized = true;
             }
-            Err(e) => return Err(Box::new(e)),
+            Err(e) => return Err(ReactorError::with_source(ErrorCode::VulkanSwapchain, "queue_present failed", e)),
         }
 
         self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -1001,7 +1007,7 @@ impl Reactor {
         mesh: &Mesh,
         material: &Material,
         transform: &glam::Mat4,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> ReactorResult<()> {
         if self.resized {
             self.recreate_swapchain()?;
             self.resized = false;
@@ -1012,7 +1018,7 @@ impl Reactor {
                 &[self.in_flight_fences[self.current_frame]],
                 true,
                 u64::MAX,
-            )?;
+            ).map_err(|e| ReactorError::with_source(ErrorCode::VulkanSynchronization, "wait_for_fences failed", e))?;
         }
 
         let (image_index, _) = unsafe {
@@ -1025,14 +1031,15 @@ impl Reactor {
                 Ok(result) => {
                     self.context
                         .device
-                        .reset_fences(&[self.in_flight_fences[self.current_frame]])?;
+                        .reset_fences(&[self.in_flight_fences[self.current_frame]])
+                        .map_err(|e| ReactorError::with_source(ErrorCode::VulkanSynchronization, "reset_fences failed", e))?;
                     result
                 }
                 Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
                     self.recreate_swapchain()?;
                     return Ok(());
                 }
-                Err(e) => return Err(Box::new(e)),
+                Err(e) => return Err(ReactorError::with_source(ErrorCode::VulkanSwapchain, "acquire_next_image failed", e)),
             }
         };
 
@@ -1041,7 +1048,8 @@ impl Reactor {
         unsafe {
             self.context
                 .device
-                .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
+                .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())
+                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "reset_command_buffer failed", e))?;
         }
 
         let begin_info = vk::CommandBufferBeginInfo::default();
@@ -1062,7 +1070,8 @@ impl Reactor {
         unsafe {
             self.context
                 .device
-                .begin_command_buffer(command_buffer, &begin_info)?;
+                .begin_command_buffer(command_buffer, &begin_info)
+                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "begin_command_buffer failed", e))?;
 
             self.context.device.cmd_begin_render_pass(
                 command_buffer,
@@ -1131,7 +1140,8 @@ impl Reactor {
 
             self.context.device.cmd_end_render_pass(command_buffer);
 
-            self.context.device.end_command_buffer(command_buffer)?;
+            self.context.device.end_command_buffer(command_buffer)
+                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "end_command_buffer failed", e))?;
         }
 
         // Submit
@@ -1151,7 +1161,7 @@ impl Reactor {
                 self.context.graphics_queue,
                 &[submit_info],
                 self.in_flight_fences[self.current_frame],
-            )?;
+            ).map_err(|e| ReactorError::with_source(ErrorCode::VulkanSynchronization, "queue_submit failed", e))?;
         }
 
         // Present
@@ -1176,12 +1186,12 @@ impl Reactor {
                 self.recreate_swapchain()?;
                 Ok(())
             }
-            Err(e) => Err(Box::new(e)),
+            Err(e) => Err(ReactorError::with_source(ErrorCode::VulkanSwapchain, "queue_present failed", e)),
         }
     }
 
     /// Find a supported depth format
-    fn find_depth_format(context: &VulkanContext) -> Result<vk::Format, Box<dyn Error>> {
+    fn find_depth_format(context: &VulkanContext) -> ReactorResult<vk::Format> {
         let candidates = [
             vk::Format::D32_SFLOAT,
             vk::Format::D32_SFLOAT_S8_UINT,
@@ -1202,7 +1212,7 @@ impl Reactor {
             }
         }
 
-        Err("Failed to find supported depth format".into())
+        Err(ReactorError::new(ErrorCode::VulkanRenderPass, "Failed to find supported depth format"))
     }
 
     /// Create depth buffer resources
@@ -1212,7 +1222,7 @@ impl Reactor {
         height: u32,
         format: vk::Format,
         samples: vk::SampleCountFlags,
-    ) -> Result<(vk::Image, vk::ImageView, vk::DeviceMemory), Box<dyn Error>> {
+    ) -> ReactorResult<(vk::Image, vk::ImageView, vk::DeviceMemory)> {
         let image_info = vk::ImageCreateInfo::default()
             .image_type(vk::ImageType::TYPE_2D)
             .extent(vk::Extent3D { width, height, depth: 1 })
@@ -1225,7 +1235,7 @@ impl Reactor {
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .samples(samples);
 
-        let image = unsafe { context.device.create_image(&image_info, None)? };
+        let image = unsafe { context.device.create_image(&image_info, None).map_err(|e| ReactorError::with_source(ErrorCode::VulkanImageCreation, "Failed to create depth image", e))? };
         let requirements = unsafe { context.device.get_image_memory_requirements(image) };
 
         let memory_props = unsafe {
@@ -1242,14 +1252,14 @@ impl Reactor {
                         .property_flags
                         .contains(vk::MemoryPropertyFlags::DEVICE_LOCAL)
             })
-            .ok_or("Failed to find suitable memory type for depth buffer")?;
+            .ok_or_else(|| ReactorError::new(ErrorCode::VulkanMemoryAllocation, "Failed to find suitable memory type for depth buffer"))?;
 
         let alloc_info = vk::MemoryAllocateInfo::default()
             .allocation_size(requirements.size)
             .memory_type_index(memory_type_index);
 
-        let memory = unsafe { context.device.allocate_memory(&alloc_info, None)? };
-        unsafe { context.device.bind_image_memory(image, memory, 0)? };
+        let memory = unsafe { context.device.allocate_memory(&alloc_info, None).map_err(|e| ReactorError::with_source(ErrorCode::VulkanMemoryAllocation, "Failed to allocate depth memory", e))? };
+        unsafe { context.device.bind_image_memory(image, memory, 0).map_err(|e| ReactorError::with_source(ErrorCode::VulkanImageCreation, "Failed to bind depth memory", e))? };
 
         let view_info = vk::ImageViewCreateInfo::default()
             .image(image)
@@ -1264,7 +1274,7 @@ impl Reactor {
                     .layer_count(1),
             );
 
-        let view = unsafe { context.device.create_image_view(&view_info, None)? };
+        let view = unsafe { context.device.create_image_view(&view_info, None).map_err(|e| ReactorError::with_source(ErrorCode::VulkanImageCreation, "Failed to create depth image view", e))? };
 
         Ok((image, view, memory))
     }
@@ -1275,7 +1285,7 @@ impl Reactor {
         color_format: vk::Format,
         depth_format: vk::Format,
         samples: vk::SampleCountFlags,
-    ) -> Result<vk::RenderPass, Box<dyn Error>> {
+    ) -> ReactorResult<vk::RenderPass> {
         if samples == vk::SampleCountFlags::TYPE_1 {
             // No MSAA - simple render pass with depth
             let color_attachment = vk::AttachmentDescription::default()
@@ -1338,7 +1348,7 @@ impl Reactor {
                 .subpasses(&subpasses)
                 .dependencies(&dependencies);
 
-            return unsafe { Ok(context.device.create_render_pass(&render_pass_info, None)?) };
+            return unsafe { Ok(context.device.create_render_pass(&render_pass_info, None).map_err(|e| ReactorError::with_source(ErrorCode::VulkanRenderPass, "Failed to create render pass", e))?) };
         }
 
         // MSAA with depth
@@ -1418,7 +1428,7 @@ impl Reactor {
             .subpasses(&subpasses)
             .dependencies(&dependencies);
 
-        unsafe { Ok(context.device.create_render_pass(&render_pass_info, None)?) }
+        unsafe { Ok(context.device.create_render_pass(&render_pass_info, None).map_err(|e| ReactorError::with_source(ErrorCode::VulkanRenderPass, "Failed to create MSAA render pass", e))?) }
     }
 
     /// Create framebuffers with depth support
@@ -1429,7 +1439,7 @@ impl Reactor {
         msaa_view: Option<vk::ImageView>,
         depth_view: vk::ImageView,
         samples: vk::SampleCountFlags,
-    ) -> Result<Vec<vk::Framebuffer>, Box<dyn Error>> {
+    ) -> ReactorResult<Vec<vk::Framebuffer>> {
         if samples == vk::SampleCountFlags::TYPE_1 {
             // No MSAA: [color, depth]
             return swapchain
@@ -1447,14 +1457,14 @@ impl Reactor {
                         context
                             .device
                             .create_framebuffer(&framebuffer_info, None)
-                            .map_err(|e| e.into())
+                            .map_err(|e| ReactorError::with_source(ErrorCode::VulkanFramebuffer, "Failed to create framebuffer", e))
                     }
                 })
                 .collect();
         }
 
         // MSAA: [msaa_color, resolve_color, depth]
-        let msaa_view = msaa_view.ok_or("MSAA view required for MSAA framebuffers")?;
+        let msaa_view = msaa_view.ok_or_else(|| ReactorError::new(ErrorCode::VulkanFramebuffer, "MSAA view required for MSAA framebuffers"))?;
 
         swapchain
             .image_views
@@ -1471,7 +1481,7 @@ impl Reactor {
                     context
                         .device
                         .create_framebuffer(&framebuffer_info, None)
-                        .map_err(|e| e.into())
+                        .map_err(|e| ReactorError::with_source(ErrorCode::VulkanFramebuffer, "Failed to create MSAA framebuffer", e))
                 }
             })
             .collect()
@@ -1536,7 +1546,7 @@ impl Drop for Reactor {
         }
 
         // Destroy swapchain
-        self.swapchain.destroy(&self.context.device);
+        self.swapchain.destroy(self.context.ash_device());
 
         // Allocator must be dropped before device
         // Force drop of allocator by taking ownership

@@ -1,4 +1,5 @@
 use ash::vk;
+use crate::core::error::ReactorResult;
 use ash::Instance;
 use std::ffi::CStr;
 
@@ -20,7 +21,7 @@ impl GPUDetector {
         instance: &Instance,
         surface_loader: &ash::khr::surface::Instance,
         surface: vk::SurfaceKHR,
-    ) -> Result<GPUInfo, Box<dyn std::error::Error>> {
+    ) -> ReactorResult<GPUInfo> {
         let pdevices = unsafe { instance.enumerate_physical_devices()? };
 
         let mut candidates = Vec::new();

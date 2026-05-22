@@ -1,4 +1,5 @@
 use crate::graphics::buffer::Buffer;
+use crate::core::error::ReactorResult;
 use crate::core::VulkanContext;
 use ash::vk;
 use bytemuck::{Pod, Zeroable};
@@ -162,7 +163,7 @@ impl<T: Pod + Zeroable> UniformBuffer<T> {
         ctx: &VulkanContext,
         allocator: Arc<Mutex<Allocator>>,
         frame_count: usize,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         let size = std::mem::size_of::<T>() as u64;
         let mut buffers = Vec::with_capacity(frame_count);
 

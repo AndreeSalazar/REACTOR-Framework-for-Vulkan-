@@ -1,6 +1,6 @@
 use crate::core::context::VulkanContext;
+use crate::core::error::{ReactorResult, ReactorError, ErrorCode};
 use ash::vk;
-use std::error::Error;
 
 pub struct RayTracingContext {
     pub pipeline_fn: ash::khr::ray_tracing_pipeline::Device,
@@ -13,9 +13,9 @@ pub struct RayTracingContext {
 }
 
 impl RayTracingContext {
-    pub fn new(ctx: &VulkanContext) -> Result<Self, Box<dyn Error>> {
-        let pipeline_fn = ash::khr::ray_tracing_pipeline::Device::new(&ctx.instance, &ctx.device);
-        let accel_fn = ash::khr::acceleration_structure::Device::new(&ctx.instance, &ctx.device);
+    pub fn new(ctx: &VulkanContext) -> ReactorResult<Self> {
+        let pipeline_fn = ash::khr::ray_tracing_pipeline::Device::new(ctx.ash_instance(), ctx.ash_device());
+        let accel_fn = ash::khr::acceleration_structure::Device::new(ctx.ash_instance(), ctx.ash_device());
 
         // Get properties
         let mut pipeline_properties = vk::PhysicalDeviceRayTracingPipelinePropertiesKHR::default();

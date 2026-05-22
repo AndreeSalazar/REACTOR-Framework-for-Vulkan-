@@ -1,10 +1,10 @@
 use crate::graphics::buffer::Buffer;
 use crate::resources::vertex::Vertex;
 use crate::core::VulkanContext;
+use crate::core::error::{ReactorResult, ReactorError};
 use ash::vk;
 use gpu_allocator::vulkan::Allocator;
 use gpu_allocator::MemoryLocation;
-use std::error::Error;
 use std::sync::{Arc, Mutex};
 
 pub struct Mesh {
@@ -20,7 +20,7 @@ impl Mesh {
         allocator: &Arc<Mutex<Allocator>>,
         vertices: &[Vertex],
         indices: &[u32],
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         let vertex_size = (vertices.len() * std::mem::size_of::<Vertex>()) as u64;
         let index_size = (indices.len() * std::mem::size_of::<u32>()) as u64;
 
@@ -88,7 +88,7 @@ impl Mesh {
         src: vk::Buffer,
         dst: vk::Buffer,
         size: u64,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> ReactorResult<()> {
         let pool_info = vk::CommandPoolCreateInfo::default()
             .queue_family_index(ctx.queue_family_index)
             .flags(vk::CommandPoolCreateFlags::TRANSIENT);
@@ -161,7 +161,7 @@ impl Mesh {
     pub fn cube(
         ctx: &VulkanContext,
         allocator: &Arc<Mutex<Allocator>>,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         let vertices = [
             // Front
             Vertex::new(
@@ -222,7 +222,7 @@ impl Mesh {
     pub fn quad(
         ctx: &VulkanContext,
         allocator: &Arc<Mutex<Allocator>>,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         let vertices = [
             Vertex::new(
                 glam::Vec3::new(-0.5, -0.5, 0.0),

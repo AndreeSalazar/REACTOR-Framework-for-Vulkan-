@@ -1,7 +1,7 @@
 use crate::core::VulkanContext;
+use crate::core::error::{ReactorResult, ReactorError, ErrorCode};
 use ash::khr::swapchain;
 use ash::{vk, Device};
-use std::error::Error;
 
 pub struct Swapchain {
     pub loader: swapchain::Device,
@@ -14,20 +14,27 @@ pub struct Swapchain {
 }
 
 impl Swapchain {
-    pub fn new(ctx: &VulkanContext, width: u32, height: u32) -> Result<Self, Box<dyn Error>> {
+    pub fn new(ctx: &VulkanContext, width: u32, height: u32) -> ReactorResult<Self> {
+        let surface_loader = ctx.surface_loader();
+        let surface = ctx.surface_khr();
+        let device = ctx.ash_device();
+
         let surface_capabilities = unsafe {
-            ctx.surface_loader
-                .get_physical_device_surface_capabilities(ctx.physical_device, ctx.surface)?
+            surface_loader
+                .get_physical_device_surface_capabilities(ctx.physical_device, surface)
+                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanSwapchainCreation, "get_surface_capabilities failed", e))?
         };
 
         let surface_formats = unsafe {
-            ctx.surface_loader
-                .get_physical_device_surface_formats(ctx.physical_device, ctx.surface)?
+            surface_loader
+                .get_physical_device_surface_formats(ctx.physical_device, surface)
+                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanSwapchainCreation, "get_surface_formats failed", e))?
         };
 
         let present_modes = unsafe {
-            ctx.surface_loader
-                .get_physical_device_surface_present_modes(ctx.physical_device, ctx.surface)?
+            surface_loader
+                .get_physical_device_surface_present_modes(ctx.physical_device, surface)
+                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanSwapchainCreation, "get_present_modes failed", e))?
         };
 
         let format = surface_formats
@@ -65,7 +72,7 @@ impl Swapchain {
         };
 
         let create_info = vk::SwapchainCreateInfoKHR::default()
-            .surface(ctx.surface)
+            .surface(surface)
             .min_image_count(image_count)
             .image_format(format.format)
             .image_color_space(format.color_space)
@@ -78,9 +85,15 @@ impl Swapchain {
             .present_mode(*present_mode)
             .clipped(true);
 
-        let loader = swapchain::Device::new(&ctx.instance, &ctx.device);
-        let handle = unsafe { loader.create_swapchain(&create_info, None)? };
-        let images = unsafe { loader.get_swapchain_images(handle)? };
+        let loader = swapchain::Device::new(ctx.ash_instance(), device);
+        let handle = unsafe {
+            loader.create_swapchain(&create_info, None)
+                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanSwapchainCreation, "create_swapchain failed", e))?
+        };
+        let images = unsafe {
+            loader.get_swapchain_images(handle)
+                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanSwapchainCreation, "get_swapchain_images failed", e))?
+        };
 
         let image_views = images
             .iter()
@@ -98,9 +111,12 @@ impl Swapchain {
                             .base_array_layer(0)
                             .layer_count(1),
                     );
-                unsafe { ctx.device.create_image_view(&create_info, None) }
+                unsafe {
+                    device.create_image_view(&create_info, None)
+                        .map_err(|e| ReactorError::with_source(ErrorCode::VulkanSwapchainCreation, "create_image_view failed", e))
+                }
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<ReactorResult<Vec<_>>>()?;
 
         Ok(Self {
             loader,

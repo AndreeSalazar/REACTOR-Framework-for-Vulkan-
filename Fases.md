@@ -131,6 +131,19 @@ producir videojuegos comerciales**, manteniendo:
 - [x] Centralizar `VulkanError` con `thiserror`.
   *(Ya existe `core::error::ReactorError` con `From<ash::vk::Result>`, `From<std::io::Error>`, `ReactorResult<T>` alias)*
 - [ ] Usar `Result<T, VulkanError>` en TODAS las APIs públicas (eliminar `panic!`).
+  - [x] ✅ `src/graphics/swapchain.rs` — migrado a `ReactorResult<Self>`
+  - [ ] `src/graphics/buffer.rs` — pendiente
+  - [ ] `src/graphics/pipeline.rs` — pendiente
+  - [ ] `src/graphics/render_pass.rs` — pendiente
+  - [ ] `src/graphics/image.rs` — pendiente
+  - [ ] `src/graphics/framebuffer.rs` — pendiente
+  - [ ] `src/graphics/depth.rs` — pendiente
+  - [ ] `src/graphics/descriptors.rs` — pendiente
+  - [ ] `src/graphics/msaa.rs` — pendiente
+  - [ ] `src/graphics/sampler.rs` — pendiente
+  - [ ] `src/graphics/uniform_buffer.rs` — pendiente
+  - [ ] `src/core/command.rs` — pendiente
+  - [ ] `src/reactor.rs` — pendiente (monolito, ~20 usos de `Box<dyn Error>`)
 - [ ] Soporte completo de `VK_LAYER_KHRONOS_validation` en debug.
 
 ### 1.2 Allocator GPU

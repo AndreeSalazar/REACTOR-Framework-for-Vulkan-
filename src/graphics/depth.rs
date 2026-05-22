@@ -1,8 +1,8 @@
 use crate::core::VulkanContext;
+use crate::core::error::ReactorResult;
 use ash::vk;
 use gpu_allocator::vulkan::*;
 use gpu_allocator::MemoryLocation;
-use std::error::Error;
 use std::sync::{Arc, Mutex};
 
 pub struct DepthBuffer {
@@ -20,7 +20,7 @@ impl DepthBuffer {
         allocator: Arc<Mutex<Allocator>>,
         width: u32,
         height: u32,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         let format = Self::find_depth_format(ctx)?;
 
         let image_info = vk::ImageCreateInfo::default()
@@ -35,8 +35,9 @@ impl DepthBuffer {
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .samples(vk::SampleCountFlags::TYPE_1);
 
-        let image = unsafe { ctx.device.create_image(&image_info, None)? };
-        let requirements = unsafe { ctx.device.get_image_memory_requirements(image) };
+        let device = ctx.ash_device();
+        let image = unsafe { device.create_image(&image_info, None)? };
+        let requirements = unsafe { device.get_image_memory_requirements(image) };
 
         let allocation = allocator.lock().unwrap().allocate(&AllocationCreateDesc {
             name: "depth_buffer",
@@ -47,7 +48,7 @@ impl DepthBuffer {
         })?;
 
         unsafe {
-            ctx.device
+            device
                 .bind_image_memory(image, allocation.memory(), allocation.offset())?;
         }
 
@@ -64,19 +65,19 @@ impl DepthBuffer {
                     .layer_count(1),
             );
 
-        let view = unsafe { ctx.device.create_image_view(&view_info, None)? };
+        let view = unsafe { device.create_image_view(&view_info, None)? };
 
         Ok(Self {
             image,
             view,
             format,
             allocation: Some(allocation),
-            device: ctx.device.clone(),
+            device: device.clone(),
             allocator,
         })
     }
 
-    fn find_depth_format(ctx: &VulkanContext) -> Result<vk::Format, Box<dyn Error>> {
+    fn find_depth_format(ctx: &VulkanContext) -> ReactorResult<vk::Format> {
         let candidates = [
             vk::Format::D32_SFLOAT,
             vk::Format::D32_SFLOAT_S8_UINT,

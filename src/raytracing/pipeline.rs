@@ -1,7 +1,7 @@
 use crate::core::context::VulkanContext;
+use crate::core::error::{ReactorResult, ReactorError};
 use crate::raytracing::context::RayTracingContext;
 use ash::vk;
-use std::error::Error;
 use std::ffi::CStr;
 
 pub struct RayTracingPipeline {
@@ -64,14 +64,15 @@ impl RayTracingPipeline {
         groups: &[ShaderGroup],
         descriptor_layouts: &[vk::DescriptorSetLayout],
         max_recursion: u32,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         // Create shader modules
         let mut shader_modules = Vec::new();
         let mut stage_infos = Vec::new();
 
+        let device = ctx.ash_device();
         for stage in stages {
             let create_info = vk::ShaderModuleCreateInfo::default().code(&stage.code);
-            let module = unsafe { ctx.device.create_shader_module(&create_info, None)? };
+            let module = unsafe { device.create_shader_module(&create_info, None)? };
             shader_modules.push(module);
 
             let stage_info = vk::PipelineShaderStageCreateInfo::default()
@@ -96,7 +97,7 @@ impl RayTracingPipeline {
 
         // Pipeline layout
         let layout_info = vk::PipelineLayoutCreateInfo::default().set_layouts(descriptor_layouts);
-        let layout = unsafe { ctx.device.create_pipeline_layout(&layout_info, None)? };
+        let layout = unsafe { device.create_pipeline_layout(&layout_info, None)? };
 
         // Create pipeline
         let pipeline_info = vk::RayTracingPipelineCreateInfoKHR::default()
@@ -120,7 +121,7 @@ impl RayTracingPipeline {
         // Cleanup shader modules
         for module in shader_modules {
             unsafe {
-                ctx.device.destroy_shader_module(module, None);
+                device.destroy_shader_module(module, None);
             }
         }
 
@@ -128,7 +129,7 @@ impl RayTracingPipeline {
             pipeline: pipelines[0],
             layout,
             shader_group_count: groups.len() as u32,
-            device: ctx.device.clone(),
+            device: device.clone(),
         })
     }
 }

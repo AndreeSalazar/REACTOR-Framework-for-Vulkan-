@@ -1,12 +1,13 @@
 use crate::resources::vertex::Vertex;
+use crate::core::arc_handle::ArcDevice;
+use crate::core::error::{ReactorResult, ReactorError, ErrorCode};
 use ash::vk;
-use ash::Device;
 use std::ffi::CStr;
 
 pub struct Pipeline {
     pub pipeline: vk::Pipeline,
     pub layout: vk::PipelineLayout,
-    device: ash::Device,
+    device: ArcDevice,
 }
 
 pub struct PipelineConfig {
@@ -35,13 +36,13 @@ impl Default for PipelineConfig {
 
 impl Pipeline {
     pub fn new(
-        device: &Device,
+        device: &ArcDevice,
         render_pass: vk::RenderPass,
         vert_spv: &[u32],
         frag_spv: &[u32],
         width: u32,
         height: u32,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> ReactorResult<Self> {
         Self::with_config(
             device,
             render_pass,
@@ -55,7 +56,7 @@ impl Pipeline {
     }
 
     pub fn with_config(
-        device: &Device,
+        device: &ArcDevice,
         render_pass: vk::RenderPass,
         vert_spv: &[u32],
         frag_spv: &[u32],
@@ -63,15 +64,17 @@ impl Pipeline {
         height: u32,
         config: &PipelineConfig,
         descriptor_layouts: &[vk::DescriptorSetLayout],
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> ReactorResult<Self> {
         let vert_shader_module = unsafe {
             let create_info = vk::ShaderModuleCreateInfo::default().code(vert_spv);
-            device.create_shader_module(&create_info, None)?
+            device.create_shader_module(&create_info, None)
+                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanShaderCompilation, "create_shader_module (vert) failed", e))?
         };
 
         let frag_shader_module = unsafe {
             let create_info = vk::ShaderModuleCreateInfo::default().code(frag_spv);
-            device.create_shader_module(&create_info, None)?
+            device.create_shader_module(&create_info, None)
+                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanShaderCompilation, "create_shader_module (frag) failed", e))?
         };
 
         let vert_stage = vk::PipelineShaderStageCreateInfo::default()
@@ -166,7 +169,10 @@ impl Pipeline {
         let layout_create_info = vk::PipelineLayoutCreateInfo::default()
             .set_layouts(descriptor_layouts)
             .push_constant_ranges(&push_constant_ranges);
-        let layout = unsafe { device.create_pipeline_layout(&layout_create_info, None)? };
+        let layout = unsafe {
+            device.create_pipeline_layout(&layout_create_info, None)
+                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanPipelineCreation, "create_pipeline_layout failed", e))?
+        };
 
         let create_info = vk::GraphicsPipelineCreateInfo::default()
             .stages(&shader_stages)
@@ -185,7 +191,7 @@ impl Pipeline {
         let pipelines = unsafe {
             device
                 .create_graphics_pipelines(vk::PipelineCache::null(), &[create_info], None)
-                .map_err(|(_, e)| e)?
+                .map_err(|(_, e)| ReactorError::with_source(ErrorCode::VulkanPipelineCreation, "create_graphics_pipelines failed", e))?
         };
 
         unsafe {

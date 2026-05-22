@@ -1,10 +1,11 @@
 use crate::core::VulkanContext;
+use crate::core::arc_handle::ArcDevice;
+use crate::core::error::{ReactorResult, ReactorError, ErrorCode};
 use ash::vk;
-use std::error::Error;
 
 pub struct RenderPass {
     pub handle: vk::RenderPass,
-    device: ash::Device,
+    device: ArcDevice,
 }
 
 pub struct RenderPassConfig {
@@ -28,7 +29,7 @@ impl Default for RenderPassConfig {
 }
 
 impl RenderPass {
-    pub fn new(ctx: &VulkanContext, config: &RenderPassConfig) -> Result<Self, Box<dyn Error>> {
+    pub fn new(ctx: &VulkanContext, config: &RenderPassConfig) -> ReactorResult<Self> {
         let mut attachments = Vec::new();
         let mut attachment_refs = Vec::new();
 
@@ -119,12 +120,16 @@ impl RenderPass {
             .subpasses(&subpasses)
             .dependencies(&dependencies);
 
-        let handle = unsafe { ctx.device.create_render_pass(&render_pass_info, None)? };
+        let handle = unsafe {
+            ctx.ash_device()
+                .create_render_pass(&render_pass_info, None)
+                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanRenderPassCreation, "create_render_pass failed", e))?
+        };
 
         Ok(Self { handle, device: ctx.device.clone() })
     }
 
-    pub fn simple(ctx: &VulkanContext, color_format: vk::Format) -> Result<Self, Box<dyn Error>> {
+    pub fn simple(ctx: &VulkanContext, color_format: vk::Format) -> ReactorResult<Self> {
         Self::new(
             ctx,
             &RenderPassConfig {
@@ -139,7 +144,7 @@ impl RenderPass {
         ctx: &VulkanContext,
         color_format: vk::Format,
         depth_format: vk::Format,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         Self::new(
             ctx,
             &RenderPassConfig {

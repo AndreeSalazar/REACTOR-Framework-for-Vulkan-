@@ -1,29 +1,91 @@
+// =============================================================================
+// REACTOR VulkanContext — The engine's central Vulkan state
+// =============================================================================
+// Thread-safe, Arc-based ownership model.
+// Cloning is cheap (refcount++) and safe (RAII ensures correct destruction).
+//
+// Design (UE5-inspired):
+// - All Vulkan handles are wrapped in Arc<Handle> for safe sharing.
+// - Drop order is enforced: device → surface → instance (reverse creation).
+// - All APIs return ReactorResult<T>, never panic or Box<dyn std::error::Error + Send + Sync>.
+// - Validation layers are enabled by default in debug builds.
+// =============================================================================
+
 use ash::vk;
-use ash::{Device, Entry, Instance};
+use ash::Entry;
 use raw_window_handle::HasWindowHandle;
-use std::error::Error;
 use std::ffi::{c_void, CStr};
 
+use crate::core::arc_handle::{ArcDevice, ArcInstance, ArcSurface};
+use crate::core::error::{ErrorCode, ReactorError, ReactorResult};
 use crate::utils::gpu_detector::GPUDetector;
 
+// =============================================================================
+// VulkanContext
+// =============================================================================
+
+/// Central Vulkan state for the REACTOR engine.
+///
+/// `VulkanContext` owns (via `Arc`) the Vulkan instance, device, and surface.
+/// It is cheap to clone (`Arc::clone`) and safe to share across threads.
+///
+/// # Lifetime & Ownership
+///
+/// The underlying Vulkan handles are destroyed in the correct order when the
+/// last clone of this context is dropped:
+///
+/// 1. Device + queues destroyed first (they depend on the instance).
+/// 2. Surface destroyed next (it depends on the instance).
+/// 3. Debug messenger destroyed (depends on instance).
+/// 4. Instance destroyed last.
+///
+/// # Example
+///
+/// ```ignore
+/// let ctx = VulkanContext::new(&window)?;
+/// let shared = ctx.clone(); // cheap, no deep copy
+/// // Use ctx and shared across threads...
+/// drop(ctx);     // instance/device still alive via `shared`
+/// drop(shared);  // now Vulkan handles are destroyed
+/// ```
+#[derive(Clone)]
 pub struct VulkanContext {
-    pub entry: Entry,
-    pub instance: Instance,
-    pub device: Device,
+    /// Arc-wrapped VkInstance (RAII, destroyed last).
+    pub instance: ArcInstance,
+
+    /// Arc-wrapped VkDevice (RAII, destroyed before instance).
+    pub device: ArcDevice,
+
+    /// Arc-wrapped VkSurfaceKHR (RAII, destroyed before instance).
+    pub surface: ArcSurface,
+
+    /// Selected physical device (does not need RAII — owned by Instance).
     pub physical_device: vk::PhysicalDevice,
+
+    /// Graphics queue (owned by Device).
     pub graphics_queue: vk::Queue,
+
+    /// Optional dedicated compute queue.
     pub compute_queue: Option<vk::Queue>,
+
+    /// Optional dedicated transfer queue.
     pub transfer_queue: Option<vk::Queue>,
-    pub surface_loader: ash::khr::surface::Instance,
-    pub surface: vk::SurfaceKHR,
+
+    /// Graphics queue family index.
     pub queue_family_index: u32,
+
+    /// Compute queue family index (if separate from graphics).
     pub compute_queue_family_index: Option<u32>,
+
+    /// Transfer queue family index (if separate from graphics/compute).
     pub transfer_queue_family_index: Option<u32>,
-    debug_utils: Option<ash::ext::debug_utils::Instance>,
-    debug_messenger: Option<vk::DebugUtilsMessengerEXT>,
 }
 
-/// Vulkan debug callback - logs validation messages
+// =============================================================================
+// Vulkan debug callback
+// =============================================================================
+
+/// Vulkan debug callback — logs validation messages via the `log` crate.
 unsafe extern "system" fn vulkan_debug_callback(
     message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
     message_type: vk::DebugUtilsMessageTypeFlagsEXT,
@@ -65,18 +127,112 @@ unsafe extern "system" fn vulkan_debug_callback(
     vk::FALSE
 }
 
+// =============================================================================
+// Construction
+// =============================================================================
+
 impl VulkanContext {
-    pub fn new(window: &impl HasWindowHandle) -> Result<Self, Box<dyn Error>> {
-        let entry = unsafe { Entry::load()? };
+    /// Create a new Vulkan context for the given window.
+    ///
+    /// This performs the full Vulkan initialization sequence:
+    /// 1. Load Vulkan entry point
+    /// 2. Create VkInstance (with validation layers in debug)
+    /// 3. Set up debug messenger (debug builds only)
+    /// 4. Create VkSurfaceKHR for the window
+    /// 5. Select best physical device (via GPUDetector)
+    /// 6. Create VkDevice with requested features
+    /// 7. Retrieve queues
+    ///
+    /// # Errors
+    ///
+    /// Returns `ReactorError` with appropriate `ErrorCode` if any step fails.
+    /// Never panics.
+    pub fn new(window: &impl HasWindowHandle) -> ReactorResult<Self> {
+        // 1. Load Vulkan entry
+        let entry = unsafe { Entry::load().map_err(|e| {
+            ReactorError::with_source(
+                ErrorCode::VulkanInstanceCreation,
+                "Failed to load Vulkan entry — is the Vulkan runtime installed?",
+                e,
+            )
+        })? };
 
-        // Layers
-        let layer_names = [CStr::from_bytes_with_nul(b"VK_LAYER_KHRONOS_validation\0")?];
-        let layers_ptr: Vec<*const i8> = layer_names
-            .iter()
-            .map(|raw_name| raw_name.as_ptr())
-            .collect();
+        // 2. Instance creation (with validation layers in debug)
+        let (instance, debug_utils, debug_messenger) =
+            Self::create_instance(&entry).map_err(|e| {
+                ReactorError::with_source(
+                    ErrorCode::VulkanInstanceCreation,
+                    "Failed to create VkInstance",
+                    e,
+                )
+            })?;
 
-        // Extensions - add debug utils in debug builds
+        let arc_instance = ArcInstance::new(entry, instance, debug_utils, debug_messenger);
+
+        // 3. Create surface for the window
+        let (surface, surface_loader) = Self::create_surface(&arc_instance, window)?;
+        let arc_surface = ArcSurface::new(surface, surface_loader);
+
+        // 4. Select best physical device
+        let gpu_info = GPUDetector::detect(
+            arc_instance.get(),
+            arc_surface.loader(),
+            arc_surface.handle(),
+        )
+        .map_err(|e| {
+            ReactorError::with_source(
+                ErrorCode::VulkanDeviceCreation,
+                "GPU detection failed",
+                e,
+            )
+        })?;
+        let pdevice = gpu_info.device;
+        let queue_family_index = gpu_info.queue_family_index;
+
+        log::info!(
+            "🎮 Selected GPU: {} (queue family {})",
+            gpu_info.name,
+            queue_family_index
+        );
+
+        // 5. Create logical device
+        let (device, graphics_queue) =
+            Self::create_device(&arc_instance, pdevice, queue_family_index)?;
+        let arc_device = ArcDevice::new(device);
+
+        Ok(Self {
+            instance: arc_instance,
+            device: arc_device,
+            surface: arc_surface,
+            physical_device: pdevice,
+            graphics_queue,
+            compute_queue: None,
+            transfer_queue: None,
+            queue_family_index,
+            compute_queue_family_index: None,
+            transfer_queue_family_index: None,
+        })
+    }
+
+    // -------------------------------------------------------------------------
+    // Internal: instance creation
+    // -------------------------------------------------------------------------
+    fn create_instance(
+        entry: &Entry,
+    ) -> Result<
+        (
+            ash::Instance,
+            Option<ash::ext::debug_utils::Instance>,
+            Option<vk::DebugUtilsMessengerEXT>,
+        ),
+        vk::Result,
+    > {
+        // Validation layers (debug only)
+        let layer_names =
+            [CStr::from_bytes_with_nul(b"VK_LAYER_KHRONOS_validation\0").unwrap()];
+        let layers_ptr: Vec<*const i8> = layer_names.iter().map(|r| r.as_ptr()).collect();
+
+        // Extensions
         let mut extension_names = vec![
             ash::khr::surface::NAME.as_ptr(),
             ash::khr::win32_surface::NAME.as_ptr(),
@@ -96,15 +252,16 @@ impl VulkanContext {
 
         let instance = unsafe { entry.create_instance(&create_info, None)? };
 
-        // Setup debug messenger in debug builds
+        // Debug messenger (debug builds only)
         #[cfg(debug_assertions)]
         let (debug_utils, debug_messenger) = {
-            let debug_utils = ash::ext::debug_utils::Instance::new(&entry, &instance);
+            let debug_utils = ash::ext::debug_utils::Instance::new(entry, &instance);
 
-            let debug_create_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
+            let messenger_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
                 .message_severity(
                     vk::DebugUtilsMessageSeverityFlagsEXT::ERROR
-                        | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING,
+                        | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
+                        | vk::DebugUtilsMessageSeverityFlagsEXT::INFO,
                 )
                 .message_type(
                     vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
@@ -115,7 +272,7 @@ impl VulkanContext {
 
             let messenger = unsafe {
                 debug_utils
-                    .create_debug_utils_messenger(&debug_create_info, None)
+                    .create_debug_utils_messenger(&messenger_info, None)
                     .expect("Failed to create debug messenger")
             };
 
@@ -129,52 +286,95 @@ impl VulkanContext {
             Option<vk::DebugUtilsMessengerEXT>,
         ) = (None, None);
 
-        // Surface
+        Ok((instance, debug_utils, debug_messenger))
+    }
+
+    // -------------------------------------------------------------------------
+    // Internal: surface creation
+    // -------------------------------------------------------------------------
+    fn create_surface(
+        instance: &ArcInstance,
+        window: &impl HasWindowHandle,
+    ) -> ReactorResult<(vk::SurfaceKHR, ash::khr::surface::Instance)> {
+        let surface_loader = ash::khr::surface::Instance::new(instance.entry(), instance.get());
+
         let surface = unsafe {
             use raw_window_handle::RawWindowHandle;
-            match window.window_handle()?.as_raw() {
+            match window
+                .window_handle()
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanSurfaceCreation,
+                        "Failed to get window handle",
+                        e,
+                    )
+                })?
+                .as_raw()
+            {
                 RawWindowHandle::Win32(handle) => {
-                    let win32_create_info = vk::Win32SurfaceCreateInfoKHR::default()
+                    let create_info = vk::Win32SurfaceCreateInfoKHR::default()
                         .hinstance(handle.hinstance.unwrap().get() as isize)
                         .hwnd(handle.hwnd.get() as isize);
-                    let win32_surface_loader =
-                        ash::khr::win32_surface::Instance::new(&entry, &instance);
-                    win32_surface_loader.create_win32_surface(&win32_create_info, None)?
+                    let win32_loader =
+                        ash::khr::win32_surface::Instance::new(instance.entry(), instance.get());
+                    win32_loader
+                        .create_win32_surface(&create_info, None)
+                        .map_err(|e| {
+                            ReactorError::with_source(
+                                ErrorCode::VulkanSurfaceCreation,
+                                "Failed to create Win32 surface",
+                                e,
+                            )
+                        })?
                 }
-                _ => return Err("Unsupported window handle".into()),
+                _ => {
+                    return Err(ReactorError::new(
+                        ErrorCode::VulkanSurfaceCreation,
+                        "Unsupported window platform (only Win32 supported)",
+                    ));
+                }
             }
         };
-        let surface_loader = ash::khr::surface::Instance::new(&entry, &instance);
 
-        // Physical Device (Smart Selection)
-        let gpu_info = GPUDetector::detect(&instance, &surface_loader, surface)?;
-        let pdevice = gpu_info.device;
-        let queue_family_index = gpu_info.queue_family_index;
+        Ok((surface, surface_loader))
+    }
 
-        // Device Extensions
+    // -------------------------------------------------------------------------
+    // Internal: device creation
+    // -------------------------------------------------------------------------
+    fn create_device(
+        instance: &ArcInstance,
+        physical_device: vk::PhysicalDevice,
+        queue_family_index: u32,
+    ) -> ReactorResult<(ash::Device, vk::Queue)> {
+        // Device extensions
         let device_extension_names = [
             ash::khr::swapchain::NAME.as_ptr(),
             ash::khr::ray_tracing_pipeline::NAME.as_ptr(),
             ash::khr::acceleration_structure::NAME.as_ptr(),
             ash::khr::deferred_host_operations::NAME.as_ptr(),
-            CStr::from_bytes_with_nul(b"VK_KHR_spirv_1_4\0")?.as_ptr(),
-            CStr::from_bytes_with_nul(b"VK_KHR_shader_float_controls\0")?.as_ptr(),
-            CStr::from_bytes_with_nul(b"VK_KHR_buffer_device_address\0")?.as_ptr(),
+            CStr::from_bytes_with_nul(b"VK_KHR_spirv_1_4\0")
+                .unwrap()
+                .as_ptr(),
+            CStr::from_bytes_with_nul(b"VK_KHR_shader_float_controls\0")
+                .unwrap()
+                .as_ptr(),
+            CStr::from_bytes_with_nul(b"VK_KHR_buffer_device_address\0")
+                .unwrap()
+                .as_ptr(),
         ];
 
-        // Queue Creation
-        let queue_priorities = [1.0];
+        // Queue
+        let queue_priorities = [1.0f32];
         let queue_info = vk::DeviceQueueCreateInfo::default()
             .queue_family_index(queue_family_index)
             .queue_priorities(&queue_priorities);
 
-        // Enable Features
+        // Features
         let mut buffer_device_address_features =
             vk::PhysicalDeviceBufferDeviceAddressFeatures::default().buffer_device_address(true);
-
         let mut ray_tracing_pipeline_features =
             vk::PhysicalDeviceRayTracingPipelineFeaturesKHR::default().ray_tracing_pipeline(true);
-
         let mut acceleration_structure_features =
             vk::PhysicalDeviceAccelerationStructureFeaturesKHR::default()
                 .acceleration_structure(true);
@@ -186,45 +386,91 @@ impl VulkanContext {
             .push_next(&mut ray_tracing_pipeline_features)
             .push_next(&mut acceleration_structure_features);
 
-        let device = unsafe { instance.create_device(pdevice, &device_create_info, None)? };
+        let device = unsafe {
+            instance
+                .get()
+                .create_device(physical_device, &device_create_info, None)
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanDeviceCreation,
+                        "Failed to create logical device",
+                        e,
+                    )
+                })?
+        };
+
         let graphics_queue = unsafe { device.get_device_queue(queue_family_index, 0) };
 
-        Ok(Self {
-            entry,
-            instance,
-            device,
-            physical_device: pdevice,
-            graphics_queue,
-            compute_queue: None,
-            transfer_queue: None,
-            surface_loader,
-            surface,
-            queue_family_index,
-            compute_queue_family_index: None,
-            transfer_queue_family_index: None,
-            debug_utils,
-            debug_messenger,
-        })
+        Ok((device, graphics_queue))
     }
 
-    pub fn wait_idle(&self) -> Result<(), vk::Result> {
-        unsafe { self.device.device_wait_idle() }
+    // =========================================================================
+    // Public API
+    // =========================================================================
+
+    /// Block until the device is idle (all submitted work completed).
+    pub fn wait_idle(&self) -> ReactorResult<()> {
+        unsafe { self.device.get().device_wait_idle().map_err(|e| {
+            ReactorError::with_source(
+                ErrorCode::VulkanSynchronization,
+                "device_wait_idle failed",
+                e,
+            )
+        }) }
+    }
+
+    /// Borrow the underlying `ash::Instance`.
+    #[inline]
+    pub fn ash_instance(&self) -> &ash::Instance {
+        self.instance.get()
+    }
+
+    /// Borrow the underlying `ash::Device`.
+    #[inline]
+    pub fn ash_device(&self) -> &ash::Device {
+        self.device.get()
+    }
+
+    /// Raw surface handle.
+    #[inline]
+    pub fn surface_khr(&self) -> vk::SurfaceKHR {
+        self.surface.handle()
+    }
+
+    /// Surface loader for queries (capabilities, formats, present modes).
+    /// Backward-compatible alias — delegates to `self.surface.loader()`.
+    #[inline]
+    pub fn surface_loader(&self) -> &ash::khr::surface::Instance {
+        self.surface.loader()
+    }
+
+    /// Raw surface handle (backward-compatible alias for `surface_khr()`).
+    #[inline]
+    pub fn surface_handle(&self) -> vk::SurfaceKHR {
+        self.surface.handle()
+    }
+
+    /// Diagnostic: how many Arc clones exist for each handle.
+    pub fn ref_counts(&self) -> (usize, usize, usize) {
+        (
+            self.instance.ref_count(),
+            self.device.ref_count(),
+            self.surface.ref_count(),
+        )
     }
 }
 
-impl Drop for VulkanContext {
-    fn drop(&mut self) {
-        unsafe {
-            self.device.destroy_device(None);
-            self.surface_loader.destroy_surface(self.surface, None);
-
-            // Destroy debug messenger before instance
-            if let (Some(debug_utils), Some(messenger)) = (&self.debug_utils, self.debug_messenger)
-            {
-                debug_utils.destroy_debug_utils_messenger(messenger, None);
-            }
-
-            self.instance.destroy_instance(None);
-        }
-    }
-}
+// =============================================================================
+// NOTE: No Drop impl here.
+// =============================================================================
+// Destruction is delegated to ArcInstance, ArcDevice, and ArcSurface.
+// When the last clone of VulkanContext is dropped, the Arcs trigger
+// their own Drop impls in the correct reverse-creation order:
+//
+//   1. ArcDevice drops → VkDevice destroyed
+//   2. ArcSurface drops → VkSurfaceKHR destroyed
+//   3. ArcInstance drops → Debug messenger + VkInstance destroyed
+//
+// This is the UE5-style "handle-based" ownership model: resources
+// hold Arc clones of what they depend on, and everything cleans
+// itself up naturally.

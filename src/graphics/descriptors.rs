@@ -1,6 +1,6 @@
 use crate::core::VulkanContext;
+use crate::core::error::ReactorResult;
 use ash::vk;
-use std::error::Error;
 
 // ============================================================================
 // Descriptor Set Layout
@@ -23,7 +23,7 @@ impl DescriptorSetLayout {
     pub fn new(
         ctx: &VulkanContext,
         bindings: &[DescriptorBinding],
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         let vk_bindings: Vec<vk::DescriptorSetLayoutBinding> = bindings
             .iter()
             .map(|b| {
@@ -37,19 +37,20 @@ impl DescriptorSetLayout {
 
         let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&vk_bindings);
 
+        let device = ctx.ash_device();
         let handle = unsafe {
-            ctx.device
+            device
                 .create_descriptor_set_layout(&layout_info, None)?
         };
 
-        Ok(Self { handle, device: ctx.device.clone() })
+        Ok(Self { handle, device: device.clone() })
     }
 
     pub fn for_uniform_buffer(
         ctx: &VulkanContext,
         binding: u32,
         stages: vk::ShaderStageFlags,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         Self::new(
             ctx,
             &[DescriptorBinding {
@@ -61,7 +62,7 @@ impl DescriptorSetLayout {
         )
     }
 
-    pub fn for_texture(ctx: &VulkanContext, binding: u32) -> Result<Self, Box<dyn Error>> {
+    pub fn for_texture(ctx: &VulkanContext, binding: u32) -> ReactorResult<Self> {
         Self::new(
             ctx,
             &[DescriptorBinding {
@@ -101,7 +102,7 @@ impl DescriptorPool {
         ctx: &VulkanContext,
         max_sets: u32,
         pool_sizes: &[PoolSize],
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         let vk_sizes: Vec<vk::DescriptorPoolSize> = pool_sizes
             .iter()
             .map(|s| {
@@ -116,12 +117,13 @@ impl DescriptorPool {
             .max_sets(max_sets)
             .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET);
 
-        let handle = unsafe { ctx.device.create_descriptor_pool(&pool_info, None)? };
+        let device = ctx.ash_device();
+        let handle = unsafe { device.create_descriptor_pool(&pool_info, None)? };
 
-        Ok(Self { handle, device: ctx.device.clone() })
+        Ok(Self { handle, device: device.clone() })
     }
 
-    pub fn standard(ctx: &VulkanContext, max_sets: u32) -> Result<Self, Box<dyn Error>> {
+    pub fn standard(ctx: &VulkanContext, max_sets: u32) -> ReactorResult<Self> {
         Self::new(
             ctx,
             max_sets,
@@ -146,17 +148,18 @@ impl DescriptorPool {
         &self,
         ctx: &VulkanContext,
         layout: &DescriptorSetLayout,
-    ) -> Result<DescriptorSet, Box<dyn Error>> {
+    ) -> ReactorResult<DescriptorSet> {
         let layouts = [layout.handle];
         let alloc_info = vk::DescriptorSetAllocateInfo::default()
             .descriptor_pool(self.handle)
             .set_layouts(&layouts);
 
-        let sets = unsafe { ctx.device.allocate_descriptor_sets(&alloc_info)? };
+        let device = ctx.ash_device();
+        let sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
 
         Ok(DescriptorSet {
             handle: sets[0],
-            device: ctx.device.clone(),
+            device: device.clone(),
         })
     }
 }

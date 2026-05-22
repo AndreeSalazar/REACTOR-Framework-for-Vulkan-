@@ -1,4 +1,5 @@
 use ash::{Entry, Instance, Device};
+use crate::core::error::ReactorResult;
 use ash::vk;
 use std::ffi::CStr;
 use raw_window_handle::HasWindowHandle;
@@ -18,7 +19,7 @@ pub struct VulkanContext {
 use crate::gpu_detector::GPUDetector;
 
 impl VulkanContext {
-    pub fn new(window: &impl HasWindowHandle) -> Result<Self, Box<dyn Error>> {
+    pub fn new(window: &impl HasWindowHandle) -> ReactorResult<Self> {
         let entry = unsafe { Entry::load()? };
         
         // Layers

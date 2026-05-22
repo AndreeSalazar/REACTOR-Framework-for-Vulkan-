@@ -1,6 +1,6 @@
 use crate::core::context::VulkanContext;
+use crate::core::error::{ReactorResult, ReactorError};
 use ash::vk;
-use std::error::Error;
 use std::ffi::CStr;
 
 pub struct ComputePipeline {
@@ -15,10 +15,11 @@ impl ComputePipeline {
         shader_code: &[u32],
         descriptor_layouts: &[vk::DescriptorSetLayout],
         push_constant_size: Option<u32>,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
+        let device = ctx.ash_device();
         let shader_module = unsafe {
             let create_info = vk::ShaderModuleCreateInfo::default().code(shader_code);
-            ctx.device.create_shader_module(&create_info, None)?
+            device.create_shader_module(&create_info, None)?
         };
 
         let stage_info = vk::PipelineShaderStageCreateInfo::default()
@@ -41,26 +42,26 @@ impl ComputePipeline {
             .set_layouts(descriptor_layouts)
             .push_constant_ranges(&push_constant_ranges);
 
-        let layout = unsafe { ctx.device.create_pipeline_layout(&layout_info, None)? };
+        let layout = unsafe { device.create_pipeline_layout(&layout_info, None)? };
 
         let pipeline_info = vk::ComputePipelineCreateInfo::default()
             .stage(stage_info)
             .layout(layout);
 
         let pipelines = unsafe {
-            ctx.device
+            device
                 .create_compute_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
                 .map_err(|(_, e)| e)?
         };
 
         unsafe {
-            ctx.device.destroy_shader_module(shader_module, None);
+            device.destroy_shader_module(shader_module, None);
         }
 
         Ok(Self {
             pipeline: pipelines[0],
             layout,
-            device: ctx.device.clone(),
+            device: device.clone(),
         })
     }
 

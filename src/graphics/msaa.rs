@@ -1,8 +1,8 @@
 use crate::core::VulkanContext;
+use crate::core::error::ReactorResult;
 use ash::vk;
 use gpu_allocator::vulkan::*;
 use gpu_allocator::MemoryLocation;
-use std::error::Error;
 use std::sync::{Arc, Mutex};
 
 pub struct MsaaTarget {
@@ -22,7 +22,7 @@ impl MsaaTarget {
         height: u32,
         format: vk::Format,
         samples: vk::SampleCountFlags,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> ReactorResult<Self> {
         let image_info = vk::ImageCreateInfo::default()
             .image_type(vk::ImageType::TYPE_2D)
             .extent(vk::Extent3D { width, height, depth: 1 })
@@ -37,8 +37,9 @@ impl MsaaTarget {
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .samples(samples);
 
-        let image = unsafe { ctx.device.create_image(&image_info, None)? };
-        let requirements = unsafe { ctx.device.get_image_memory_requirements(image) };
+        let device = ctx.ash_device();
+        let image = unsafe { device.create_image(&image_info, None)? };
+        let requirements = unsafe { device.get_image_memory_requirements(image) };
 
         let allocation = allocator.lock().unwrap().allocate(&AllocationCreateDesc {
             name: "msaa_target",
@@ -49,7 +50,7 @@ impl MsaaTarget {
         })?;
 
         unsafe {
-            ctx.device
+            device
                 .bind_image_memory(image, allocation.memory(), allocation.offset())?;
         }
 
@@ -66,14 +67,14 @@ impl MsaaTarget {
                     .layer_count(1),
             );
 
-        let view = unsafe { ctx.device.create_image_view(&view_info, None)? };
+        let view = unsafe { device.create_image_view(&view_info, None)? };
 
         Ok(Self {
             image,
             view,
             samples,
             allocation: Some(allocation),
-            device: ctx.device.clone(),
+            device: device.clone(),
             allocator,
         })
     }
