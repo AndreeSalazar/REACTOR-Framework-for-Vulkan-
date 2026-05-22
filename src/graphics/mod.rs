@@ -43,10 +43,19 @@ pub mod bindless;
 pub mod pso_hash;
 pub mod pso_cache;
 pub mod shader_compiler;
+pub mod shader_hot_reload;
 pub mod indirect;
 
-pub use bindless::{BindlessRegistry, BindlessConfig, TextureHandle, BufferHandle, SamplerHandle};
+pub use bindless::{
+    BindlessRegistry, BindlessConfig, BindlessStats,
+    TextureHandle, BufferHandle, SamplerHandle, MeshHandle, MaterialHandle,
+    GpuMeshData, GpuMaterialData,
+};
 pub use pso_hash::{PsoHash, PsoHashBuilder};
-pub use pso_cache::{PsoCache, CachedPipeline, PsoCacheManager};
-pub use shader_compiler::{ShaderCompiler, ShaderLanguage, ShaderStage, CompiledShader};
+pub use pso_cache::{PsoCache, CachedPipeline, PsoCacheManager, SerializablePsoEntry};
+pub use shader_compiler::{
+    ShaderCompiler, ShaderLanguage, ShaderStage, CompiledShader,
+    ShaderReflection, ReflectedBinding, ReflectedPushConstant, ReflectedEntryPoint, BindingType,
+};
+pub use shader_hot_reload::{ShaderHotReloader, ShaderReloadEvent};
 pub use indirect::{IndirectDrawBuffer, DrawIndexedIndirectCommand, IndirectCommandWithMaterial};

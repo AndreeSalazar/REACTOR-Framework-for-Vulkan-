@@ -1,20 +1,50 @@
-﻿//! PSO Hashing System
+//! # PSO Hashing System
+//!
+//! Hash determinístico de (shader SPIR-V + render state) → `PsoHash(u64)`.
+//! Dos pipelines con el mismo hash son binariamente idénticos y se pueden
+//! reutilizar sin recompilar.
+
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use ash::vk;
 
+/// Hash único de un Pipeline State Object.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PsoHash(pub u64);
 
-impl PsoHash { pub fn as_u64(&self) -> u64 { self.0 } }
+impl PsoHash {
+    #[inline] pub fn as_u64(&self) -> u64 { self.0 }
 
+    /// Crea desde dos spirv_hash (vertex + fragment) + state bits.
+    pub fn from_shaders_and_state(
+        vert_spirv_hash: u64,
+        frag_spirv_hash: u64,
+        state_bits: u64,
+    ) -> Self {
+        let mut hasher = DefaultHasher::new();
+        vert_spirv_hash.hash(&mut hasher);
+        frag_spirv_hash.hash(&mut hasher);
+        state_bits.hash(&mut hasher);
+        Self(hasher.finish())
+    }
+}
+
+/// Builder incremental para calcular el hash de un PSO.
 pub struct PsoHashBuilder { hasher: DefaultHasher }
 
 impl PsoHashBuilder {
     pub fn new() -> Self { Self { hasher: DefaultHasher::new() } }
 
+    /// Hash del SPIR-V de un shader (usar `CompiledShader::spirv_hash`).
     pub fn hash_shader_spirv(&mut self, spirv: &[u32]) -> &mut Self {
-        spirv.hash(&mut self.hasher); self
+        spirv.hash(&mut self.hasher);
+        self
+    }
+
+    /// Hash directamente desde el `spirv_hash` pre-calculado (más rápido).
+    pub fn hash_shader_spirv_hash(&mut self, hash: u64) -> &mut Self {
+        hash.hash(&mut self.hasher);
+        self
     }
 
     pub fn hash_vertex_input(&mut self, vi: &vk::PipelineVertexInputStateCreateInfo) -> &mut Self {
@@ -63,10 +93,33 @@ impl PsoHashBuilder {
         self
     }
 
+    pub fn hash_color_blend(&mut self, cb: &vk::PipelineColorBlendStateCreateInfo) -> &mut Self {
+        cb.logic_op_enable.hash(&mut self.hasher);
+        let ac = cb.attachment_count as usize;
+        let attachments = unsafe { std::slice::from_raw_parts(cb.p_attachments, ac) };
+        for a in attachments {
+            a.blend_enable.hash(&mut self.hasher);
+            a.src_color_blend_factor.as_raw().hash(&mut self.hasher);
+            a.dst_color_blend_factor.as_raw().hash(&mut self.hasher);
+            a.color_blend_op.as_raw().hash(&mut self.hasher);
+            a.src_alpha_blend_factor.as_raw().hash(&mut self.hasher);
+            a.dst_alpha_blend_factor.as_raw().hash(&mut self.hasher);
+            a.alpha_blend_op.as_raw().hash(&mut self.hasher);
+            a.color_write_mask.as_raw().hash(&mut self.hasher);
+        }
+        self
+    }
+
     pub fn hash_render_pass_formats(&mut self, color: &[vk::Format], depth: Option<vk::Format>) -> &mut Self {
         color.len().hash(&mut self.hasher);
         for f in color { f.as_raw().hash(&mut self.hasher); }
         if let Some(df) = depth { df.as_raw().hash(&mut self.hasher); } else { 0u32.hash(&mut self.hasher); }
+        self
+    }
+
+    /// Hash de un `PipelineConfig` simplificado (cull mode, polygon mode, etc).
+    pub fn hash_pipeline_config_bits(&mut self, bits: u64) -> &mut Self {
+        bits.hash(&mut self.hasher);
         self
     }
 
