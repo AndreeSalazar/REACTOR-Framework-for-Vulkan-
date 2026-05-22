@@ -1,6 +1,6 @@
-use ash::vk;
 use crate::core::context::VulkanContext;
 use crate::raytracing::context::RayTracingContext;
+use ash::vk;
 use std::error::Error;
 use std::ffi::CStr;
 
@@ -95,8 +95,7 @@ impl RayTracingPipeline {
             .collect();
 
         // Pipeline layout
-        let layout_info = vk::PipelineLayoutCreateInfo::default()
-            .set_layouts(descriptor_layouts);
+        let layout_info = vk::PipelineLayoutCreateInfo::default().set_layouts(descriptor_layouts);
         let layout = unsafe { ctx.device.create_pipeline_layout(&layout_info, None)? };
 
         // Create pipeline
@@ -107,17 +106,22 @@ impl RayTracingPipeline {
             .layout(layout);
 
         let pipelines = unsafe {
-            rt_ctx.pipeline_fn.create_ray_tracing_pipelines(
-                vk::DeferredOperationKHR::null(),
-                vk::PipelineCache::null(),
-                &[pipeline_info],
-                None,
-            ).map_err(|(_, e)| e)?
+            rt_ctx
+                .pipeline_fn
+                .create_ray_tracing_pipelines(
+                    vk::DeferredOperationKHR::null(),
+                    vk::PipelineCache::null(),
+                    &[pipeline_info],
+                    None,
+                )
+                .map_err(|(_, e)| e)?
         };
 
         // Cleanup shader modules
         for module in shader_modules {
-            unsafe { ctx.device.destroy_shader_module(module, None); }
+            unsafe {
+                ctx.device.destroy_shader_module(module, None);
+            }
         }
 
         Ok(Self {

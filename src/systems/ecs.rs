@@ -40,7 +40,9 @@ impl World {
 
     pub fn register_component<T: Component>(&mut self) {
         let type_id = TypeId::of::<T>();
-        self.components.entry(type_id).or_insert_with(|| Box::new(HashMap::<Entity, T>::new()));
+        self.components
+            .entry(type_id)
+            .or_insert_with(|| Box::new(HashMap::<Entity, T>::new()));
     }
 
     pub fn add_component<T: Component>(&mut self, entity: Entity, component: T) {
@@ -75,7 +77,7 @@ impl World {
         }
         None
     }
-    
+
     pub fn get_component_mut<T: Component>(&mut self, entity: Entity) -> Option<&mut T> {
         let type_id = TypeId::of::<T>();
         if let Some(store) = self.components.get_mut(&type_id) {

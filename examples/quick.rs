@@ -27,7 +27,12 @@ fn main() {
             |ctx| {
                 ctx.look_at(Vec3::new(0.0, 2.0, 5.0), Vec3::ZERO);
                 ctx.add_sun();
-                ctx.add_point_light(Vec3::new(3.0, 4.0, 2.0), Vec3::new(1.0, 0.7, 0.4), 2.0, 15.0);
+                ctx.add_point_light(
+                    Vec3::new(3.0, 4.0, 2.0),
+                    Vec3::new(1.0, 0.7, 0.4),
+                    2.0,
+                    15.0,
+                );
             },
             |ctx| {
                 let _dt = ctx.delta();

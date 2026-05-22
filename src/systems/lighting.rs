@@ -1,5 +1,5 @@
-use glam::Vec3;
 use crate::graphics::uniform_buffer::{LightData, LightUniformData, MAX_LIGHTS};
+use glam::Vec3;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum LightType {
@@ -50,7 +50,14 @@ impl Light {
         }
     }
 
-    pub fn spot(position: Vec3, direction: Vec3, color: Vec3, intensity: f32, range: f32, angle_degrees: f32) -> Self {
+    pub fn spot(
+        position: Vec3,
+        direction: Vec3,
+        color: Vec3,
+        intensity: f32,
+        range: f32,
+        angle_degrees: f32,
+    ) -> Self {
         Self {
             light_type: LightType::Spot,
             position,
@@ -74,9 +81,24 @@ impl Light {
 
     pub fn to_gpu_data(&self) -> LightData {
         LightData {
-            position: [self.position.x, self.position.y, self.position.z, self.range],
-            direction: [self.direction.x, self.direction.y, self.direction.z, self.spot_angle],
-            color: [self.color.x * self.intensity, self.color.y * self.intensity, self.color.z * self.intensity, self.intensity],
+            position: [
+                self.position.x,
+                self.position.y,
+                self.position.z,
+                self.range,
+            ],
+            direction: [
+                self.direction.x,
+                self.direction.y,
+                self.direction.z,
+                self.spot_angle,
+            ],
+            color: [
+                self.color.x * self.intensity,
+                self.color.y * self.intensity,
+                self.color.z * self.intensity,
+                self.intensity,
+            ],
             light_type: match self.light_type {
                 LightType::Directional => 0,
                 LightType::Point => 1,
@@ -136,7 +158,7 @@ impl LightingSystem {
 
     pub fn to_gpu_data(&self) -> LightUniformData {
         let mut data = LightUniformData::default();
-        
+
         data.ambient_color = [
             self.ambient_color.x * self.ambient_intensity,
             self.ambient_color.y * self.ambient_intensity,

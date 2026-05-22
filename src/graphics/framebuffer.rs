@@ -1,5 +1,5 @@
-use ash::vk;
 use crate::vulkan_context::VulkanContext;
+use ash::vk;
 use std::error::Error;
 
 pub struct Framebuffer {
@@ -73,7 +73,9 @@ impl FramebufferSet {
     ) -> Result<Self, Box<dyn Error>> {
         let framebuffers = swapchain_views
             .iter()
-            .map(|&view| Framebuffer::from_swapchain(ctx, render_pass, view, depth_view, width, height))
+            .map(|&view| {
+                Framebuffer::from_swapchain(ctx, render_pass, view, depth_view, width, height)
+            })
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self { framebuffers })

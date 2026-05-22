@@ -1,5 +1,5 @@
-use glam::{Vec3, Quat};
 use crate::systems::transform::Transform;
+use glam::{Quat, Vec3};
 
 /// Basic physics body component
 #[derive(Clone, Debug)]
@@ -31,10 +31,7 @@ impl Default for RigidBody {
 
 impl RigidBody {
     pub fn kinematic() -> Self {
-        Self {
-            is_kinematic: true,
-            ..Default::default()
-        }
+        Self { is_kinematic: true, ..Default::default() }
     }
 
     pub fn add_force(&mut self, force: Vec3) {
@@ -70,10 +67,7 @@ impl AABB {
 
     pub fn from_center_size(center: Vec3, size: Vec3) -> Self {
         let half = size * 0.5;
-        Self {
-            min: center - half,
-            max: center + half,
-        }
+        Self { min: center - half, max: center + half }
     }
 
     pub fn center(&self) -> Vec3 {
@@ -89,15 +83,21 @@ impl AABB {
     }
 
     pub fn contains_point(&self, point: Vec3) -> bool {
-        point.x >= self.min.x && point.x <= self.max.x &&
-        point.y >= self.min.y && point.y <= self.max.y &&
-        point.z >= self.min.z && point.z <= self.max.z
+        point.x >= self.min.x
+            && point.x <= self.max.x
+            && point.y >= self.min.y
+            && point.y <= self.max.y
+            && point.z >= self.min.z
+            && point.z <= self.max.z
     }
 
     pub fn intersects(&self, other: &AABB) -> bool {
-        self.min.x <= other.max.x && self.max.x >= other.min.x &&
-        self.min.y <= other.max.y && self.max.y >= other.min.y &&
-        self.min.z <= other.max.z && self.max.z >= other.min.z
+        self.min.x <= other.max.x
+            && self.max.x >= other.min.x
+            && self.min.y <= other.max.y
+            && self.max.y >= other.min.y
+            && self.min.z <= other.max.z
+            && self.max.z >= other.min.z
     }
 
     pub fn expand(&mut self, point: Vec3) {
@@ -126,7 +126,7 @@ impl AABB {
 
         let mat = transform.matrix();
         let mut result = AABB::new(Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
-        
+
         for corner in corners {
             let transformed = mat.transform_point3(corner);
             result.expand(transformed);
@@ -177,10 +177,7 @@ pub struct Ray {
 
 impl Ray {
     pub fn new(origin: Vec3, direction: Vec3) -> Self {
-        Self {
-            origin,
-            direction: direction.normalize(),
-        }
+        Self { origin, direction: direction.normalize() }
     }
 
     pub fn from_screen(
@@ -204,8 +201,12 @@ impl Ray {
     }
 
     pub fn intersects_aabb(&self, aabb: &AABB) -> Option<f32> {
-        let inv_dir = Vec3::new(1.0 / self.direction.x, 1.0 / self.direction.y, 1.0 / self.direction.z);
-        
+        let inv_dir = Vec3::new(
+            1.0 / self.direction.x,
+            1.0 / self.direction.y,
+            1.0 / self.direction.z,
+        );
+
         let t1 = (aabb.min.x - self.origin.x) * inv_dir.x;
         let t2 = (aabb.max.x - self.origin.x) * inv_dir.x;
         let t3 = (aabb.min.y - self.origin.y) * inv_dir.y;
@@ -234,7 +235,11 @@ impl Ray {
             None
         } else {
             let t = (-b - discriminant.sqrt()) / (2.0 * a);
-            if t > 0.0 { Some(t) } else { None }
+            if t > 0.0 {
+                Some(t)
+            } else {
+                None
+            }
         }
     }
 
@@ -242,7 +247,11 @@ impl Ray {
         let denom = plane_normal.dot(self.direction);
         if denom.abs() > 1e-6 {
             let t = -(plane_normal.dot(self.origin) + plane_d) / denom;
-            if t >= 0.0 { Some(t) } else { None }
+            if t >= 0.0 {
+                Some(t)
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -353,10 +362,7 @@ impl Default for CharacterController {
 
 impl CharacterController {
     pub fn new(position: Vec3) -> Self {
-        Self {
-            position,
-            ..Default::default()
-        }
+        Self { position, ..Default::default() }
     }
 
     /// Update the character controller with input
@@ -386,7 +392,11 @@ impl CharacterController {
         let move_dir = Vec3::new(move_input.x, 0.0, move_input.z);
         if move_dir.length_squared() > 0.0 {
             let target_velocity = move_dir.normalize() * self.move_speed;
-            let drag = if self.is_grounded { self.ground_drag } else { self.air_drag };
+            let drag = if self.is_grounded {
+                self.ground_drag
+            } else {
+                self.air_drag
+            };
             self.velocity.x = lerp(self.velocity.x, target_velocity.x, drag * dt);
             self.velocity.z = lerp(self.velocity.z, target_velocity.z, drag * dt);
         } else if self.is_grounded {
@@ -401,7 +411,11 @@ impl CharacterController {
 
     /// Get the eye position (for camera)
     pub fn eye_position(&self) -> Vec3 {
-        Vec3::new(self.position.x, self.position.y + self.height * 0.4, self.position.z)
+        Vec3::new(
+            self.position.x,
+            self.position.y + self.height * 0.4,
+            self.position.z,
+        )
     }
 
     /// Get the collider as a sphere
@@ -413,8 +427,16 @@ impl CharacterController {
     pub fn aabb(&self) -> AABB {
         let half_height = self.height * 0.5;
         AABB::new(
-            Vec3::new(self.position.x - self.radius, self.position.y - half_height, self.position.z - self.radius),
-            Vec3::new(self.position.x + self.radius, self.position.y + half_height, self.position.z + self.radius),
+            Vec3::new(
+                self.position.x - self.radius,
+                self.position.y - half_height,
+                self.position.z - self.radius,
+            ),
+            Vec3::new(
+                self.position.x + self.radius,
+                self.position.y + half_height,
+                self.position.z + self.radius,
+            ),
         )
     }
 

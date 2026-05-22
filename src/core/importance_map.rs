@@ -92,11 +92,10 @@ pub struct ImportanceTileData {
 impl ImportanceTileData {
     /// Calcular importancia combinada
     pub fn calculate_combined(&mut self, config: &ImportanceMapConfig) {
-        self.combined = 
-            self.visual * config.visual_weight +
-            self.physics * config.physics_weight +
-            self.ai * config.ai_weight +
-            self.audio * config.audio_weight;
+        self.combined = self.visual * config.visual_weight
+            + self.physics * config.physics_weight
+            + self.ai * config.ai_weight
+            + self.audio * config.audio_weight;
     }
 
     /// Verificar si es importante según umbral
@@ -106,18 +105,34 @@ impl ImportanceTileData {
 
     /// Obtener nivel de detalle sugerido (0 = máximo, 3 = mínimo)
     pub fn suggested_lod(&self) -> u8 {
-        if self.combined > 0.75 { 0 }
-        else if self.combined > 0.5 { 1 }
-        else if self.combined > 0.25 { 2 }
-        else { 3 }
+        if self.combined > 0.75 {
+            0
+        } else if self.combined > 0.5 {
+            1
+        } else if self.combined > 0.25 {
+            2
+        } else {
+            3
+        }
     }
 
     /// Obtener frecuencia de actualización sugerida (cada N frames)
     pub fn suggested_update_frequency(&self) -> u32 {
-        if self.combined > 0.75 { 1 }      // Cada frame
-        else if self.combined > 0.5 { 2 }  // Cada 2 frames
-        else if self.combined > 0.25 { 4 } // Cada 4 frames
-        else { 8 }                          // Cada 8 frames
+        if self.combined > 0.75 {
+            1
+        }
+        // Cada frame
+        else if self.combined > 0.5 {
+            2
+        }
+        // Cada 2 frames
+        else if self.combined > 0.25 {
+            4
+        }
+        // Cada 4 frames
+        else {
+            8
+        } // Cada 8 frames
     }
 }
 
@@ -154,7 +169,7 @@ impl ImportanceMap {
         let tile_size = 16;
         let tile_width = (screen_width + tile_size - 1) / tile_size;
         let tile_height = (screen_height + tile_size - 1) / tile_size;
-        
+
         let config = ImportanceMapConfig {
             tile_width,
             tile_height,
@@ -249,7 +264,15 @@ impl ImportanceMap {
     }
 
     /// Establecer todas las importancias de un tile
-    pub fn set_tile_importance(&mut self, x: u32, y: u32, visual: f32, physics: f32, ai: f32, audio: f32) {
+    pub fn set_tile_importance(
+        &mut self,
+        x: u32,
+        y: u32,
+        visual: f32,
+        physics: f32,
+        ai: f32,
+        audio: f32,
+    ) {
         let current_frame = self.current_frame;
         if let Some(idx) = self.tile_index(x, y) {
             self.tiles[idx].visual = visual.clamp(0.0, 1.0);
@@ -266,14 +289,14 @@ impl ImportanceMap {
             if tile.world_center != Vec3::ZERO {
                 // Calcular distancia
                 tile.camera_distance = (tile.world_center - camera_pos).length();
-                
+
                 // Importancia visual basada en distancia
                 let dist_factor = 1.0 / (tile.camera_distance * 0.1 + 1.0);
-                
+
                 // Importancia basada en dirección de vista
                 let to_tile = (tile.world_center - camera_pos).normalize();
                 let view_factor = camera_forward.dot(to_tile).max(0.0);
-                
+
                 tile.visual = (dist_factor * 0.5 + view_factor * 0.5).clamp(0.0, 1.0);
             }
         }
@@ -285,7 +308,7 @@ impl ImportanceMap {
         for tile in &mut self.tiles {
             tile.visible = false;
         }
-        
+
         // Marcar visibles
         for &(x, y) in visible_tiles {
             if let Some(tile) = self.get_tile_mut(x, y) {
@@ -327,13 +350,15 @@ impl ImportanceMap {
     fn update_stats(&mut self) {
         self.stats.total_tiles = self.tiles.len() as u32;
         self.stats.visible_tiles = self.tiles.iter().filter(|t| t.visible).count() as u32;
-        self.stats.important_tiles = self.tiles.iter()
+        self.stats.important_tiles = self
+            .tiles
+            .iter()
             .filter(|t| t.is_important(self.config.importance_threshold))
             .count() as u32;
-        
+
         let sum: f32 = self.tiles.iter().map(|t| t.combined).sum();
         self.stats.average_importance = sum / self.tiles.len() as f32;
-        
+
         self.stats.lod_distribution = [0; 4];
         for tile in &self.tiles {
             let lod = tile.suggested_lod() as usize;
@@ -344,7 +369,12 @@ impl ImportanceMap {
     }
 
     /// Obtener importancia en coordenadas de pantalla
-    pub fn get_importance_at(&self, screen_x: u32, screen_y: u32, importance_type: ImportanceType) -> f32 {
+    pub fn get_importance_at(
+        &self,
+        screen_x: u32,
+        screen_y: u32,
+        importance_type: ImportanceType,
+    ) -> f32 {
         if let Some(tile) = self.get_tile_at_screen(screen_x, screen_y) {
             match importance_type {
                 ImportanceType::Visual => tile.visual,
@@ -380,8 +410,9 @@ impl ImportanceMap {
     /// Redimensionar para nueva resolución
     pub fn resize(&mut self, screen_width: u32, screen_height: u32) {
         self.config.tile_width = (screen_width + self.config.tile_size - 1) / self.config.tile_size;
-        self.config.tile_height = (screen_height + self.config.tile_size - 1) / self.config.tile_size;
-        
+        self.config.tile_height =
+            (screen_height + self.config.tile_size - 1) / self.config.tile_size;
+
         let total_tiles = (self.config.tile_width * self.config.tile_height) as usize;
         self.tiles = vec![ImportanceTileData::default(); total_tiles];
     }
@@ -391,15 +422,39 @@ impl ImportanceMap {
         println!("╔══════════════════════════════════════════════════════════════════╗");
         println!("║                   Importance Map Stats                           ║");
         println!("╠══════════════════════════════════════════════════════════════════╣");
-        println!("║ Total Tiles:     {:5}                                           ║", self.stats.total_tiles);
-        println!("║ Visible Tiles:   {:5}                                           ║", self.stats.visible_tiles);
-        println!("║ Important Tiles: {:5}                                           ║", self.stats.important_tiles);
-        println!("║ Avg Importance:  {:5.2}                                           ║", self.stats.average_importance);
+        println!(
+            "║ Total Tiles:     {:5}                                           ║",
+            self.stats.total_tiles
+        );
+        println!(
+            "║ Visible Tiles:   {:5}                                           ║",
+            self.stats.visible_tiles
+        );
+        println!(
+            "║ Important Tiles: {:5}                                           ║",
+            self.stats.important_tiles
+        );
+        println!(
+            "║ Avg Importance:  {:5.2}                                           ║",
+            self.stats.average_importance
+        );
         println!("║ LOD Distribution:                                                ║");
-        println!("║   LOD 0 (Max):   {:5}                                           ║", self.stats.lod_distribution[0]);
-        println!("║   LOD 1:         {:5}                                           ║", self.stats.lod_distribution[1]);
-        println!("║   LOD 2:         {:5}                                           ║", self.stats.lod_distribution[2]);
-        println!("║   LOD 3 (Min):   {:5}                                           ║", self.stats.lod_distribution[3]);
+        println!(
+            "║   LOD 0 (Max):   {:5}                                           ║",
+            self.stats.lod_distribution[0]
+        );
+        println!(
+            "║   LOD 1:         {:5}                                           ║",
+            self.stats.lod_distribution[1]
+        );
+        println!(
+            "║   LOD 2:         {:5}                                           ║",
+            self.stats.lod_distribution[2]
+        );
+        println!(
+            "║   LOD 3 (Min):   {:5}                                           ║",
+            self.stats.lod_distribution[3]
+        );
         println!("╚══════════════════════════════════════════════════════════════════╝");
     }
 }

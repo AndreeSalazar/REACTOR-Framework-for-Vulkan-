@@ -1,4 +1,4 @@
-use glam::{Vec3, Quat};
+use glam::{Quat, Vec3};
 use std::collections::HashMap;
 
 /// Keyframe for animation
@@ -31,7 +31,8 @@ impl<T: Clone + Interpolate> AnimationTrack<T> {
 
     pub fn add_keyframe(&mut self, time: f32, value: T) {
         self.keyframes.push(Keyframe::new(time, value));
-        self.keyframes.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
+        self.keyframes
+            .sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
     }
 
     pub fn duration(&self) -> f32 {
@@ -145,7 +146,7 @@ impl AnimationClip {
 
     pub fn duration(&self) -> f32 {
         let mut max_duration = 0.0f32;
-        
+
         if let Some(track) = &self.position_track {
             max_duration = max_duration.max(track.duration());
         }
@@ -155,7 +156,7 @@ impl AnimationClip {
         if let Some(track) = &self.scale_track {
             max_duration = max_duration.max(track.duration());
         }
-        
+
         max_duration
     }
 
@@ -346,7 +347,11 @@ impl EasingFunction {
             Self::EaseInQuad => t * t,
             Self::EaseOutQuad => t * (2.0 - t),
             Self::EaseInOutQuad => {
-                if t < 0.5 { 2.0 * t * t } else { -1.0 + (4.0 - 2.0 * t) * t }
+                if t < 0.5 {
+                    2.0 * t * t
+                } else {
+                    -1.0 + (4.0 - 2.0 * t) * t
+                }
             }
             Self::EaseInCubic => t * t * t,
             Self::EaseOutCubic => {
@@ -362,14 +367,18 @@ impl EasingFunction {
                 }
             }
             Self::EaseInElastic => {
-                if t == 0.0 || t == 1.0 { return t; }
+                if t == 0.0 || t == 1.0 {
+                    return t;
+                }
                 let p = 0.3;
                 let s = p / 4.0;
                 let t = t - 1.0;
                 -(2.0_f32.powf(10.0 * t) * ((t - s) * std::f32::consts::TAU / p).sin())
             }
             Self::EaseOutElastic => {
-                if t == 0.0 || t == 1.0 { return t; }
+                if t == 0.0 || t == 1.0 {
+                    return t;
+                }
                 let p = 0.3;
                 let s = p / 4.0;
                 2.0_f32.powf(-10.0 * t) * ((t - s) * std::f32::consts::TAU / p).sin() + 1.0

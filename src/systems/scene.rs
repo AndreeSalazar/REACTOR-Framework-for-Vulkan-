@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use glam::Mat4;
-use crate::resources::mesh::Mesh;
 use crate::resources::material::Material;
+use crate::resources::mesh::Mesh;
+use glam::Mat4;
+use std::sync::Arc;
 
 pub struct SceneObject {
     pub mesh: Arc<Mesh>,
@@ -49,9 +49,15 @@ impl Scene {
         }
     }
 
-    pub fn add_object(&mut self, mesh: Arc<Mesh>, material: Arc<Material>, transform: Mat4) -> usize {
+    pub fn add_object(
+        &mut self,
+        mesh: Arc<Mesh>,
+        material: Arc<Material>,
+        transform: Mat4,
+    ) -> usize {
         let index = self.objects.len();
-        self.objects.push(SceneObject::new(mesh, material, transform));
+        self.objects
+            .push(SceneObject::new(mesh, material, transform));
         index
     }
 
@@ -70,7 +76,9 @@ impl Scene {
     }
 
     pub fn find_by_name(&self, name: &str) -> Option<usize> {
-        self.objects.iter().position(|o| o.name.as_deref() == Some(name))
+        self.objects
+            .iter()
+            .position(|o| o.name.as_deref() == Some(name))
     }
 
     pub fn remove(&mut self, index: usize) -> Option<SceneObject> {

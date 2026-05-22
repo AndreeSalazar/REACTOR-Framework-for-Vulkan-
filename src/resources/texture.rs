@@ -1,8 +1,8 @@
-use ash::vk;
-use crate::vulkan_context::VulkanContext;
 use crate::graphics::buffer::Buffer;
 use crate::graphics::image::Image;
 use crate::graphics::sampler::Sampler;
+use crate::vulkan_context::VulkanContext;
+use ash::vk;
 use gpu_allocator::vulkan::Allocator;
 use gpu_allocator::MemoryLocation;
 use std::error::Error;
@@ -30,7 +30,7 @@ impl Texture {
         let rgba = img.to_rgba8();
         let (width, height) = rgba.dimensions();
         let data = rgba.into_raw();
-        
+
         Self::from_rgba(ctx, allocator, &data, width, height, generate_mipmaps)
     }
 
@@ -45,7 +45,7 @@ impl Texture {
         let rgba = img.to_rgba8();
         let (width, height) = rgba.dimensions();
         let data = rgba.into_raw();
-        
+
         Self::from_rgba(ctx, allocator, &data, width, height, generate_mipmaps)
     }
 
@@ -53,24 +53,36 @@ impl Texture {
     pub fn solid_color(
         ctx: &VulkanContext,
         allocator: Arc<Mutex<Allocator>>,
-        r: u8, g: u8, b: u8, a: u8,
+        r: u8,
+        g: u8,
+        b: u8,
+        a: u8,
     ) -> Result<Self, Box<dyn Error>> {
         let data = [r, g, b, a];
         Self::from_rgba(ctx, allocator, &data, 1, 1, false)
     }
 
     /// Create white texture (default diffuse)
-    pub fn white(ctx: &VulkanContext, allocator: Arc<Mutex<Allocator>>) -> Result<Self, Box<dyn Error>> {
+    pub fn white(
+        ctx: &VulkanContext,
+        allocator: Arc<Mutex<Allocator>>,
+    ) -> Result<Self, Box<dyn Error>> {
         Self::solid_color(ctx, allocator, 255, 255, 255, 255)
     }
 
     /// Create black texture
-    pub fn black(ctx: &VulkanContext, allocator: Arc<Mutex<Allocator>>) -> Result<Self, Box<dyn Error>> {
+    pub fn black(
+        ctx: &VulkanContext,
+        allocator: Arc<Mutex<Allocator>>,
+    ) -> Result<Self, Box<dyn Error>> {
         Self::solid_color(ctx, allocator, 0, 0, 0, 255)
     }
 
     /// Create normal map default (flat surface pointing up)
-    pub fn default_normal(ctx: &VulkanContext, allocator: Arc<Mutex<Allocator>>) -> Result<Self, Box<dyn Error>> {
+    pub fn default_normal(
+        ctx: &VulkanContext,
+        allocator: Arc<Mutex<Allocator>>,
+    ) -> Result<Self, Box<dyn Error>> {
         Self::solid_color(ctx, allocator, 128, 128, 255, 255)
     }
 
@@ -156,7 +168,8 @@ impl Texture {
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
         unsafe {
-            ctx.device.begin_command_buffer(command_buffer, &begin_info)?;
+            ctx.device
+                .begin_command_buffer(command_buffer, &begin_info)?;
 
             // Transition to transfer dst
             let barrier = vk::ImageMemoryBarrier::default()
@@ -213,7 +226,8 @@ impl Texture {
 
             let command_buffers = [command_buffer];
             let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
-            ctx.device.queue_submit(ctx.graphics_queue, &[submit_info], vk::Fence::null())?;
+            ctx.device
+                .queue_submit(ctx.graphics_queue, &[submit_info], vk::Fence::null())?;
             ctx.device.queue_wait_idle(ctx.graphics_queue)?;
             ctx.device.destroy_command_pool(command_pool, None);
         }
@@ -242,7 +256,8 @@ impl Texture {
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
         unsafe {
-            ctx.device.begin_command_buffer(command_buffer, &begin_info)?;
+            ctx.device
+                .begin_command_buffer(command_buffer, &begin_info)?;
 
             let barrier = vk::ImageMemoryBarrier::default()
                 .old_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
@@ -275,7 +290,8 @@ impl Texture {
 
             let command_buffers = [command_buffer];
             let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
-            ctx.device.queue_submit(ctx.graphics_queue, &[submit_info], vk::Fence::null())?;
+            ctx.device
+                .queue_submit(ctx.graphics_queue, &[submit_info], vk::Fence::null())?;
             ctx.device.queue_wait_idle(ctx.graphics_queue)?;
             ctx.device.destroy_command_pool(command_pool, None);
         }
@@ -306,7 +322,8 @@ impl Texture {
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
         unsafe {
-            ctx.device.begin_command_buffer(command_buffer, &begin_info)?;
+            ctx.device
+                .begin_command_buffer(command_buffer, &begin_info)?;
 
             // First, transition ALL mip levels (except 0 which is already TRANSFER_DST) to TRANSFER_DST
             // Mip level 0 is already in TRANSFER_DST_OPTIMAL from copy_buffer_to_image
@@ -439,8 +456,12 @@ impl Texture {
                     &[barrier],
                 );
 
-                if mip_width > 1 { mip_width /= 2; }
-                if mip_height > 1 { mip_height /= 2; }
+                if mip_width > 1 {
+                    mip_width /= 2;
+                }
+                if mip_height > 1 {
+                    mip_height /= 2;
+                }
             }
 
             // Transition last mip level
@@ -475,7 +496,8 @@ impl Texture {
 
             let command_buffers = [command_buffer];
             let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
-            ctx.device.queue_submit(ctx.graphics_queue, &[submit_info], vk::Fence::null())?;
+            ctx.device
+                .queue_submit(ctx.graphics_queue, &[submit_info], vk::Fence::null())?;
             ctx.device.queue_wait_idle(ctx.graphics_queue)?;
             ctx.device.destroy_command_pool(command_pool, None);
         }

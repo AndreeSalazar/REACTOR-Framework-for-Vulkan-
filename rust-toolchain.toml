@@ -1,0 +1,10 @@
+# REACTOR — Rust Toolchain Configuration
+# =============================================================================
+# Pins the toolchain version for reproducible builds across all contributors.
+# Rustup will automatically use this version when working in this directory.
+# =============================================================================
+
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy", "rust-analyzer"]
+profile = "default"

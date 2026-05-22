@@ -630,10 +630,7 @@ impl EditorContext {
         let id = self.scene.spawn("Main Camera");
         if let Some(e) = self.scene.get_mut(id) {
             e.transform.position = Vec3::new(0.0, 2.0, 5.0);
-            e.camera = Some(CameraComponent {
-                is_main: true,
-                ..Default::default()
-            });
+            e.camera = Some(CameraComponent { is_main: true, ..Default::default() });
         }
 
         // Directional Light
@@ -771,10 +768,7 @@ impl EditorContext {
         let id = self.spawn_entity(name);
         if let Some(e) = self.scene.get_mut(id) {
             e.transform.position = Vec3::new(0.0, 3.0, 0.0);
-            e.light = Some(LightComponent {
-                light_type: lt,
-                ..Default::default()
-            });
+            e.light = Some(LightComponent { light_type: lt, ..Default::default() });
         }
         id
     }

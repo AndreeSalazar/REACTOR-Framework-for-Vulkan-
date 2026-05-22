@@ -1,8 +1,38 @@
+# =============================================================================
+# REACTOR Framework for Vulkan — Workspace Root
+# =============================================================================
+# This is a Cargo workspace with two members:
+#   1. `reactor-vulkan` (the engine crate, defined below)
+#   2. `Editor-REACTOR` (the visual editor, in ./Editor-REACTOR/)
+#
+# Build everything:  cargo build --workspace
+# Run an example:    cargo run --example xenofall
+# Run the editor:    cargo run --bin reactor-editor
+# =============================================================================
+
+[workspace]
+members = [".", "Editor-REACTOR"]
+resolver = "2"
+
+# Shared dependency versions — all workspace members should use these.
+[workspace.dependencies]
+glam = "0.30"
+log = "0.4"
+env_logger = "0.11"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+rayon = "1.10"
+parking_lot = "0.12"
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+walkdir = "2.5"
+
 [package]
 name = "reactor-vulkan"
-version = "1.1.0"
+version = "1.2.0"
 edition = "2021"
-description = "Zero-overhead Vulkan framework — control total, API de 1 línea"
+description = "Zero-overhead Vulkan game framework — UE5-style core, 100% Rust puro"
 license-file = "LICENSE"
 repository = "https://github.com/AndreeSalazar/REACTOR-Framework-for-Vulkan-"
 keywords = ["vulkan", "gamedev", "graphics", "framework", "rendering"]
@@ -11,20 +41,46 @@ readme = "README.md"
 authors = ["Eddi Andreé Salazar Matos"]
 
 [dependencies]
+# Vulkan
 ash = "0.38.0"
-bytemuck = { version = "1.24.0", features = ["derive"] }
-env_logger = "0.11.8"
-glam = "0.30.9"
-gltf = "1.4"
 gpu-allocator = "0.28.0"
-image = "0.25"
-log = "0.4.29"
-raw-window-handle = "0.6.2"
+bytemuck = { version = "1.24.0", features = ["derive"] }
+
+# Windowing
 winit = "0.30.12"
-thiserror = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-walkdir = "2.5"
+raw-window-handle = "0.6.2"
+
+# Math
+glam = { workspace = true }
+
+# Assets
+gltf = "1.4"
+image = "0.25"
+
+# Observability (UE5-style profiling + logging)
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+
+# Concurrency (UE5 TaskGraph-style)
+rayon = { workspace = true }
+parking_lot = { workspace = true }
+
+# Error handling + serialization
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Build utilities
+walkdir = { workspace = true }
+
+[build-dependencies]
+walkdir = { workspace = true }
+
+# =============================================================================
+# Examples
+# =============================================================================
 
 [[example]]
 name = "cube"
@@ -53,3 +109,20 @@ path = "examples/quick.rs"
 [[example]]
 name = "xenofall"
 path = "examples/xenofall.rs"
+
+# =============================================================================
+# Profiles
+# =============================================================================
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
+[profile.dev.package."*"]
+opt-level = 2  # Compile dependencies with optimizations even in dev mode

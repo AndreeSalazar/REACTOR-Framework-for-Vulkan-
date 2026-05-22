@@ -1,15 +1,15 @@
-﻿use winit::window::Window;
-use ash::vk;
-use crate::vulkan_context::VulkanContext;
-use crate::swapchain::Swapchain;
-use crate::mesh::Mesh;
 use crate::material::Material;
+use crate::mesh::Mesh;
+use crate::swapchain::Swapchain;
+use crate::vulkan_context::VulkanContext;
+use ash::vk;
 use gpu_allocator::vulkan::*;
 use std::error::Error;
 use std::sync::{Arc, Mutex};
+use winit::window::Window;
 
-use crate::input::Input;
 use crate::ecs::World;
+use crate::input::Input;
 use crate::ray_tracing::RayTracingContext;
 use winit::event::WindowEvent;
 
@@ -24,20 +24,20 @@ pub struct Reactor {
     pub render_finished_semaphores: Vec<vk::Semaphore>,
     pub in_flight_fences: Vec<vk::Fence>,
     pub current_frame: usize,
-    
+
     // New Systems
     pub input: Input,
     pub world: World,
     pub ray_tracing: Option<RayTracingContext>,
     pub resized: bool,
     pub context: VulkanContext,
-    
+
     // MSAA Anti-Aliasing
     pub msaa_samples: vk::SampleCountFlags,
     pub msaa_image: Option<vk::Image>,
     pub msaa_image_view: Option<vk::ImageView>,
     pub msaa_memory: Option<vk::DeviceMemory>,
-    
+
     // Depth Buffer
     pub depth_image: Option<vk::Image>,
     pub depth_image_view: Option<vk::ImageView>,
@@ -50,7 +50,7 @@ const MAX_FRAMES_IN_FLIGHT: usize = 3;
 impl Reactor {
     pub fn init(window: &Window) -> Result<Self, Box<dyn Error>> {
         let context = VulkanContext::new(window)?;
-        
+
         let allocator = Allocator::new(&AllocatorCreateDesc {
             instance: context.instance.clone(),
             device: context.device.clone(),
@@ -63,25 +63,29 @@ impl Reactor {
 
         let inner_size = window.inner_size();
         let swapchain = Swapchain::new(&context, inner_size.width, inner_size.height)?;
-        
+
         // Get MSAA samples (4x for good quality/performance balance)
         let msaa_samples = Self::get_max_msaa_samples_static(&context);
-        println!("ðŸ”· MSAA: {:?} samples enabled for anti-aliasing", msaa_samples);
-        
+        println!(
+            "ðŸ”· MSAA: {:?} samples enabled for anti-aliasing",
+            msaa_samples
+        );
+
         // Create MSAA resources if supported
-        let (msaa_image, msaa_image_view, msaa_memory) = if msaa_samples != vk::SampleCountFlags::TYPE_1 {
-            let (img, view, mem) = Self::create_msaa_resources(
-                &context, 
-                swapchain.extent.width, 
-                swapchain.extent.height, 
-                swapchain.format,
-                msaa_samples
-            )?;
-            (Some(img), Some(view), Some(mem))
-        } else {
-            (None, None, None)
-        };
-        
+        let (msaa_image, msaa_image_view, msaa_memory) =
+            if msaa_samples != vk::SampleCountFlags::TYPE_1 {
+                let (img, view, mem) = Self::create_msaa_resources(
+                    &context,
+                    swapchain.extent.width,
+                    swapchain.extent.height,
+                    swapchain.format,
+                    msaa_samples,
+                )?;
+                (Some(img), Some(view), Some(mem))
+            } else {
+                (None, None, None)
+            };
+
         // Create Depth Buffer
         let depth_format = Self::find_depth_format(&context)?;
         let (depth_image, depth_image_view, depth_memory) = Self::create_depth_resources(
@@ -92,15 +96,31 @@ impl Reactor {
             msaa_samples,
         )?;
         println!("ðŸ”· Depth buffer created: {:?}", depth_format);
-        
-        let render_pass = Self::create_render_pass_with_depth(&context, swapchain.format, depth_format, msaa_samples)?;
-        let framebuffers = Self::create_framebuffers_with_depth(&context, &swapchain, render_pass, msaa_image_view, depth_image_view, msaa_samples)?;
+
+        let render_pass = Self::create_render_pass_with_depth(
+            &context,
+            swapchain.format,
+            depth_format,
+            msaa_samples,
+        )?;
+        let framebuffers = Self::create_framebuffers_with_depth(
+            &context,
+            &swapchain,
+            render_pass,
+            msaa_image_view,
+            depth_image_view,
+            msaa_samples,
+        )?;
 
         // Command Pool
         let pool_create_info = vk::CommandPoolCreateInfo::default()
             .queue_family_index(context.queue_family_index)
             .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
-        let command_pool = unsafe { context.device.create_command_pool(&pool_create_info, None)? };
+        let command_pool = unsafe {
+            context
+                .device
+                .create_command_pool(&pool_create_info, None)?
+        };
 
         // Command Buffers
         let alloc_info = vk::CommandBufferAllocateInfo::default()
@@ -119,8 +139,10 @@ impl Reactor {
 
         for _ in 0..MAX_FRAMES_IN_FLIGHT {
             unsafe {
-                image_available_semaphores.push(context.device.create_semaphore(&semaphore_info, None)?);
-                render_finished_semaphores.push(context.device.create_semaphore(&semaphore_info, None)?);
+                image_available_semaphores
+                    .push(context.device.create_semaphore(&semaphore_info, None)?);
+                render_finished_semaphores
+                    .push(context.device.create_semaphore(&semaphore_info, None)?);
                 in_flight_fences.push(context.device.create_fence(&fence_info, None)?);
             }
         }
@@ -130,15 +152,15 @@ impl Reactor {
             Ok(rt) => {
                 println!("Ray Tracing initialized successfully!");
                 Some(rt)
-            },
+            }
             Err(e) => {
                 println!("Ray Tracing not supported or failed to init: {}", e);
                 None
             }
         };
 
-        Ok(Self { 
-            context, 
+        Ok(Self {
+            context,
             swapchain,
             allocator,
             render_pass,
@@ -168,16 +190,23 @@ impl Reactor {
 
     /// Get maximum supported MSAA sample count
     pub fn get_max_msaa_samples(&self) -> vk::SampleCountFlags {
-        let props = unsafe { 
-            self.context.instance.get_physical_device_properties(self.context.physical_device) 
+        let props = unsafe {
+            self.context
+                .instance
+                .get_physical_device_properties(self.context.physical_device)
         };
         let counts = props.limits.framebuffer_color_sample_counts
             & props.limits.framebuffer_depth_sample_counts;
 
-        if counts.contains(vk::SampleCountFlags::TYPE_8) { vk::SampleCountFlags::TYPE_8 }
-        else if counts.contains(vk::SampleCountFlags::TYPE_4) { vk::SampleCountFlags::TYPE_4 }
-        else if counts.contains(vk::SampleCountFlags::TYPE_2) { vk::SampleCountFlags::TYPE_2 }
-        else { vk::SampleCountFlags::TYPE_1 }
+        if counts.contains(vk::SampleCountFlags::TYPE_8) {
+            vk::SampleCountFlags::TYPE_8
+        } else if counts.contains(vk::SampleCountFlags::TYPE_4) {
+            vk::SampleCountFlags::TYPE_4
+        } else if counts.contains(vk::SampleCountFlags::TYPE_2) {
+            vk::SampleCountFlags::TYPE_2
+        } else {
+            vk::SampleCountFlags::TYPE_1
+        }
     }
 
     pub fn handle_event(&mut self, event: &WindowEvent) {
@@ -188,11 +217,17 @@ impl Reactor {
     }
 
     pub fn recreate_swapchain(&mut self) -> Result<(), Box<dyn Error>> {
-        unsafe { self.context.device.device_wait_idle()?; }
+        unsafe {
+            self.context.device.device_wait_idle()?;
+        }
 
         let capabilities = unsafe {
-            self.context.surface_loader
-                .get_physical_device_surface_capabilities(self.context.physical_device, self.context.surface)?
+            self.context
+                .surface_loader
+                .get_physical_device_surface_capabilities(
+                    self.context.physical_device,
+                    self.context.surface,
+                )?
         };
 
         if capabilities.current_extent.width == 0 || capabilities.current_extent.height == 0 {
@@ -205,33 +240,49 @@ impl Reactor {
                 self.context.device.destroy_framebuffer(framebuffer, None);
             }
         }
-        
+
         // Destroy old depth resources
         if let Some(view) = self.depth_image_view.take() {
-            unsafe { self.context.device.destroy_image_view(view, None); }
+            unsafe {
+                self.context.device.destroy_image_view(view, None);
+            }
         }
         if let Some(image) = self.depth_image.take() {
-            unsafe { self.context.device.destroy_image(image, None); }
+            unsafe {
+                self.context.device.destroy_image(image, None);
+            }
         }
         if let Some(memory) = self.depth_memory.take() {
-            unsafe { self.context.device.free_memory(memory, None); }
+            unsafe {
+                self.context.device.free_memory(memory, None);
+            }
         }
-        
+
         // Destroy old MSAA resources if they exist
         if let Some(view) = self.msaa_image_view.take() {
-            unsafe { self.context.device.destroy_image_view(view, None); }
+            unsafe {
+                self.context.device.destroy_image_view(view, None);
+            }
         }
         if let Some(image) = self.msaa_image.take() {
-            unsafe { self.context.device.destroy_image(image, None); }
+            unsafe {
+                self.context.device.destroy_image(image, None);
+            }
         }
         if let Some(memory) = self.msaa_memory.take() {
-            unsafe { self.context.device.free_memory(memory, None); }
+            unsafe {
+                self.context.device.free_memory(memory, None);
+            }
         }
-        
+
         self.swapchain.destroy(&self.context.device);
 
-        self.swapchain = Swapchain::new(&self.context, capabilities.current_extent.width, capabilities.current_extent.height)?;
-        
+        self.swapchain = Swapchain::new(
+            &self.context,
+            capabilities.current_extent.width,
+            capabilities.current_extent.height,
+        )?;
+
         // Recreate MSAA resources if MSAA is enabled
         if self.msaa_samples != vk::SampleCountFlags::TYPE_1 {
             let (img, view, mem) = Self::create_msaa_resources(
@@ -239,13 +290,13 @@ impl Reactor {
                 self.swapchain.extent.width,
                 self.swapchain.extent.height,
                 self.swapchain.format,
-                self.msaa_samples
+                self.msaa_samples,
             )?;
             self.msaa_image = Some(img);
             self.msaa_image_view = Some(view);
             self.msaa_memory = Some(mem);
         }
-        
+
         // Recreate depth buffer
         let (depth_img, depth_view, depth_mem) = Self::create_depth_resources(
             &self.context,
@@ -257,48 +308,85 @@ impl Reactor {
         self.depth_image = Some(depth_img);
         self.depth_image_view = Some(depth_view);
         self.depth_memory = Some(depth_mem);
-        
+
         // Recreate framebuffers with depth support
         self.framebuffers = Self::create_framebuffers_with_depth(
-            &self.context, 
-            &self.swapchain, 
+            &self.context,
+            &self.swapchain,
             self.render_pass,
             self.msaa_image_view,
             depth_view,
-            self.msaa_samples
+            self.msaa_samples,
         )?;
-        
+
         Ok(())
     }
 
-    pub fn create_mesh(&self, vertices: &[crate::vertex::Vertex], indices: &[u32]) -> Result<Mesh, Box<dyn Error>> {
+    pub fn create_mesh(
+        &self,
+        vertices: &[crate::vertex::Vertex],
+        indices: &[u32],
+    ) -> Result<Mesh, Box<dyn Error>> {
         Mesh::new(&self.context, &self.allocator, vertices, indices)
     }
 
     /// Load texture from file (PNG, JPG, BMP, etc.)
-    pub fn load_texture(&self, path: &str) -> Result<crate::resources::texture::Texture, Box<dyn Error>> {
-        crate::resources::texture::Texture::from_file(&self.context, self.allocator.clone(), path, true)
+    pub fn load_texture(
+        &self,
+        path: &str,
+    ) -> Result<crate::resources::texture::Texture, Box<dyn Error>> {
+        crate::resources::texture::Texture::from_file(
+            &self.context,
+            self.allocator.clone(),
+            path,
+            true,
+        )
     }
 
     /// Load texture from embedded bytes
-    pub fn load_texture_bytes(&self, bytes: &[u8]) -> Result<crate::resources::texture::Texture, Box<dyn Error>> {
-        crate::resources::texture::Texture::from_bytes(&self.context, self.allocator.clone(), bytes, true)
+    pub fn load_texture_bytes(
+        &self,
+        bytes: &[u8],
+    ) -> Result<crate::resources::texture::Texture, Box<dyn Error>> {
+        crate::resources::texture::Texture::from_bytes(
+            &self.context,
+            self.allocator.clone(),
+            bytes,
+            true,
+        )
     }
 
     /// Create a solid color texture
-    pub fn create_solid_texture(&self, r: u8, g: u8, b: u8, a: u8) -> Result<crate::resources::texture::Texture, Box<dyn Error>> {
-        crate::resources::texture::Texture::solid_color(&self.context, self.allocator.clone(), r, g, b, a)
+    pub fn create_solid_texture(
+        &self,
+        r: u8,
+        g: u8,
+        b: u8,
+        a: u8,
+    ) -> Result<crate::resources::texture::Texture, Box<dyn Error>> {
+        crate::resources::texture::Texture::solid_color(
+            &self.context,
+            self.allocator.clone(),
+            r,
+            g,
+            b,
+            a,
+        )
     }
 
-    pub fn create_material(&self, vert_code: &[u32], frag_code: &[u32]) -> Result<Material, Box<dyn Error>> {
+    pub fn create_material(
+        &self,
+        vert_code: &[u32],
+        frag_code: &[u32],
+    ) -> Result<Material, Box<dyn Error>> {
         Material::new_with_msaa(
-            &self.context, 
-            self.render_pass, 
-            vert_code, 
-            frag_code, 
-            self.swapchain.extent.width, 
+            &self.context,
+            self.render_pass,
+            vert_code,
+            frag_code,
+            self.swapchain.extent.width,
             self.swapchain.extent.height,
-            self.msaa_samples
+            self.msaa_samples,
         )
     }
 
@@ -322,7 +410,10 @@ impl Reactor {
     }
 
     #[allow(dead_code)]
-    fn create_render_pass(context: &VulkanContext, format: vk::Format) -> Result<vk::RenderPass, Box<dyn Error>> {
+    fn create_render_pass(
+        context: &VulkanContext,
+        format: vk::Format,
+    ) -> Result<vk::RenderPass, Box<dyn Error>> {
         // TODO: MSAA requires creating MSAA image buffers and modifying framebuffers
         // For now, use simple render pass. MSAA can be enabled by:
         // 1. Creating MSAA color buffer with MsaaTarget
@@ -333,20 +424,29 @@ impl Reactor {
     }
 
     fn get_max_msaa_samples_static(context: &VulkanContext) -> vk::SampleCountFlags {
-        let props = unsafe { 
-            context.instance.get_physical_device_properties(context.physical_device) 
+        let props = unsafe {
+            context
+                .instance
+                .get_physical_device_properties(context.physical_device)
         };
         let counts = props.limits.framebuffer_color_sample_counts
             & props.limits.framebuffer_depth_sample_counts;
 
         // Use 4x MSAA as default (good balance of quality/performance)
-        if counts.contains(vk::SampleCountFlags::TYPE_4) { vk::SampleCountFlags::TYPE_4 }
-        else if counts.contains(vk::SampleCountFlags::TYPE_2) { vk::SampleCountFlags::TYPE_2 }
-        else { vk::SampleCountFlags::TYPE_1 }
+        if counts.contains(vk::SampleCountFlags::TYPE_4) {
+            vk::SampleCountFlags::TYPE_4
+        } else if counts.contains(vk::SampleCountFlags::TYPE_2) {
+            vk::SampleCountFlags::TYPE_2
+        } else {
+            vk::SampleCountFlags::TYPE_1
+        }
     }
 
     #[allow(dead_code)]
-    fn create_render_pass_simple(context: &VulkanContext, format: vk::Format) -> Result<vk::RenderPass, Box<dyn Error>> {
+    fn create_render_pass_simple(
+        context: &VulkanContext,
+        format: vk::Format,
+    ) -> Result<vk::RenderPass, Box<dyn Error>> {
         let color_attachment = vk::AttachmentDescription::default()
             .format(format)
             .samples(vk::SampleCountFlags::TYPE_1)
@@ -387,9 +487,13 @@ impl Reactor {
     }
 
     #[allow(dead_code)]
-    fn create_render_pass_msaa(context: &VulkanContext, format: vk::Format, samples: vk::SampleCountFlags) -> Result<vk::RenderPass, Box<dyn Error>> {
+    fn create_render_pass_msaa(
+        context: &VulkanContext,
+        format: vk::Format,
+        samples: vk::SampleCountFlags,
+    ) -> Result<vk::RenderPass, Box<dyn Error>> {
         println!("ðŸ”· Enabling MSAA {:?} for anti-aliasing", samples);
-        
+
         // MSAA color attachment (multisampled)
         let msaa_attachment = vk::AttachmentDescription::default()
             .format(format)
@@ -451,11 +555,12 @@ impl Reactor {
 
     #[allow(dead_code)]
     fn create_framebuffers(
-        context: &VulkanContext, 
-        swapchain: &Swapchain, 
-        render_pass: vk::RenderPass
+        context: &VulkanContext,
+        swapchain: &Swapchain,
+        render_pass: vk::RenderPass,
     ) -> Result<Vec<vk::Framebuffer>, Box<dyn Error>> {
-        swapchain.image_views
+        swapchain
+            .image_views
             .iter()
             .map(|&view| {
                 let attachments = [view];
@@ -465,7 +570,12 @@ impl Reactor {
                     .width(swapchain.extent.width)
                     .height(swapchain.extent.height)
                     .layers(1);
-                unsafe { context.device.create_framebuffer(&framebuffer_info, None).map_err(|e| e.into()) }
+                unsafe {
+                    context
+                        .device
+                        .create_framebuffer(&framebuffer_info, None)
+                        .map_err(|e| e.into())
+                }
             })
             .collect()
     }
@@ -487,7 +597,9 @@ impl Reactor {
             .format(format)
             .tiling(vk::ImageTiling::OPTIMAL)
             .initial_layout(vk::ImageLayout::UNDEFINED)
-            .usage(vk::ImageUsageFlags::TRANSIENT_ATTACHMENT | vk::ImageUsageFlags::COLOR_ATTACHMENT)
+            .usage(
+                vk::ImageUsageFlags::TRANSIENT_ATTACHMENT | vk::ImageUsageFlags::COLOR_ATTACHMENT,
+            )
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .samples(samples);
 
@@ -495,12 +607,19 @@ impl Reactor {
         let requirements = unsafe { context.device.get_image_memory_requirements(image) };
 
         // Find memory type
-        let memory_props = unsafe { context.instance.get_physical_device_memory_properties(context.physical_device) };
+        let memory_props = unsafe {
+            context
+                .instance
+                .get_physical_device_memory_properties(context.physical_device)
+        };
         let memory_type_index = (0..memory_props.memory_type_count)
             .find(|&i| {
                 let suitable = (requirements.memory_type_bits & (1 << i)) != 0;
                 let memory_type = memory_props.memory_types[i as usize];
-                suitable && memory_type.property_flags.contains(vk::MemoryPropertyFlags::DEVICE_LOCAL)
+                suitable
+                    && memory_type
+                        .property_flags
+                        .contains(vk::MemoryPropertyFlags::DEVICE_LOCAL)
             })
             .ok_or("Failed to find suitable memory type for MSAA")?;
 
@@ -533,7 +652,7 @@ impl Reactor {
     /// Create render pass with MSAA support
     #[allow(dead_code)]
     fn create_render_pass_with_msaa(
-        context: &VulkanContext, 
+        context: &VulkanContext,
         format: vk::Format,
         samples: vk::SampleCountFlags,
     ) -> Result<vk::RenderPass, Box<dyn Error>> {
@@ -604,14 +723,18 @@ impl Reactor {
     /// Create framebuffers with MSAA support
     #[allow(dead_code)]
     fn create_framebuffers_msaa(
-        context: &VulkanContext, 
-        swapchain: &Swapchain, 
+        context: &VulkanContext,
+        swapchain: &Swapchain,
         render_pass: vk::RenderPass,
         msaa_view: Option<vk::ImageView>,
         samples: vk::SampleCountFlags,
     ) -> Result<Vec<vk::Framebuffer>, Box<dyn Error>> {
-        println!("ðŸ”· Creating framebuffers: samples={:?}, msaa_view={:?}", samples, msaa_view.is_some());
-        
+        println!(
+            "ðŸ”· Creating framebuffers: samples={:?}, msaa_view={:?}",
+            samples,
+            msaa_view.is_some()
+        );
+
         if samples == vk::SampleCountFlags::TYPE_1 {
             // No MSAA - use simple framebuffers
             println!("ðŸ”· Using simple framebuffers (no MSAA)");
@@ -621,14 +744,17 @@ impl Reactor {
         let msaa_view = match msaa_view {
             Some(view) => view,
             None => {
-                println!("âš ï¸ MSAA requested but no MSAA view available, falling back to simple");
+                println!(
+                    "âš ï¸ MSAA requested but no MSAA view available, falling back to simple"
+                );
                 return Self::create_framebuffers(context, swapchain, render_pass);
             }
         };
-        
+
         println!("ðŸ”· Creating MSAA framebuffers with 2 attachments");
 
-        swapchain.image_views
+        swapchain
+            .image_views
             .iter()
             .map(|&resolve_view| {
                 // MSAA framebuffer has 2 attachments: MSAA color + resolve
@@ -639,19 +765,32 @@ impl Reactor {
                     .width(swapchain.extent.width)
                     .height(swapchain.extent.height)
                     .layers(1);
-                unsafe { context.device.create_framebuffer(&framebuffer_info, None).map_err(|e| e.into()) }
+                unsafe {
+                    context
+                        .device
+                        .create_framebuffer(&framebuffer_info, None)
+                        .map_err(|e| e.into())
+                }
             })
             .collect()
     }
 
-    pub fn draw_scene(&mut self, scene: &crate::scene::Scene, view_projection: &glam::Mat4) -> Result<(), Box<dyn Error>> {
+    pub fn draw_scene(
+        &mut self,
+        scene: &crate::scene::Scene,
+        view_projection: &glam::Mat4,
+    ) -> Result<(), Box<dyn Error>> {
         if self.resized {
             self.recreate_swapchain()?;
             self.resized = false;
         }
 
         unsafe {
-            self.context.device.wait_for_fences(&[self.in_flight_fences[self.current_frame]], true, u64::MAX)?;
+            self.context.device.wait_for_fences(
+                &[self.in_flight_fences[self.current_frame]],
+                true,
+                u64::MAX,
+            )?;
         }
 
         let (image_index, _) = unsafe {
@@ -662,9 +801,11 @@ impl Reactor {
                 vk::Fence::null(),
             ) {
                 Ok(result) => {
-                    self.context.device.reset_fences(&[self.in_flight_fences[self.current_frame]])?;
+                    self.context
+                        .device
+                        .reset_fences(&[self.in_flight_fences[self.current_frame]])?;
                     result
-                },
+                }
                 Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
                     self.recreate_swapchain()?;
                     return Ok(());
@@ -676,28 +817,23 @@ impl Reactor {
         // Record command buffer
         let command_buffer = self.command_buffers[self.current_frame];
         unsafe {
-            self.context.device.reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
+            self.context
+                .device
+                .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
         }
 
         let begin_info = vk::CommandBufferBeginInfo::default();
-        
+
         // Clear values: [MSAA color, resolve color, depth]
         let clear_values = [
             vk::ClearValue {
-                color: vk::ClearColorValue {
-                    float32: [0.1, 0.1, 0.1, 1.0],
-                },
+                color: vk::ClearColorValue { float32: [0.1, 0.1, 0.1, 1.0] },
             },
             vk::ClearValue {
-                color: vk::ClearColorValue {
-                    float32: [0.1, 0.1, 0.1, 1.0],
-                },
+                color: vk::ClearColorValue { float32: [0.1, 0.1, 0.1, 1.0] },
             },
             vk::ClearValue {
-                depth_stencil: vk::ClearDepthStencilValue {
-                    depth: 1.0,
-                    stencil: 0,
-                },
+                depth_stencil: vk::ClearDepthStencilValue { depth: 1.0, stencil: 0 },
             },
         ];
 
@@ -711,14 +847,16 @@ impl Reactor {
             .clear_values(&clear_values);
 
         unsafe {
-            self.context.device.begin_command_buffer(command_buffer, &begin_info)?;
-            
+            self.context
+                .device
+                .begin_command_buffer(command_buffer, &begin_info)?;
+
             self.context.device.cmd_begin_render_pass(
                 command_buffer,
                 &render_pass_begin_info,
                 vk::SubpassContents::INLINE,
             );
-            
+
             // Dynamic State (Viewport/Scissor) - Set once per frame as it covers the whole screen
             let viewport = vk::Viewport {
                 x: 0.0,
@@ -732,8 +870,12 @@ impl Reactor {
                 offset: vk::Offset2D { x: 0, y: 0 },
                 extent: self.swapchain.extent,
             };
-            self.context.device.cmd_set_viewport(command_buffer, 0, &[viewport]);
-            self.context.device.cmd_set_scissor(command_buffer, 0, &[scissor]);
+            self.context
+                .device
+                .cmd_set_viewport(command_buffer, 0, &[viewport]);
+            self.context
+                .device
+                .cmd_set_scissor(command_buffer, 0, &[scissor]);
 
             for object in &scene.objects {
                 // Bind pipeline and descriptor sets (for textures)
@@ -750,10 +892,7 @@ impl Reactor {
                         mvp: glam::Mat4,
                         model: glam::Mat4,
                     }
-                    let push = PushConstants {
-                        mvp,
-                        model: object.transform,
-                    };
+                    let push = PushConstants { mvp, model: object.transform };
                     let constants_array = std::slice::from_raw_parts(
                         &push as *const PushConstants as *const u8,
                         std::mem::size_of::<PushConstants>(),
@@ -782,20 +921,32 @@ impl Reactor {
 
                 let vertex_buffers = [object.mesh.vertex_buffer.handle];
                 let offsets = [0];
-                self.context.device.cmd_bind_vertex_buffers(command_buffer, 0, &vertex_buffers, &offsets);
-                
-                self.context.device.cmd_bind_index_buffer(
-                    command_buffer, 
-                    object.mesh.index_buffer.handle, 
-                    0, 
-                    vk::IndexType::UINT32
+                self.context.device.cmd_bind_vertex_buffers(
+                    command_buffer,
+                    0,
+                    &vertex_buffers,
+                    &offsets,
                 );
 
-                self.context.device.cmd_draw_indexed(command_buffer, object.mesh.index_count, 1, 0, 0, 0);
+                self.context.device.cmd_bind_index_buffer(
+                    command_buffer,
+                    object.mesh.index_buffer.handle,
+                    0,
+                    vk::IndexType::UINT32,
+                );
+
+                self.context.device.cmd_draw_indexed(
+                    command_buffer,
+                    object.mesh.index_count,
+                    1,
+                    0,
+                    0,
+                    0,
+                );
             }
-            
+
             self.context.device.cmd_end_render_pass(command_buffer);
-            
+
             self.context.device.end_command_buffer(command_buffer)?;
         }
 
@@ -813,9 +964,9 @@ impl Reactor {
 
         unsafe {
             self.context.device.queue_submit(
-                self.context.graphics_queue, 
-                &[submit_info], 
-                self.in_flight_fences[self.current_frame]
+                self.context.graphics_queue,
+                &[submit_info],
+                self.in_flight_fences[self.current_frame],
             )?;
         }
 
@@ -827,14 +978,16 @@ impl Reactor {
             .image_indices(&image_indices);
 
         let result = unsafe {
-            self.swapchain.loader.queue_present(self.context.graphics_queue, &present_info)
+            self.swapchain
+                .loader
+                .queue_present(self.context.graphics_queue, &present_info)
         };
 
         match result {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(vk::Result::ERROR_OUT_OF_DATE_KHR) | Err(vk::Result::SUBOPTIMAL_KHR) => {
                 self.resized = true;
-            },
+            }
             Err(e) => return Err(Box::new(e)),
         }
 
@@ -843,14 +996,23 @@ impl Reactor {
         Ok(())
     }
 
-    pub fn draw_frame(&mut self, mesh: &Mesh, material: &Material, transform: &glam::Mat4) -> Result<(), Box<dyn Error>> {
+    pub fn draw_frame(
+        &mut self,
+        mesh: &Mesh,
+        material: &Material,
+        transform: &glam::Mat4,
+    ) -> Result<(), Box<dyn Error>> {
         if self.resized {
             self.recreate_swapchain()?;
             self.resized = false;
         }
 
         unsafe {
-            self.context.device.wait_for_fences(&[self.in_flight_fences[self.current_frame]], true, u64::MAX)?;
+            self.context.device.wait_for_fences(
+                &[self.in_flight_fences[self.current_frame]],
+                true,
+                u64::MAX,
+            )?;
         }
 
         let (image_index, _) = unsafe {
@@ -861,9 +1023,11 @@ impl Reactor {
                 vk::Fence::null(),
             ) {
                 Ok(result) => {
-                    self.context.device.reset_fences(&[self.in_flight_fences[self.current_frame]])?;
+                    self.context
+                        .device
+                        .reset_fences(&[self.in_flight_fences[self.current_frame]])?;
                     result
-                },
+                }
                 Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
                     self.recreate_swapchain()?;
                     return Ok(());
@@ -875,18 +1039,16 @@ impl Reactor {
         // Record command buffer
         let command_buffer = self.command_buffers[self.current_frame];
         unsafe {
-            self.context.device.reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
+            self.context
+                .device
+                .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
         }
 
         let begin_info = vk::CommandBufferBeginInfo::default();
-        
-        let clear_values = [
-            vk::ClearValue {
-                color: vk::ClearColorValue {
-                    float32: [0.1, 0.1, 0.1, 1.0],
-                },
-            },
-        ];
+
+        let clear_values = [vk::ClearValue {
+            color: vk::ClearColorValue { float32: [0.1, 0.1, 0.1, 1.0] },
+        }];
 
         let render_pass_begin_info = vk::RenderPassBeginInfo::default()
             .render_pass(self.render_pass)
@@ -898,14 +1060,16 @@ impl Reactor {
             .clear_values(&clear_values);
 
         unsafe {
-            self.context.device.begin_command_buffer(command_buffer, &begin_info)?;
-            
+            self.context
+                .device
+                .begin_command_buffer(command_buffer, &begin_info)?;
+
             self.context.device.cmd_begin_render_pass(
                 command_buffer,
                 &render_pass_begin_info,
                 vk::SubpassContents::INLINE,
             );
-            
+
             self.context.device.cmd_bind_pipeline(
                 command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
@@ -925,8 +1089,12 @@ impl Reactor {
                 offset: vk::Offset2D { x: 0, y: 0 },
                 extent: self.swapchain.extent,
             };
-            self.context.device.cmd_set_viewport(command_buffer, 0, &[viewport]);
-            self.context.device.cmd_set_scissor(command_buffer, 0, &[scissor]);
+            self.context
+                .device
+                .cmd_set_viewport(command_buffer, 0, &[viewport]);
+            self.context
+                .device
+                .cmd_set_scissor(command_buffer, 0, &[scissor]);
 
             // Push Constants
             let constants_array = std::slice::from_raw_parts(
@@ -943,19 +1111,26 @@ impl Reactor {
 
             let vertex_buffers = [mesh.vertex_buffer.handle];
             let offsets = [0];
-            self.context.device.cmd_bind_vertex_buffers(command_buffer, 0, &vertex_buffers, &offsets);
-            
-            self.context.device.cmd_bind_index_buffer(
-                command_buffer, 
-                mesh.index_buffer.handle, 
-                0, 
-                vk::IndexType::UINT32
+            self.context.device.cmd_bind_vertex_buffers(
+                command_buffer,
+                0,
+                &vertex_buffers,
+                &offsets,
             );
 
-            self.context.device.cmd_draw_indexed(command_buffer, mesh.index_count, 1, 0, 0, 0);
-            
+            self.context.device.cmd_bind_index_buffer(
+                command_buffer,
+                mesh.index_buffer.handle,
+                0,
+                vk::IndexType::UINT32,
+            );
+
+            self.context
+                .device
+                .cmd_draw_indexed(command_buffer, mesh.index_count, 1, 0, 0, 0);
+
             self.context.device.cmd_end_render_pass(command_buffer);
-            
+
             self.context.device.end_command_buffer(command_buffer)?;
         }
 
@@ -988,7 +1163,9 @@ impl Reactor {
             .image_indices(&image_indices);
 
         let result = unsafe {
-            self.swapchain.loader.queue_present(self.context.graphics_queue, &present_info)
+            self.swapchain
+                .loader
+                .queue_present(self.context.graphics_queue, &present_info)
         };
 
         self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -1013,9 +1190,14 @@ impl Reactor {
 
         for &format in &candidates {
             let props = unsafe {
-                context.instance.get_physical_device_format_properties(context.physical_device, format)
+                context
+                    .instance
+                    .get_physical_device_format_properties(context.physical_device, format)
             };
-            if props.optimal_tiling_features.contains(vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT) {
+            if props
+                .optimal_tiling_features
+                .contains(vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT)
+            {
                 return Ok(format);
             }
         }
@@ -1046,12 +1228,19 @@ impl Reactor {
         let image = unsafe { context.device.create_image(&image_info, None)? };
         let requirements = unsafe { context.device.get_image_memory_requirements(image) };
 
-        let memory_props = unsafe { context.instance.get_physical_device_memory_properties(context.physical_device) };
+        let memory_props = unsafe {
+            context
+                .instance
+                .get_physical_device_memory_properties(context.physical_device)
+        };
         let memory_type_index = (0..memory_props.memory_type_count)
             .find(|&i| {
                 let suitable = (requirements.memory_type_bits & (1 << i)) != 0;
                 let memory_type = memory_props.memory_types[i as usize];
-                suitable && memory_type.property_flags.contains(vk::MemoryPropertyFlags::DEVICE_LOCAL)
+                suitable
+                    && memory_type
+                        .property_flags
+                        .contains(vk::MemoryPropertyFlags::DEVICE_LOCAL)
             })
             .ok_or("Failed to find suitable memory type for depth buffer")?;
 
@@ -1126,10 +1315,19 @@ impl Reactor {
             let dependency = vk::SubpassDependency::default()
                 .src_subpass(vk::SUBPASS_EXTERNAL)
                 .dst_subpass(0)
-                .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
+                .src_stage_mask(
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                        | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+                )
                 .src_access_mask(vk::AccessFlags::empty())
-                .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
-                .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE);
+                .dst_stage_mask(
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                        | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+                )
+                .dst_access_mask(
+                    vk::AccessFlags::COLOR_ATTACHMENT_WRITE
+                        | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+                );
 
             let attachments = [color_attachment, depth_attachment];
             let subpasses = [subpass];
@@ -1197,10 +1395,19 @@ impl Reactor {
         let dependency = vk::SubpassDependency::default()
             .src_subpass(vk::SUBPASS_EXTERNAL)
             .dst_subpass(0)
-            .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
+            .src_stage_mask(
+                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                    | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+            )
             .src_access_mask(vk::AccessFlags::empty())
-            .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
-            .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE);
+            .dst_stage_mask(
+                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                    | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+            )
+            .dst_access_mask(
+                vk::AccessFlags::COLOR_ATTACHMENT_WRITE
+                    | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+            );
 
         let attachments = [msaa_color, resolve_color, depth_attachment];
         let subpasses = [subpass];
@@ -1225,7 +1432,8 @@ impl Reactor {
     ) -> Result<Vec<vk::Framebuffer>, Box<dyn Error>> {
         if samples == vk::SampleCountFlags::TYPE_1 {
             // No MSAA: [color, depth]
-            return swapchain.image_views
+            return swapchain
+                .image_views
                 .iter()
                 .map(|&color_view| {
                     let attachments = [color_view, depth_view];
@@ -1235,15 +1443,21 @@ impl Reactor {
                         .width(swapchain.extent.width)
                         .height(swapchain.extent.height)
                         .layers(1);
-                    unsafe { context.device.create_framebuffer(&framebuffer_info, None).map_err(|e| e.into()) }
+                    unsafe {
+                        context
+                            .device
+                            .create_framebuffer(&framebuffer_info, None)
+                            .map_err(|e| e.into())
+                    }
                 })
                 .collect();
         }
 
         // MSAA: [msaa_color, resolve_color, depth]
         let msaa_view = msaa_view.ok_or("MSAA view required for MSAA framebuffers")?;
-        
-        swapchain.image_views
+
+        swapchain
+            .image_views
             .iter()
             .map(|&resolve_view| {
                 let attachments = [msaa_view, resolve_view, depth_view];
@@ -1253,7 +1467,12 @@ impl Reactor {
                     .width(swapchain.extent.width)
                     .height(swapchain.extent.height)
                     .layers(1);
-                unsafe { context.device.create_framebuffer(&framebuffer_info, None).map_err(|e| e.into()) }
+                unsafe {
+                    context
+                        .device
+                        .create_framebuffer(&framebuffer_info, None)
+                        .map_err(|e| e.into())
+                }
             })
             .collect()
     }
@@ -1264,7 +1483,7 @@ impl Drop for Reactor {
         unsafe {
             // Wait for all GPU operations to complete
             let _ = self.context.device.device_wait_idle();
-            
+
             // Destroy depth resources
             if let Some(depth_view) = self.depth_image_view.take() {
                 self.context.device.destroy_image_view(depth_view, None);
@@ -1275,7 +1494,7 @@ impl Drop for Reactor {
             if let Some(depth_memory) = self.depth_memory.take() {
                 self.context.device.free_memory(depth_memory, None);
             }
-            
+
             // Destroy MSAA resources
             if let Some(msaa_view) = self.msaa_image_view.take() {
                 self.context.device.destroy_image_view(msaa_view, None);
@@ -1286,29 +1505,39 @@ impl Drop for Reactor {
             if let Some(msaa_memory) = self.msaa_memory.take() {
                 self.context.device.free_memory(msaa_memory, None);
             }
-            
+
             // Destroy framebuffers
             for &framebuffer in &self.framebuffers {
                 self.context.device.destroy_framebuffer(framebuffer, None);
             }
-            
+
             // Destroy render pass
-            self.context.device.destroy_render_pass(self.render_pass, None);
+            self.context
+                .device
+                .destroy_render_pass(self.render_pass, None);
 
             // Destroy sync objects
             for i in 0..MAX_FRAMES_IN_FLIGHT {
-                self.context.device.destroy_semaphore(self.image_available_semaphores[i], None);
-                self.context.device.destroy_semaphore(self.render_finished_semaphores[i], None);
-                self.context.device.destroy_fence(self.in_flight_fences[i], None);
+                self.context
+                    .device
+                    .destroy_semaphore(self.image_available_semaphores[i], None);
+                self.context
+                    .device
+                    .destroy_semaphore(self.render_finished_semaphores[i], None);
+                self.context
+                    .device
+                    .destroy_fence(self.in_flight_fences[i], None);
             }
-            
+
             // Destroy command pool
-            self.context.device.destroy_command_pool(self.command_pool, None);
+            self.context
+                .device
+                .destroy_command_pool(self.command_pool, None);
         }
-        
+
         // Destroy swapchain
         self.swapchain.destroy(&self.context.device);
-        
+
         // Allocator must be dropped before device
         // Force drop of allocator by taking ownership
         if let Ok(allocator) = self.allocator.lock() {

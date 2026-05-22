@@ -13,14 +13,14 @@
 
 use winit::{
     application::ApplicationHandler,
+    dpi::LogicalSize,
     event::WindowEvent,
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::{Window, WindowId},
-    dpi::LogicalSize,
 };
 
 use crate::reactor::Reactor;
-use crate::input::Input;
+use crate::systems::input::Input;
 use crate::utils::time::Time;
 
 use std::sync::Arc;
@@ -38,7 +38,9 @@ pub enum RendererMode {
 }
 
 impl Default for RendererMode {
-    fn default() -> Self { Self::Forward }
+    fn default() -> Self {
+        Self::Forward
+    }
 }
 
 /// Configuration for a REACTOR application.
@@ -232,7 +234,7 @@ pub struct ReactorContext {
 
     // Game systems — ALL inherited and ready
     pub camera: crate::systems::camera::Camera,
-    pub scene: crate::scene::Scene,
+    pub scene: crate::systems::scene::Scene,
     pub lighting: crate::systems::lighting::LightingSystem,
     pub physics: crate::systems::physics::PhysicsWorld,
     pub culling: crate::systems::frustum::CullingSystem,
@@ -248,7 +250,7 @@ impl Drop for ReactorContext {
         // This releases Arc references to Mesh/Material which contain Vulkan resources
         // that need the allocator (which is inside reactor) to be freed
         self.scene.clear();
-        
+
         // SAFETY: device_wait_idle() blocks until all GPU operations complete.
         // This is safe to call at any time and has no aliasing requirements.
         // We call it here to ensure all GPU operations complete before
@@ -277,7 +279,9 @@ impl ReactorContext {
     /// Get window aspect ratio
     pub fn aspect_ratio(&self) -> f32 {
         let size = self.window.inner_size();
-        if size.height == 0 { return 1.0; }
+        if size.height == 0 {
+            return 1.0;
+        }
         size.width as f32 / size.height as f32
     }
 
@@ -297,28 +301,58 @@ impl ReactorContext {
     // =========================================================================
 
     /// Create a mesh from vertices and indices
-    pub fn create_mesh(&self, vertices: &[crate::vertex::Vertex], indices: &[u32]) -> crate::core::error::ReactorResult<crate::mesh::Mesh> {
-        self.reactor.create_mesh(vertices, indices).map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
+    pub fn create_mesh(
+        &self,
+        vertices: &[crate::resources::vertex::Vertex],
+        indices: &[u32],
+    ) -> crate::core::error::ReactorResult<crate::resources::mesh::Mesh> {
+        self.reactor
+            .create_mesh(vertices, indices)
+            .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
     }
 
     /// Create a material from SPIR-V shader code
-    pub fn create_material(&self, vert_code: &[u32], frag_code: &[u32]) -> crate::core::error::ReactorResult<crate::material::Material> {
-        self.reactor.create_material(vert_code, frag_code).map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
+    pub fn create_material(
+        &self,
+        vert_code: &[u32],
+        frag_code: &[u32],
+    ) -> crate::core::error::ReactorResult<crate::resources::material::Material> {
+        self.reactor
+            .create_material(vert_code, frag_code)
+            .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
     }
 
     /// Load texture from file (PNG, JPG, BMP, etc.)
-    pub fn load_texture(&self, path: &str) -> crate::core::error::ReactorResult<crate::resources::texture::Texture> {
-        self.reactor.load_texture(path).map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
+    pub fn load_texture(
+        &self,
+        path: &str,
+    ) -> crate::core::error::ReactorResult<crate::resources::texture::Texture> {
+        self.reactor
+            .load_texture(path)
+            .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
     }
 
     /// Load texture from embedded bytes
-    pub fn load_texture_bytes(&self, bytes: &[u8]) -> crate::core::error::ReactorResult<crate::resources::texture::Texture> {
-        self.reactor.load_texture_bytes(bytes).map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
+    pub fn load_texture_bytes(
+        &self,
+        bytes: &[u8],
+    ) -> crate::core::error::ReactorResult<crate::resources::texture::Texture> {
+        self.reactor
+            .load_texture_bytes(bytes)
+            .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
     }
 
     /// Create a solid color texture
-    pub fn create_solid_texture(&self, r: u8, g: u8, b: u8, a: u8) -> crate::core::error::ReactorResult<crate::resources::texture::Texture> {
-        self.reactor.create_solid_texture(r, g, b, a).map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
+    pub fn create_solid_texture(
+        &self,
+        r: u8,
+        g: u8,
+        b: u8,
+        a: u8,
+    ) -> crate::core::error::ReactorResult<crate::resources::texture::Texture> {
+        self.reactor
+            .create_solid_texture(r, g, b, a)
+            .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
     }
 
     /// Create a textured material with a diffuse texture
@@ -327,8 +361,10 @@ impl ReactorContext {
         vert_code: &[u32],
         frag_code: &[u32],
         texture: &crate::resources::texture::Texture,
-    ) -> crate::core::error::ReactorResult<crate::material::Material> {
-        self.reactor.create_textured_material(vert_code, frag_code, texture).map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
+    ) -> crate::core::error::ReactorResult<crate::resources::material::Material> {
+        self.reactor
+            .create_textured_material(vert_code, frag_code, texture)
+            .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
     }
 
     // =========================================================================
@@ -336,29 +372,42 @@ impl ReactorContext {
     // =========================================================================
 
     /// Load an OBJ file and return the mesh
-    pub fn load_obj(&self, path: &str) -> crate::core::error::ReactorResult<crate::mesh::Mesh> {
+    pub fn load_obj(
+        &self,
+        path: &str,
+    ) -> crate::core::error::ReactorResult<crate::resources::mesh::Mesh> {
         use crate::resources::model::ObjData;
-        
-        let obj = ObjData::load(path).map_err(|_e| crate::core::error::ReactorError::file_not_found(path))?;
+
+        let obj = ObjData::load(path)
+            .map_err(|_e| crate::core::error::ReactorError::file_not_found(path))?;
         if obj.vertices.is_empty() {
-            return Err(crate::core::error::ReactorError::invalid_format("OBJ file contains no vertices"));
+            return Err(crate::core::error::ReactorError::invalid_format(
+                "OBJ file contains no vertices",
+            ));
         }
-        
-        println!("📦 Loaded OBJ: {} vertices, {} triangles", obj.vertex_count(), obj.triangle_count());
-        
-        self.reactor.create_mesh(&obj.vertices, &obj.indices).map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
+
+        println!(
+            "📦 Loaded OBJ: {} vertices, {} triangles",
+            obj.vertex_count(),
+            obj.triangle_count()
+        );
+
+        self.reactor
+            .create_mesh(&obj.vertices, &obj.indices)
+            .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
     }
 
     /// Load an OBJ file and create a mesh with material, returning a scene object index
     pub fn load_obj_with_material(
         &mut self,
         path: &str,
-        material: std::sync::Arc<crate::material::Material>,
+        material: std::sync::Arc<crate::resources::material::Material>,
     ) -> crate::core::error::ReactorResult<u32> {
         let mesh = self.load_obj(path)?;
         let mesh_arc = std::sync::Arc::new(mesh);
         let index = self.scene.objects.len() as u32;
-        self.scene.add_object(mesh_arc, material, glam::Mat4::IDENTITY);
+        self.scene
+            .add_object(mesh_arc, material, glam::Mat4::IDENTITY);
         Ok(index)
     }
 
@@ -386,14 +435,23 @@ impl ReactorContext {
     }
 
     /// Render a custom scene (not the built-in one)
-    pub fn draw_scene(&mut self, scene: &crate::scene::Scene, view_projection: &glam::Mat4) {
+    pub fn draw_scene(
+        &mut self,
+        scene: &crate::systems::scene::Scene,
+        view_projection: &glam::Mat4,
+    ) {
         if let Err(e) = self.reactor.draw_scene(scene, view_projection) {
             eprintln!("REACTOR draw error: {}", e);
         }
     }
 
     /// Render a single mesh with transform
-    pub fn draw(&mut self, mesh: &crate::mesh::Mesh, material: &crate::material::Material, transform: &glam::Mat4) {
+    pub fn draw(
+        &mut self,
+        mesh: &crate::resources::mesh::Mesh,
+        material: &crate::resources::material::Material,
+        transform: &glam::Mat4,
+    ) {
         if let Err(e) = self.reactor.draw_frame(mesh, material, transform) {
             eprintln!("REACTOR draw error: {}", e);
         }
@@ -453,7 +511,8 @@ impl ReactorContext {
     /// # }
     /// ```
     pub fn add_sun(&mut self) -> usize {
-        self.lighting.add_light(crate::systems::lighting::Light::sun())
+        self.lighting
+            .add_light(crate::systems::lighting::Light::sun())
     }
 
     /// Añade una luz direccional personalizada.
@@ -464,7 +523,9 @@ impl ReactorContext {
         intensity: f32,
     ) -> usize {
         self.lighting
-            .add_light(crate::systems::lighting::Light::directional(direction, color, intensity))
+            .add_light(crate::systems::lighting::Light::directional(
+                direction, color, intensity,
+            ))
     }
 
     /// Añade una luz puntual.
@@ -476,7 +537,9 @@ impl ReactorContext {
         range: f32,
     ) -> usize {
         self.lighting
-            .add_light(crate::systems::lighting::Light::point(position, color, intensity, range))
+            .add_light(crate::systems::lighting::Light::point(
+                position, color, intensity, range,
+            ))
     }
 
     /// Añade un foco (spotlight).
@@ -489,14 +552,15 @@ impl ReactorContext {
         range: f32,
         angle_degrees: f32,
     ) -> usize {
-        self.lighting.add_light(crate::systems::lighting::Light::spot(
-            position,
-            direction,
-            color,
-            intensity,
-            range,
-            angle_degrees,
-        ))
+        self.lighting
+            .add_light(crate::systems::lighting::Light::spot(
+                position,
+                direction,
+                color,
+                intensity,
+                range,
+                angle_degrees,
+            ))
     }
 
     // =========================================================================
@@ -506,8 +570,8 @@ impl ReactorContext {
     /// Añade un objeto a la escena y devuelve su índice.
     pub fn spawn(
         &mut self,
-        mesh: std::sync::Arc<crate::mesh::Mesh>,
-        material: std::sync::Arc<crate::material::Material>,
+        mesh: std::sync::Arc<crate::resources::mesh::Mesh>,
+        material: std::sync::Arc<crate::resources::material::Material>,
         transform: glam::Mat4,
     ) -> usize {
         self.scene.add_object(mesh, material, transform)
@@ -532,10 +596,14 @@ impl ReactorContext {
     /// let mat = ctx.default_material()?;
     /// # Ok(()) }
     /// ```
-    pub fn default_material(&self) -> crate::core::error::ReactorResult<crate::material::Material> {
+    pub fn default_material(
+        &self,
+    ) -> crate::core::error::ReactorResult<crate::resources::material::Material> {
         let vert = crate::builtin_shaders::vert_default();
         let frag = crate::builtin_shaders::frag_default();
-        self.reactor.create_material(&vert, &frag).map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
+        self.reactor
+            .create_material(&vert, &frag)
+            .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
     }
 
     /// Spawn-helper: crea un cubo unitario en `position` y lo añade a la escena.
@@ -546,7 +614,11 @@ impl ReactorContext {
     }
 
     /// Spawn-helper: crea una esfera (32×16 segmentos) en `position` y la añade.
-    pub fn spawn_sphere(&mut self, position: glam::Vec3, _radius: f32) -> crate::core::error::ReactorResult<usize> {
+    pub fn spawn_sphere(
+        &mut self,
+        position: glam::Vec3,
+        _radius: f32,
+    ) -> crate::core::error::ReactorResult<usize> {
         let (v, i) = crate::resources::primitives::Primitives::sphere(32, 16);
         let xf = glam::Mat4::from_scale_rotation_translation(
             glam::Vec3::splat(_radius.max(0.001)),
@@ -557,7 +629,11 @@ impl ReactorContext {
     }
 
     /// Spawn-helper: crea un plano (suelo) centrado en `position` con tamaño `size`.
-    pub fn spawn_plane(&mut self, position: glam::Vec3, size: f32) -> crate::core::error::ReactorResult<usize> {
+    pub fn spawn_plane(
+        &mut self,
+        position: glam::Vec3,
+        size: f32,
+    ) -> crate::core::error::ReactorResult<usize> {
         let (v, i) = crate::resources::primitives::Primitives::plane(1);
         let xf = glam::Mat4::from_scale_rotation_translation(
             glam::Vec3::new(size, 1.0, size),
@@ -576,8 +652,12 @@ impl ReactorContext {
     ) -> crate::core::error::ReactorResult<usize> {
         // Las dos definiciones de Vertex (legacy + nueva) son ABI-idénticas
         // (repr(C) Pod con position/color/uv). Re-interpretamos sin copia.
-        let legacy: &[crate::vertex::Vertex] = bytemuck::cast_slice(vertices);
-        let mesh = std::sync::Arc::new(self.reactor.create_mesh(legacy, indices).map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))?);
+        let legacy: &[crate::resources::vertex::Vertex] = bytemuck::cast_slice(vertices);
+        let mesh = std::sync::Arc::new(
+            self.reactor
+                .create_mesh(legacy, indices)
+                .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))?,
+        );
         let material = std::sync::Arc::new(self.default_material()?);
         Ok(self.scene.add_object(mesh, material, transform))
     }
@@ -594,7 +674,9 @@ struct AppRunner<A: ReactorApp> {
 
 impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.context.is_some() { return; }
+        if self.context.is_some() {
+            return;
+        }
 
         let config = self.app.config();
 
@@ -625,13 +707,20 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
         println!("╔══════════════════════════════════════════════════════════════╗");
         println!("║              🚀 REACTOR Framework Initialized                ║");
         println!("║  Title: {:52} ║", config.title);
-        println!("║  Resolution: {}x{:<44} ║",
+        println!(
+            "║  Resolution: {}x{:<44} ║",
             window.inner_size().width,
-            format!("{}", window.inner_size().height));
-        println!("║  MSAA: {:?}{:<49} ║",
-            reactor.msaa_samples, "");
-        println!("║  Ray Tracing: {:<47} ║",
-            if reactor.ray_tracing.is_some() { "✅ Enabled" } else { "❌ Not available" });
+            format!("{}", window.inner_size().height)
+        );
+        println!("║  MSAA: {:?}{:<49} ║", reactor.msaa_samples, "");
+        println!(
+            "║  Ray Tracing: {:<47} ║",
+            if reactor.ray_tracing.is_some() {
+                "✅ Enabled"
+            } else {
+                "❌ Not available"
+            }
+        );
         println!("╚══════════════════════════════════════════════════════════════╝");
 
         let aspect = window.inner_size().width as f32 / window.inner_size().height.max(1) as f32;
@@ -641,7 +730,7 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
             time: Time::new(),
             config: config.clone(),
             camera: crate::systems::camera::Camera::perspective(60.0, aspect, 0.1, 1000.0),
-            scene: crate::scene::Scene::new(),
+            scene: crate::systems::scene::Scene::new(),
             lighting: crate::systems::lighting::LightingSystem::new(),
             physics: crate::systems::physics::PhysicsWorld::new(),
             culling: crate::systems::frustum::CullingSystem::new(),
@@ -655,7 +744,12 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
         self.context = Some(ctx);
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        _window_id: WindowId,
+        event: WindowEvent,
+    ) {
         let Some(ctx) = &mut self.context else { return };
 
         // Let Reactor handle input
@@ -751,10 +845,7 @@ pub fn run<A: ReactorApp + 'static>(app: A) {
     let event_loop = EventLoop::new().expect("Failed to create event loop");
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let mut runner = AppRunner {
-        app,
-        context: None,
-    };
+    let mut runner = AppRunner { app, context: None };
 
     event_loop.run_app(&mut runner).expect("Event loop error");
 }
@@ -832,9 +923,5 @@ where
     I: FnMut(&mut ReactorContext) + 'static,
     U: FnMut(&mut ReactorContext) + 'static,
 {
-    run(QuickApp {
-        config,
-        init: Some(init),
-        update,
-    });
+    run(QuickApp { config, init: Some(init), update });
 }

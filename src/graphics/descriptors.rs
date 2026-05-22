@@ -1,5 +1,5 @@
-use ash::vk;
 use crate::vulkan_context::VulkanContext;
+use ash::vk;
 use std::error::Error;
 
 // ============================================================================
@@ -20,7 +20,10 @@ pub struct DescriptorBinding {
 }
 
 impl DescriptorSetLayout {
-    pub fn new(ctx: &VulkanContext, bindings: &[DescriptorBinding]) -> Result<Self, Box<dyn Error>> {
+    pub fn new(
+        ctx: &VulkanContext,
+        bindings: &[DescriptorBinding],
+    ) -> Result<Self, Box<dyn Error>> {
         let vk_bindings: Vec<vk::DescriptorSetLayoutBinding> = bindings
             .iter()
             .map(|b| {
@@ -32,33 +35,42 @@ impl DescriptorSetLayout {
             })
             .collect();
 
-        let layout_info = vk::DescriptorSetLayoutCreateInfo::default()
-            .bindings(&vk_bindings);
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&vk_bindings);
 
-        let handle = unsafe { ctx.device.create_descriptor_set_layout(&layout_info, None)? };
+        let handle = unsafe {
+            ctx.device
+                .create_descriptor_set_layout(&layout_info, None)?
+        };
 
-        Ok(Self {
-            handle,
-            device: ctx.device.clone(),
-        })
+        Ok(Self { handle, device: ctx.device.clone() })
     }
 
-    pub fn for_uniform_buffer(ctx: &VulkanContext, binding: u32, stages: vk::ShaderStageFlags) -> Result<Self, Box<dyn Error>> {
-        Self::new(ctx, &[DescriptorBinding {
-            binding,
-            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-            count: 1,
-            stage_flags: stages,
-        }])
+    pub fn for_uniform_buffer(
+        ctx: &VulkanContext,
+        binding: u32,
+        stages: vk::ShaderStageFlags,
+    ) -> Result<Self, Box<dyn Error>> {
+        Self::new(
+            ctx,
+            &[DescriptorBinding {
+                binding,
+                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                count: 1,
+                stage_flags: stages,
+            }],
+        )
     }
 
     pub fn for_texture(ctx: &VulkanContext, binding: u32) -> Result<Self, Box<dyn Error>> {
-        Self::new(ctx, &[DescriptorBinding {
-            binding,
-            descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-            count: 1,
-            stage_flags: vk::ShaderStageFlags::FRAGMENT,
-        }])
+        Self::new(
+            ctx,
+            &[DescriptorBinding {
+                binding,
+                descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                count: 1,
+                stage_flags: vk::ShaderStageFlags::FRAGMENT,
+            }],
+        )
     }
 }
 
@@ -85,7 +97,11 @@ pub struct PoolSize {
 }
 
 impl DescriptorPool {
-    pub fn new(ctx: &VulkanContext, max_sets: u32, pool_sizes: &[PoolSize]) -> Result<Self, Box<dyn Error>> {
+    pub fn new(
+        ctx: &VulkanContext,
+        max_sets: u32,
+        pool_sizes: &[PoolSize],
+    ) -> Result<Self, Box<dyn Error>> {
         let vk_sizes: Vec<vk::DescriptorPoolSize> = pool_sizes
             .iter()
             .map(|s| {
@@ -102,21 +118,35 @@ impl DescriptorPool {
 
         let handle = unsafe { ctx.device.create_descriptor_pool(&pool_info, None)? };
 
-        Ok(Self {
-            handle,
-            device: ctx.device.clone(),
-        })
+        Ok(Self { handle, device: ctx.device.clone() })
     }
 
     pub fn standard(ctx: &VulkanContext, max_sets: u32) -> Result<Self, Box<dyn Error>> {
-        Self::new(ctx, max_sets, &[
-            PoolSize { descriptor_type: vk::DescriptorType::UNIFORM_BUFFER, count: max_sets * 2 },
-            PoolSize { descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER, count: max_sets * 4 },
-            PoolSize { descriptor_type: vk::DescriptorType::STORAGE_BUFFER, count: max_sets * 2 },
-        ])
+        Self::new(
+            ctx,
+            max_sets,
+            &[
+                PoolSize {
+                    descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                    count: max_sets * 2,
+                },
+                PoolSize {
+                    descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                    count: max_sets * 4,
+                },
+                PoolSize {
+                    descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+                    count: max_sets * 2,
+                },
+            ],
+        )
     }
 
-    pub fn allocate(&self, ctx: &VulkanContext, layout: &DescriptorSetLayout) -> Result<DescriptorSet, Box<dyn Error>> {
+    pub fn allocate(
+        &self,
+        ctx: &VulkanContext,
+        layout: &DescriptorSetLayout,
+    ) -> Result<DescriptorSet, Box<dyn Error>> {
         let layouts = [layout.handle];
         let alloc_info = vk::DescriptorSetAllocateInfo::default()
             .descriptor_pool(self.handle)

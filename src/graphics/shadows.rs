@@ -88,12 +88,12 @@ impl ShadowMap {
     pub fn new(config: ShadowConfig) -> Self {
         let cascade_count = config.cascade_count as usize;
         let mut cascades = Vec::with_capacity(cascade_count);
-        
+
         for i in 0..cascade_count {
             let split = config.cascade_splits.get(i).copied().unwrap_or(1.0);
             cascades.push(ShadowCascade::new(split, 0.0, 1.0));
         }
-        
+
         Self {
             config,
             cascades,
@@ -105,24 +105,26 @@ impl ShadowMap {
 
     /// Update shadow cascades for a camera frustum
     pub fn update(&mut self, _camera_view: Mat4, _camera_proj: Mat4, near: f32, far: f32) {
-        self.light_view = Mat4::look_at_rh(
-            -self.light_direction * 50.0,
-            Vec3::ZERO,
-            Vec3::Y,
-        );
+        self.light_view = Mat4::look_at_rh(-self.light_direction * 50.0, Vec3::ZERO, Vec3::Y);
 
         let range = far - near;
-        
+
         for (i, cascade) in self.cascades.iter_mut().enumerate() {
-            let prev_split = if i == 0 { 0.0 } else { 
-                self.config.cascade_splits.get(i - 1).copied().unwrap_or(0.0) 
+            let prev_split = if i == 0 {
+                0.0
+            } else {
+                self.config
+                    .cascade_splits
+                    .get(i - 1)
+                    .copied()
+                    .unwrap_or(0.0)
             };
             let curr_split = self.config.cascade_splits.get(i).copied().unwrap_or(1.0);
-            
+
             cascade.near = near + range * prev_split;
             cascade.far = near + range * curr_split;
             cascade.split_depth = cascade.far;
-            
+
             // Calculate orthographic projection for this cascade
             let cascade_proj = Mat4::orthographic_rh(-50.0, 50.0, -50.0, 50.0, 0.1, 100.0);
             cascade.view_proj = cascade_proj * self.light_view;
@@ -173,12 +175,12 @@ pub struct ShadowUniformData {
 impl ShadowUniformData {
     pub fn from_shadow_map(shadow_map: &ShadowMap) -> Self {
         let mut data = Self::default();
-        
+
         for (i, cascade) in shadow_map.cascades.iter().enumerate().take(4) {
             data.cascade_view_proj[i] = cascade.view_proj.to_cols_array_2d();
             data.cascade_splits[i] = cascade.split_depth;
         }
-        
+
         data.light_direction = [
             shadow_map.light_direction.x,
             shadow_map.light_direction.y,
@@ -189,7 +191,7 @@ impl ShadowUniformData {
         data.normal_bias = shadow_map.config.normal_bias;
         data.pcf_radius = 1.0 / shadow_map.config.resolution as f32;
         data.enabled = if shadow_map.enabled { 1 } else { 0 };
-        
+
         data
     }
 }
@@ -199,13 +201,13 @@ pub fn pcf_sample_offsets(samples: u32) -> Vec<(f32, f32)> {
     let mut offsets = Vec::new();
     let sqrt_samples = (samples as f32).sqrt() as i32;
     let half = sqrt_samples / 2;
-    
+
     for y in -half..=half {
         for x in -half..=half {
             offsets.push((x as f32, y as f32));
         }
     }
-    
+
     offsets
 }
 
@@ -219,17 +221,17 @@ pub fn calculate_shadow_factor(
     if !shadow_map.enabled {
         return 1.0;
     }
-    
+
     let cascade = &shadow_map.cascades[cascade_index];
     let _bias = shadow_map.get_bias(cascade_index);
-    
+
     // Apply normal bias
     let biased_pos = world_pos + normal * shadow_map.config.normal_bias;
-    
+
     // Transform to light space
     let light_space = cascade.view_proj * biased_pos.extend(1.0);
     let _ndc = light_space.truncate() / light_space.w;
-    
+
     // In a real implementation, we would sample the shadow map texture here
     // This is a placeholder that returns fully lit
     1.0

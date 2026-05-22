@@ -1,7 +1,7 @@
+use crate::vulkan_context::VulkanContext;
 use ash::vk;
 use gpu_allocator::vulkan::*;
 use gpu_allocator::MemoryLocation;
-use crate::vulkan_context::VulkanContext;
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 
@@ -31,7 +31,9 @@ impl MsaaTarget {
             .format(format)
             .tiling(vk::ImageTiling::OPTIMAL)
             .initial_layout(vk::ImageLayout::UNDEFINED)
-            .usage(vk::ImageUsageFlags::TRANSIENT_ATTACHMENT | vk::ImageUsageFlags::COLOR_ATTACHMENT)
+            .usage(
+                vk::ImageUsageFlags::TRANSIENT_ATTACHMENT | vk::ImageUsageFlags::COLOR_ATTACHMENT,
+            )
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .samples(samples);
 
@@ -47,7 +49,8 @@ impl MsaaTarget {
         })?;
 
         unsafe {
-            ctx.device.bind_image_memory(image, allocation.memory(), allocation.offset())?;
+            ctx.device
+                .bind_image_memory(image, allocation.memory(), allocation.offset())?;
         }
 
         let view_info = vk::ImageViewCreateInfo::default()
@@ -76,17 +79,28 @@ impl MsaaTarget {
     }
 
     pub fn get_max_samples(ctx: &VulkanContext) -> vk::SampleCountFlags {
-        let props = unsafe { ctx.instance.get_physical_device_properties(ctx.physical_device) };
+        let props = unsafe {
+            ctx.instance
+                .get_physical_device_properties(ctx.physical_device)
+        };
         let counts = props.limits.framebuffer_color_sample_counts
             & props.limits.framebuffer_depth_sample_counts;
 
-        if counts.contains(vk::SampleCountFlags::TYPE_64) { vk::SampleCountFlags::TYPE_64 }
-        else if counts.contains(vk::SampleCountFlags::TYPE_32) { vk::SampleCountFlags::TYPE_32 }
-        else if counts.contains(vk::SampleCountFlags::TYPE_16) { vk::SampleCountFlags::TYPE_16 }
-        else if counts.contains(vk::SampleCountFlags::TYPE_8) { vk::SampleCountFlags::TYPE_8 }
-        else if counts.contains(vk::SampleCountFlags::TYPE_4) { vk::SampleCountFlags::TYPE_4 }
-        else if counts.contains(vk::SampleCountFlags::TYPE_2) { vk::SampleCountFlags::TYPE_2 }
-        else { vk::SampleCountFlags::TYPE_1 }
+        if counts.contains(vk::SampleCountFlags::TYPE_64) {
+            vk::SampleCountFlags::TYPE_64
+        } else if counts.contains(vk::SampleCountFlags::TYPE_32) {
+            vk::SampleCountFlags::TYPE_32
+        } else if counts.contains(vk::SampleCountFlags::TYPE_16) {
+            vk::SampleCountFlags::TYPE_16
+        } else if counts.contains(vk::SampleCountFlags::TYPE_8) {
+            vk::SampleCountFlags::TYPE_8
+        } else if counts.contains(vk::SampleCountFlags::TYPE_4) {
+            vk::SampleCountFlags::TYPE_4
+        } else if counts.contains(vk::SampleCountFlags::TYPE_2) {
+            vk::SampleCountFlags::TYPE_2
+        } else {
+            vk::SampleCountFlags::TYPE_1
+        }
     }
 }
 

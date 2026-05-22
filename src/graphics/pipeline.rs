@@ -1,7 +1,7 @@
+use crate::resources::vertex::Vertex;
 use ash::vk;
 use ash::Device;
 use std::ffi::CStr;
-use crate::resources::vertex::Vertex;
 
 pub struct Pipeline {
     pub pipeline: vk::Pipeline,
@@ -42,7 +42,16 @@ impl Pipeline {
         width: u32,
         height: u32,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        Self::with_config(device, render_pass, vert_spv, frag_spv, width, height, &PipelineConfig::default(), &[])
+        Self::with_config(
+            device,
+            render_pass,
+            vert_spv,
+            frag_spv,
+            width,
+            height,
+            &PipelineConfig::default(),
+            &[],
+        )
     }
 
     pub fn with_config(
@@ -109,8 +118,8 @@ impl Pipeline {
             .scissors(&scissors);
 
         let dynamic_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
-        let dynamic_state_info = vk::PipelineDynamicStateCreateInfo::default()
-            .dynamic_states(&dynamic_states);
+        let dynamic_state_info =
+            vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
 
         let rasterization_state = vk::PipelineRasterizationStateCreateInfo::default()
             .depth_clamp_enable(false)
@@ -174,7 +183,8 @@ impl Pipeline {
             .subpass(0);
 
         let pipelines = unsafe {
-            device.create_graphics_pipelines(vk::PipelineCache::null(), &[create_info], None)
+            device
+                .create_graphics_pipelines(vk::PipelineCache::null(), &[create_info], None)
                 .map_err(|(_, e)| e)?
         };
 

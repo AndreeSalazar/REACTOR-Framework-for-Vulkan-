@@ -1,8 +1,8 @@
-use ash::{Entry, Instance, Device};
 use ash::vk;
-use std::ffi::{CStr, c_void};
+use ash::{Device, Entry, Instance};
 use raw_window_handle::HasWindowHandle;
 use std::error::Error;
+use std::ffi::{c_void, CStr};
 
 use crate::utils::gpu_detector::GPUDetector;
 
@@ -68,24 +68,26 @@ unsafe extern "system" fn vulkan_debug_callback(
 impl VulkanContext {
     pub fn new(window: &impl HasWindowHandle) -> Result<Self, Box<dyn Error>> {
         let entry = unsafe { Entry::load()? };
-        
+
         // Layers
         let layer_names = [CStr::from_bytes_with_nul(b"VK_LAYER_KHRONOS_validation\0")?];
-        let layers_ptr: Vec<*const i8> = layer_names.iter().map(|raw_name| raw_name.as_ptr()).collect();
+        let layers_ptr: Vec<*const i8> = layer_names
+            .iter()
+            .map(|raw_name| raw_name.as_ptr())
+            .collect();
 
         // Extensions - add debug utils in debug builds
         let mut extension_names = vec![
             ash::khr::surface::NAME.as_ptr(),
             ash::khr::win32_surface::NAME.as_ptr(),
         ];
-        
+
         #[cfg(debug_assertions)]
         {
             extension_names.push(ash::ext::debug_utils::NAME.as_ptr());
         }
-        
-        let app_info = vk::ApplicationInfo::default()
-            .api_version(vk::API_VERSION_1_3);
+
+        let app_info = vk::ApplicationInfo::default().api_version(vk::API_VERSION_1_3);
 
         let create_info = vk::InstanceCreateInfo::default()
             .application_info(&app_info)
@@ -93,36 +95,40 @@ impl VulkanContext {
             .enabled_extension_names(&extension_names);
 
         let instance = unsafe { entry.create_instance(&create_info, None)? };
-        
+
         // Setup debug messenger in debug builds
         #[cfg(debug_assertions)]
         let (debug_utils, debug_messenger) = {
             let debug_utils = ash::ext::debug_utils::Instance::new(&entry, &instance);
-            
+
             let debug_create_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
                 .message_severity(
                     vk::DebugUtilsMessageSeverityFlagsEXT::ERROR
-                    | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
+                        | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING,
                 )
                 .message_type(
                     vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
-                    | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION
-                    | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
+                        | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION
+                        | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE,
                 )
                 .pfn_user_callback(Some(vulkan_debug_callback));
-            
+
             let messenger = unsafe {
-                debug_utils.create_debug_utils_messenger(&debug_create_info, None)
+                debug_utils
+                    .create_debug_utils_messenger(&debug_create_info, None)
                     .expect("Failed to create debug messenger")
             };
-            
+
             log::info!("🔍 Vulkan validation layers enabled");
             (Some(debug_utils), Some(messenger))
         };
-        
+
         #[cfg(not(debug_assertions))]
-        let (debug_utils, debug_messenger): (Option<ash::ext::debug_utils::Instance>, Option<vk::DebugUtilsMessengerEXT>) = (None, None);
-        
+        let (debug_utils, debug_messenger): (
+            Option<ash::ext::debug_utils::Instance>,
+            Option<vk::DebugUtilsMessengerEXT>,
+        ) = (None, None);
+
         // Surface
         let surface = unsafe {
             use raw_window_handle::RawWindowHandle;
@@ -131,7 +137,8 @@ impl VulkanContext {
                     let win32_create_info = vk::Win32SurfaceCreateInfoKHR::default()
                         .hinstance(handle.hinstance.unwrap().get() as isize)
                         .hwnd(handle.hwnd.get() as isize);
-                    let win32_surface_loader = ash::khr::win32_surface::Instance::new(&entry, &instance);
+                    let win32_surface_loader =
+                        ash::khr::win32_surface::Instance::new(&entry, &instance);
                     win32_surface_loader.create_win32_surface(&win32_create_info, None)?
                 }
                 _ => return Err("Unsupported window handle".into()),
@@ -162,14 +169,15 @@ impl VulkanContext {
             .queue_priorities(&queue_priorities);
 
         // Enable Features
-        let mut buffer_device_address_features = vk::PhysicalDeviceBufferDeviceAddressFeatures::default()
-            .buffer_device_address(true);
+        let mut buffer_device_address_features =
+            vk::PhysicalDeviceBufferDeviceAddressFeatures::default().buffer_device_address(true);
 
-        let mut ray_tracing_pipeline_features = vk::PhysicalDeviceRayTracingPipelineFeaturesKHR::default()
-            .ray_tracing_pipeline(true);
-            
-        let mut acceleration_structure_features = vk::PhysicalDeviceAccelerationStructureFeaturesKHR::default()
-            .acceleration_structure(true);
+        let mut ray_tracing_pipeline_features =
+            vk::PhysicalDeviceRayTracingPipelineFeaturesKHR::default().ray_tracing_pipeline(true);
+
+        let mut acceleration_structure_features =
+            vk::PhysicalDeviceAccelerationStructureFeaturesKHR::default()
+                .acceleration_structure(true);
 
         let device_create_info = vk::DeviceCreateInfo::default()
             .queue_create_infos(std::slice::from_ref(&queue_info))
@@ -209,12 +217,13 @@ impl Drop for VulkanContext {
         unsafe {
             self.device.destroy_device(None);
             self.surface_loader.destroy_surface(self.surface, None);
-            
+
             // Destroy debug messenger before instance
-            if let (Some(debug_utils), Some(messenger)) = (&self.debug_utils, self.debug_messenger) {
+            if let (Some(debug_utils), Some(messenger)) = (&self.debug_utils, self.debug_messenger)
+            {
                 debug_utils.destroy_debug_utils_messenger(messenger, None);
             }
-            
+
             self.instance.destroy_instance(None);
         }
     }

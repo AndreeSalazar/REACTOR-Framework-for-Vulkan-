@@ -146,10 +146,7 @@ impl PBRUniformData {
                 mat.emissive.z * mat.emissive_strength,
                 mat.normal_scale,
             ],
-            flags: [
-                if mat.double_sided { 1.0 } else { 0.0 },
-                0.0, 0.0, 0.0,
-            ],
+            flags: [if mat.double_sided { 1.0 } else { 0.0 }, 0.0, 0.0, 0.0],
         }
     }
 }
@@ -261,7 +258,7 @@ pub fn distribution_ggx(n_dot_h: f32, roughness: f32) -> f32 {
     let a = roughness * roughness;
     let a2 = a * a;
     let n_dot_h2 = n_dot_h * n_dot_h;
-    
+
     let denom = n_dot_h2 * (a2 - 1.0) + 1.0;
     a2 / (std::f32::consts::PI * denom * denom)
 }
@@ -294,26 +291,26 @@ pub fn cook_torrance_brdf(
     roughness: f32,
 ) -> Vec3 {
     let h = (view_dir + light_dir).normalize();
-    
+
     let n_dot_v = normal.dot(view_dir).max(0.0);
     let n_dot_l = normal.dot(light_dir).max(0.0);
     let n_dot_h = normal.dot(h).max(0.0);
     let h_dot_v = h.dot(view_dir).max(0.0);
-    
+
     let f0 = calculate_f0(albedo, metallic);
-    
+
     // Cook-Torrance BRDF
     let d = distribution_ggx(n_dot_h, roughness);
     let g = geometry_smith(n_dot_v, n_dot_l, roughness);
     let f = fresnel_schlick(h_dot_v, f0);
-    
+
     let numerator = d * g * f;
     let denominator = 4.0 * n_dot_v * n_dot_l + 0.0001;
     let specular = numerator / denominator;
-    
+
     // Diffuse (Lambert)
     let k_d = (Vec3::ONE - f) * (1.0 - metallic);
     let diffuse = k_d * albedo / std::f32::consts::PI;
-    
+
     (diffuse + specular) * n_dot_l
 }

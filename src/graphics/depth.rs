@@ -1,7 +1,7 @@
+use crate::vulkan_context::VulkanContext;
 use ash::vk;
 use gpu_allocator::vulkan::*;
 use gpu_allocator::MemoryLocation;
-use crate::vulkan_context::VulkanContext;
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 
@@ -47,7 +47,8 @@ impl DepthBuffer {
         })?;
 
         unsafe {
-            ctx.device.bind_image_memory(image, allocation.memory(), allocation.offset())?;
+            ctx.device
+                .bind_image_memory(image, allocation.memory(), allocation.offset())?;
         }
 
         let view_info = vk::ImageViewCreateInfo::default()
@@ -84,10 +85,14 @@ impl DepthBuffer {
 
         for format in candidates {
             let props = unsafe {
-                ctx.instance.get_physical_device_format_properties(ctx.physical_device, format)
+                ctx.instance
+                    .get_physical_device_format_properties(ctx.physical_device, format)
             };
 
-            if props.optimal_tiling_features.contains(vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT) {
+            if props
+                .optimal_tiling_features
+                .contains(vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT)
+            {
                 return Ok(format);
             }
         }
@@ -96,7 +101,10 @@ impl DepthBuffer {
     }
 
     pub fn has_stencil(&self) -> bool {
-        matches!(self.format, vk::Format::D32_SFLOAT_S8_UINT | vk::Format::D24_UNORM_S8_UINT)
+        matches!(
+            self.format,
+            vk::Format::D32_SFLOAT_S8_UINT | vk::Format::D24_UNORM_S8_UINT
+        )
     }
 }
 

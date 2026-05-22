@@ -1,7 +1,7 @@
-use winit::event::{ElementState, WindowEvent, MouseButton};
-use winit::keyboard::{KeyCode, PhysicalKey};
-use std::collections::HashSet;
 use glam::Vec2;
+use std::collections::HashSet;
+use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::keyboard::{KeyCode, PhysicalKey};
 
 #[derive(Default)]
 pub struct Input {
@@ -29,51 +29,46 @@ impl Input {
     pub fn process_event(&mut self, event: &WindowEvent) {
         match event {
             WindowEvent::KeyboardInput {
-                event: winit::event::KeyEvent {
-                    state,
-                    physical_key: PhysicalKey::Code(keycode),
-                    ..
-                },
+                event:
+                    winit::event::KeyEvent {
+                        state,
+                        physical_key: PhysicalKey::Code(keycode),
+                        ..
+                    },
                 ..
-            } => {
-                match state {
-                    ElementState::Pressed => {
-                        if !self.pressed_keys.contains(keycode) {
-                            self.just_pressed_keys.insert(*keycode);
-                        }
-                        self.pressed_keys.insert(*keycode);
+            } => match state {
+                ElementState::Pressed => {
+                    if !self.pressed_keys.contains(keycode) {
+                        self.just_pressed_keys.insert(*keycode);
                     }
-                    ElementState::Released => {
-                        self.pressed_keys.remove(keycode);
-                        self.just_released_keys.insert(*keycode);
-                    }
+                    self.pressed_keys.insert(*keycode);
                 }
-            }
-            WindowEvent::MouseInput { state, button, .. } => {
-                match state {
-                    ElementState::Pressed => {
-                        self.pressed_mouse_buttons.insert(*button);
-                    }
-                    ElementState::Released => {
-                        self.pressed_mouse_buttons.remove(button);
-                    }
+                ElementState::Released => {
+                    self.pressed_keys.remove(keycode);
+                    self.just_released_keys.insert(*keycode);
                 }
-            }
+            },
+            WindowEvent::MouseInput { state, button, .. } => match state {
+                ElementState::Pressed => {
+                    self.pressed_mouse_buttons.insert(*button);
+                }
+                ElementState::Released => {
+                    self.pressed_mouse_buttons.remove(button);
+                }
+            },
             WindowEvent::CursorMoved { position, .. } => {
                 let new_pos = Vec2::new(position.x as f32, position.y as f32);
                 self.mouse_delta = new_pos - self.mouse_position;
                 self.mouse_position = new_pos;
             }
-            WindowEvent::MouseWheel { delta, .. } => {
-                match delta {
-                    winit::event::MouseScrollDelta::LineDelta(_, y) => {
-                        self.scroll_delta = *y;
-                    }
-                    winit::event::MouseScrollDelta::PixelDelta(pos) => {
-                        self.scroll_delta = pos.y as f32 / 100.0;
-                    }
+            WindowEvent::MouseWheel { delta, .. } => match delta {
+                winit::event::MouseScrollDelta::LineDelta(_, y) => {
+                    self.scroll_delta = *y;
                 }
-            }
+                winit::event::MouseScrollDelta::PixelDelta(pos) => {
+                    self.scroll_delta = pos.y as f32 / 100.0;
+                }
+            },
             _ => {}
         }
     }
@@ -111,7 +106,7 @@ impl Input {
     // Movement helpers
     pub fn get_movement_vector(&self) -> Vec2 {
         let mut movement = Vec2::ZERO;
-        
+
         if self.is_key_down(KeyCode::KeyW) || self.is_key_down(KeyCode::ArrowUp) {
             movement.y -= 1.0;
         }

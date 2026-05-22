@@ -1,5 +1,5 @@
-use ash::vk;
 use crate::vulkan_context::VulkanContext;
+use ash::vk;
 use std::error::Error;
 
 pub struct Sampler {
@@ -92,10 +92,7 @@ impl Sampler {
 
         let handle = unsafe { ctx.device.create_sampler(&sampler_info, None)? };
 
-        Ok(Self {
-            handle,
-            device: ctx.device.clone(),
-        })
+        Ok(Self { handle, device: ctx.device.clone() })
     }
 
     pub fn linear(ctx: &VulkanContext) -> Result<Self, Box<dyn Error>> {
@@ -103,13 +100,16 @@ impl Sampler {
     }
 
     pub fn nearest(ctx: &VulkanContext) -> Result<Self, Box<dyn Error>> {
-        Self::new(ctx, &SamplerConfig {
-            mag_filter: FilterMode::Nearest,
-            min_filter: FilterMode::Nearest,
-            mipmap_mode: FilterMode::Nearest,
-            anisotropy: None,
-            ..Default::default()
-        })
+        Self::new(
+            ctx,
+            &SamplerConfig {
+                mag_filter: FilterMode::Nearest,
+                min_filter: FilterMode::Nearest,
+                mipmap_mode: FilterMode::Nearest,
+                anisotropy: None,
+                ..Default::default()
+            },
+        )
     }
 }
 

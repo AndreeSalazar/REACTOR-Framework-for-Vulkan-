@@ -190,7 +190,14 @@ impl FrameGraph {
     }
 
     /// Registrar un nuevo recurso
-    pub fn create_resource(&mut self, name: &str, resource_type: ResourceType, width: u32, height: u32, format: ResourceFormat) -> ResourceId {
+    pub fn create_resource(
+        &mut self,
+        name: &str,
+        resource_type: ResourceType,
+        width: u32,
+        height: u32,
+        format: ResourceFormat,
+    ) -> ResourceId {
         let id = ResourceId(self.next_resource_id);
         self.next_resource_id += 1;
 
@@ -210,7 +217,14 @@ impl FrameGraph {
     }
 
     /// Registrar recurso persistente (no se destruye entre frames)
-    pub fn create_persistent_resource(&mut self, name: &str, resource_type: ResourceType, width: u32, height: u32, format: ResourceFormat) -> ResourceId {
+    pub fn create_persistent_resource(
+        &mut self,
+        name: &str,
+        resource_type: ResourceType,
+        width: u32,
+        height: u32,
+        format: ResourceFormat,
+    ) -> ResourceId {
         let id = self.create_resource(name, resource_type, width, height, format);
         if let Some(res) = self.resources.get_mut(&id) {
             res.persistent = true;
@@ -252,7 +266,9 @@ impl FrameGraph {
         self.execution_order.clear();
 
         // Recopilar passes habilitados
-        let mut enabled_passes: Vec<_> = self.passes.values()
+        let mut enabled_passes: Vec<_> = self
+            .passes
+            .values()
             .filter(|p| p.enabled)
             .cloned()
             .collect();
@@ -267,7 +283,13 @@ impl FrameGraph {
 
         for pass in &enabled_passes {
             if !visited.contains(&pass.id) {
-                self.topological_sort(pass.id, &enabled_passes, &mut visited, &mut temp_visited, &mut sorted);
+                self.topological_sort(
+                    pass.id,
+                    &enabled_passes,
+                    &mut visited,
+                    &mut temp_visited,
+                    &mut sorted,
+                );
             }
         }
 
@@ -280,7 +302,8 @@ impl FrameGraph {
         self.stats.total_passes = self.passes.len() as u32;
         self.stats.enabled_passes = self.execution_order.len() as u32;
         self.stats.total_resources = self.resources.len() as u32;
-        self.stats.transient_resources = self.resources.values().filter(|r| !r.persistent).count() as u32;
+        self.stats.transient_resources =
+            self.resources.values().filter(|r| !r.persistent).count() as u32;
         self.stats.barriers_generated = self.barriers.len() as u32;
 
         self.compiled = true;
@@ -297,7 +320,8 @@ impl FrameGraph {
     ) {
         if temp_visited.contains(&pass_id) {
             // Ciclo detectado — esto es un error de configuración
-            let pass_name = passes.iter()
+            let pass_name = passes
+                .iter()
                 .find(|p| p.id == pass_id)
                 .map(|p| p.name.as_str())
                 .unwrap_or("unknown");
@@ -391,33 +415,44 @@ impl FrameGraph {
         println!("╔══════════════════════════════════════════════════════════════════╗");
         println!("║                      FrameGraph Debug                            ║");
         println!("╠══════════════════════════════════════════════════════════════════╣");
-        
+
         println!("║ Resources ({}):", self.resources.len());
         for (id, res) in &self.resources {
-            println!("║   [{:2}] {} ({:?}) {}x{}", 
-                id.0, res.name, res.resource_type, res.width, res.height);
+            println!(
+                "║   [{:2}] {} ({:?}) {}x{}",
+                id.0, res.name, res.resource_type, res.width, res.height
+            );
         }
-        
+
         println!("║");
         println!("║ Execution Order ({} passes):", self.execution_order.len());
         for (i, &pass_id) in self.execution_order.iter().enumerate() {
             if let Some(pass) = self.passes.get(&pass_id) {
                 let reads: Vec<_> = pass.reads.iter().map(|r| r.0.to_string()).collect();
                 let writes: Vec<_> = pass.writes.iter().map(|r| r.0.to_string()).collect();
-                println!("║   {}. {} (reads: [{}], writes: [{}])", 
-                    i + 1, pass.name, reads.join(","), writes.join(","));
+                println!(
+                    "║   {}. {} (reads: [{}], writes: [{}])",
+                    i + 1,
+                    pass.name,
+                    reads.join(","),
+                    writes.join(",")
+                );
             }
         }
-        
+
         println!("║");
         println!("║ Barriers ({}):", self.barriers.len());
         for barrier in &self.barriers {
-            let from = barrier.from_pass.map(|p| p.0.to_string()).unwrap_or("?".to_string());
-            println!("║   Resource {} : Pass {} → Pass {} ({:?} → {:?})",
-                barrier.resource.0, from, barrier.to_pass.0, 
-                barrier.from_access, barrier.to_access);
+            let from = barrier
+                .from_pass
+                .map(|p| p.0.to_string())
+                .unwrap_or("?".to_string());
+            println!(
+                "║   Resource {} : Pass {} → Pass {} ({:?} → {:?})",
+                barrier.resource.0, from, barrier.to_pass.0, barrier.from_access, barrier.to_access
+            );
         }
-        
+
         println!("╚══════════════════════════════════════════════════════════════════╝");
     }
 
@@ -438,15 +473,52 @@ pub fn create_deferred_graph(width: u32, height: u32) -> FrameGraph {
     let mut graph = FrameGraph::new();
 
     // Recursos
-    let depth = graph.create_resource("Depth", ResourceType::DepthBuffer, width, height, ResourceFormat::Depth32F);
-    let albedo = graph.create_resource("GBuffer_Albedo", ResourceType::RenderTarget, width, height, ResourceFormat::RGBA8);
-    let normal = graph.create_resource("GBuffer_Normal", ResourceType::RenderTarget, width, height, ResourceFormat::RGBA16F);
-    let position = graph.create_resource("GBuffer_Position", ResourceType::RenderTarget, width, height, ResourceFormat::RGBA32F);
-    let lit = graph.create_resource("Lit", ResourceType::RenderTarget, width, height, ResourceFormat::RGBA16F);
-    let final_output = graph.create_resource("Final", ResourceType::Swapchain, width, height, ResourceFormat::RGBA8);
+    let depth = graph.create_resource(
+        "Depth",
+        ResourceType::DepthBuffer,
+        width,
+        height,
+        ResourceFormat::Depth32F,
+    );
+    let albedo = graph.create_resource(
+        "GBuffer_Albedo",
+        ResourceType::RenderTarget,
+        width,
+        height,
+        ResourceFormat::RGBA8,
+    );
+    let normal = graph.create_resource(
+        "GBuffer_Normal",
+        ResourceType::RenderTarget,
+        width,
+        height,
+        ResourceFormat::RGBA16F,
+    );
+    let position = graph.create_resource(
+        "GBuffer_Position",
+        ResourceType::RenderTarget,
+        width,
+        height,
+        ResourceFormat::RGBA32F,
+    );
+    let lit = graph.create_resource(
+        "Lit",
+        ResourceType::RenderTarget,
+        width,
+        height,
+        ResourceFormat::RGBA16F,
+    );
+    let final_output = graph.create_resource(
+        "Final",
+        ResourceType::Swapchain,
+        width,
+        height,
+        ResourceFormat::RGBA8,
+    );
 
     // Passes
-    graph.pass("GBuffer")
+    graph
+        .pass("GBuffer")
         .write(depth)
         .write(albedo)
         .write(normal)
@@ -454,7 +526,8 @@ pub fn create_deferred_graph(width: u32, height: u32) -> FrameGraph {
         .order(0)
         .build();
 
-    graph.pass("Lighting")
+    graph
+        .pass("Lighting")
         .read(depth)
         .read(albedo)
         .read(normal)
@@ -463,7 +536,8 @@ pub fn create_deferred_graph(width: u32, height: u32) -> FrameGraph {
         .order(1)
         .build();
 
-    graph.pass("PostProcess")
+    graph
+        .pass("PostProcess")
         .read(lit)
         .write(final_output)
         .order(2)
@@ -477,10 +551,23 @@ pub fn create_deferred_graph(width: u32, height: u32) -> FrameGraph {
 pub fn create_forward_graph(width: u32, height: u32) -> FrameGraph {
     let mut graph = FrameGraph::new();
 
-    let depth = graph.create_resource("Depth", ResourceType::DepthBuffer, width, height, ResourceFormat::Depth32F);
-    let color = graph.create_resource("Color", ResourceType::Swapchain, width, height, ResourceFormat::RGBA8);
+    let depth = graph.create_resource(
+        "Depth",
+        ResourceType::DepthBuffer,
+        width,
+        height,
+        ResourceFormat::Depth32F,
+    );
+    let color = graph.create_resource(
+        "Color",
+        ResourceType::Swapchain,
+        width,
+        height,
+        ResourceFormat::RGBA8,
+    );
 
-    graph.pass("Forward")
+    graph
+        .pass("Forward")
         .write(depth)
         .write(color)
         .order(0)

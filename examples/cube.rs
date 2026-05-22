@@ -31,15 +31,47 @@ impl CubeDemo {
     fn cube_vertices() -> [Vertex; 8] {
         [
             // Front face (z = 0.5)
-            Vertex::new(Vec3::new(-0.5, -0.5,  0.5), Vec3::new(1.0, 0.0, 0.0), Vec2::ZERO), // Red
-            Vertex::new(Vec3::new( 0.5, -0.5,  0.5), Vec3::new(0.0, 1.0, 0.0), Vec2::ZERO), // Green
-            Vertex::new(Vec3::new( 0.5,  0.5,  0.5), Vec3::new(0.0, 0.0, 1.0), Vec2::ZERO), // Blue
-            Vertex::new(Vec3::new(-0.5,  0.5,  0.5), Vec3::new(1.0, 1.0, 0.0), Vec2::ZERO), // Yellow
+            Vertex::new(
+                Vec3::new(-0.5, -0.5, 0.5),
+                Vec3::new(1.0, 0.0, 0.0),
+                Vec2::ZERO,
+            ), // Red
+            Vertex::new(
+                Vec3::new(0.5, -0.5, 0.5),
+                Vec3::new(0.0, 1.0, 0.0),
+                Vec2::ZERO,
+            ), // Green
+            Vertex::new(
+                Vec3::new(0.5, 0.5, 0.5),
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec2::ZERO,
+            ), // Blue
+            Vertex::new(
+                Vec3::new(-0.5, 0.5, 0.5),
+                Vec3::new(1.0, 1.0, 0.0),
+                Vec2::ZERO,
+            ), // Yellow
             // Back face (z = -0.5)
-            Vertex::new(Vec3::new(-0.5, -0.5, -0.5), Vec3::new(1.0, 0.0, 1.0), Vec2::ZERO), // Magenta
-            Vertex::new(Vec3::new( 0.5, -0.5, -0.5), Vec3::new(0.0, 1.0, 1.0), Vec2::ZERO), // Cyan
-            Vertex::new(Vec3::new( 0.5,  0.5, -0.5), Vec3::new(1.0, 1.0, 1.0), Vec2::ZERO), // White
-            Vertex::new(Vec3::new(-0.5,  0.5, -0.5), Vec3::new(0.5, 0.5, 0.5), Vec2::ZERO), // Gray
+            Vertex::new(
+                Vec3::new(-0.5, -0.5, -0.5),
+                Vec3::new(1.0, 0.0, 1.0),
+                Vec2::ZERO,
+            ), // Magenta
+            Vertex::new(
+                Vec3::new(0.5, -0.5, -0.5),
+                Vec3::new(0.0, 1.0, 1.0),
+                Vec2::ZERO,
+            ), // Cyan
+            Vertex::new(
+                Vec3::new(0.5, 0.5, -0.5),
+                Vec3::new(1.0, 1.0, 1.0),
+                Vec2::ZERO,
+            ), // White
+            Vertex::new(
+                Vec3::new(-0.5, 0.5, -0.5),
+                Vec3::new(0.5, 0.5, 0.5),
+                Vec2::ZERO,
+            ), // Gray
         ]
     }
 
@@ -47,25 +79,19 @@ impl CubeDemo {
     fn cube_indices() -> [u32; 36] {
         [
             // Front face
-            0, 1, 2,  2, 3, 0,
-            // Right face
-            1, 5, 6,  6, 2, 1,
-            // Back face
-            5, 4, 7,  7, 6, 5,
-            // Left face
-            4, 0, 3,  3, 7, 4,
-            // Top face
-            3, 2, 6,  6, 7, 3,
-            // Bottom face
-            4, 5, 1,  1, 0, 4,
+            0, 1, 2, 2, 3, 0, // Right face
+            1, 5, 6, 6, 2, 1, // Back face
+            5, 4, 7, 7, 6, 5, // Left face
+            4, 0, 3, 3, 7, 4, // Top face
+            3, 2, 6, 6, 7, 3, // Bottom face
+            4, 5, 1, 1, 0, 4,
         ]
     }
 }
 
 impl ReactorApp for CubeDemo {
     fn config(&self) -> ReactorConfig {
-        ReactorConfig::new("🎲 REACTOR Cube Demo")
-            .with_size(1280, 720)
+        ReactorConfig::new("🎲 REACTOR Cube Demo").with_size(1280, 720)
     }
 
     fn init(&mut self, ctx: &mut ReactorContext) {
@@ -106,13 +132,15 @@ impl ReactorApp for CubeDemo {
                 let mesh = Arc::new(mesh);
 
                 // Load shaders
-                let vert = ash::util::read_spv(&mut std::io::Cursor::new(
-                    include_bytes!("../shaders/vert.spv")
-                )).expect("Failed to load vertex shader");
+                let vert = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
+                    "../shaders/vert.spv"
+                )))
+                .expect("Failed to load vertex shader");
 
-                let frag = ash::util::read_spv(&mut std::io::Cursor::new(
-                    include_bytes!("../shaders/frag.spv")
-                )).expect("Failed to load fragment shader");
+                let frag = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
+                    "../shaders/frag.spv"
+                )))
+                .expect("Failed to load fragment shader");
 
                 match ctx.create_material(&vert, &frag) {
                     Ok(material) => {
@@ -160,8 +188,8 @@ impl ReactorApp for CubeDemo {
 
         // Rotate cube
         self.rotation += dt * 1.5;
-        let rotation = Mat4::from_rotation_y(self.rotation) 
-                     * Mat4::from_rotation_x(self.rotation * 0.7);
+        let rotation =
+            Mat4::from_rotation_y(self.rotation) * Mat4::from_rotation_x(self.rotation * 0.7);
 
         // Update cube transform in scene
         if !ctx.scene.objects.is_empty() {

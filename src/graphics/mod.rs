@@ -1,32 +1,38 @@
 // REACTOR Graphics Module
 // Contains all rendering-related abstractions
 
-pub mod swapchain;
-pub mod pipeline;
-pub mod render_pass;
-pub mod framebuffer;
 pub mod buffer;
-pub mod image;
-pub mod sampler;
-pub mod descriptors;
-pub mod depth;
-pub mod msaa;
-pub mod uniform_buffer;
 pub mod debug_renderer;
+pub mod depth;
+pub mod descriptors;
+pub mod framebuffer;
+pub mod image;
+pub mod msaa;
+pub mod pipeline;
 pub mod post_process;
+pub mod render_pass;
+pub mod sampler;
 pub mod shadows;
+pub mod swapchain;
+pub mod uniform_buffer;
 
-pub use swapchain::Swapchain;
-pub use pipeline::{Pipeline, PipelineConfig};
-pub use render_pass::{RenderPass, RenderPassConfig};
-pub use framebuffer::{Framebuffer, FramebufferSet};
 pub use buffer::Buffer;
-pub use image::Image;
-pub use sampler::{Sampler, SamplerConfig, FilterMode, WrapMode};
-pub use descriptors::{DescriptorPool, DescriptorSetLayout, DescriptorSet, DescriptorBinding, PoolSize};
+pub use debug_renderer::{DebugLine, DebugRenderer};
 pub use depth::DepthBuffer;
+pub use descriptors::{
+    DescriptorBinding, DescriptorPool, DescriptorSet, DescriptorSetLayout, PoolSize,
+};
+pub use framebuffer::{Framebuffer, FramebufferSet};
+pub use image::Image;
 pub use msaa::MsaaTarget;
-pub use uniform_buffer::{UniformBuffer, GlobalUniformData, LightUniformData, LightData, MaterialUniformData};
-pub use debug_renderer::{DebugRenderer, DebugLine};
-pub use post_process::{PostProcessPipeline, PostProcessSettings, PostProcessEffect, PostProcessPreset};
-pub use shadows::{ShadowMap, ShadowConfig, ShadowCascade, ShadowUniformData};
+pub use pipeline::{Pipeline, PipelineConfig};
+pub use post_process::{
+    PostProcessEffect, PostProcessPipeline, PostProcessPreset, PostProcessSettings,
+};
+pub use render_pass::{RenderPass, RenderPassConfig};
+pub use sampler::{FilterMode, Sampler, SamplerConfig, WrapMode};
+pub use shadows::{ShadowCascade, ShadowConfig, ShadowMap, ShadowUniformData};
+pub use swapchain::Swapchain;
+pub use uniform_buffer::{
+    GlobalUniformData, LightData, LightUniformData, MaterialUniformData, UniformBuffer,
+};

@@ -94,21 +94,16 @@ impl ReactorConfig {
 
     /// Preset: Game (1920x1080, maximized, MSAA, 60fps physics)
     pub fn game(title: &str) -> Self {
-        Self::new(title)
-            .with_size(1920, 1080)
-            .with_maximized(true)
+        Self::new(title).with_size(1920, 1080).with_maximized(true)
     }
 
     /// Preset: Prototype (800x600, windowed, quick iteration)
     pub fn prototype(title: &str) -> Self {
-        Self::new(title)
-            .with_size(800, 600)
+        Self::new(title).with_size(800, 600)
     }
 
     /// Preset: VR (high resolution, no vsync for low latency)
     pub fn vr(title: &str) -> Self {
-        Self::new(title)
-            .with_size(2160, 2160)
-            .with_vsync(false)
+        Self::new(title).with_size(2160, 2160).with_vsync(false)
     }
 }

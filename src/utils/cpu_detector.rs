@@ -17,7 +17,8 @@ impl CPUDetector {
 
         let (recommendation, thread_pool_size) = if logical_cores >= 16 {
             (
-                "High Performance: Use heavy multi-threading (Job System + Async Compute)".to_string(),
+                "High Performance: Use heavy multi-threading (Job System + Async Compute)"
+                    .to_string(),
                 logical_cores - 2, // Leave 2 cores for OS/main thread
             )
         } else if logical_cores >= 8 {
@@ -31,10 +32,7 @@ impl CPUDetector {
                 logical_cores / 2,
             )
         } else {
-            (
-                "Low Power: Limit background threads".to_string(),
-                1,
-            )
+            ("Low Power: Limit background threads".to_string(), 1)
         };
 
         println!("Detected CPU: {} Logical Cores", logical_cores);

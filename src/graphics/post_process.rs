@@ -143,30 +143,30 @@ pub struct PostProcessSettings {
     // Vignette
     pub vignette_intensity: f32,
     pub vignette_smoothness: f32,
-    
+
     // Chromatic Aberration
     pub chromatic_intensity: f32,
-    
+
     // Film Grain
     pub grain_intensity: f32,
     pub grain_speed: f32,
-    
+
     // Bloom
     pub bloom_threshold: f32,
     pub bloom_intensity: f32,
     pub bloom_blur_size: f32,
-    
+
     // Tone Mapping
     pub exposure: f32,
     pub gamma: f32,
-    
+
     // Sharpen
     pub sharpen_intensity: f32,
-    
+
     // General
     pub time: f32,
     pub effect_mask: u32, // Bitflags for enabled effects
-    
+
     pub _padding: [f32; 2],
 }
 

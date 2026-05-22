@@ -5,8 +5,8 @@
 // Shaders are only recompiled when source files change.
 // =============================================================================
 
-use std::process::Command;
 use std::path::Path;
+use std::process::Command;
 
 fn compile_shader(src: &str, dst: &str) {
     let src_path = Path::new(src);
@@ -28,9 +28,7 @@ fn compile_shader(src: &str, dst: &str) {
 
     println!("cargo:warning=Compiling shader: {} -> {}", src, dst);
 
-    let status = Command::new("glslc")
-        .args([src, "-o", dst])
-        .status();
+    let status = Command::new("glslc").args([src, "-o", dst]).status();
 
     match status {
         Ok(s) if s.success() => {}
@@ -48,34 +46,33 @@ fn compile_shader(src: &str, dst: &str) {
 fn main() {
     // Compilar recursivamente TODOS los shaders GLSL en el directorio shaders/
     let shaders_dir = Path::new("shaders");
-    
+
     if !shaders_dir.exists() {
         eprintln!("cargo:warning=Shaders directory not found: shaders/");
         return;
     }
-    
+
     // Recorrer recursivamente todos los archivos .vert y .frag
     let mut compiled = 0;
-    let mut failed = 0;
-    
+
     for entry in walkdir::WalkDir::new(shaders_dir)
         .into_iter()
         .filter_map(|e| e.ok())
     {
         let path = entry.path();
-        
+
         // Solo procesar archivos con extensión .vert o .frag
         if let Some(ext) = path.extension() {
             let ext_str = ext.to_string_lossy();
             if ext_str == "vert" || ext_str == "frag" {
                 let src = path.to_string_lossy().to_string();
                 let dst = src.replace(&format!(".{}", ext_str), ".spv");
-                
+
                 compile_shader(&src, &dst);
                 compiled += 1;
             }
         }
     }
-    
+
     println!("cargo:warning=Compiled {} shaders", compiled);
 }

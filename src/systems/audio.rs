@@ -179,13 +179,16 @@ impl AudioSystem {
         let id = AudioClipId(self.next_clip_id);
         self.next_clip_id += 1;
 
-        self.clips.insert(id, AudioClip {
+        self.clips.insert(
             id,
-            name: name.to_string(),
-            duration,
-            channels: 2,
-            sample_rate: 44100,
-        });
+            AudioClip {
+                id,
+                name: name.to_string(),
+                duration,
+                channels: 2,
+                sample_rate: 44100,
+            },
+        );
 
         id
     }
@@ -231,7 +234,12 @@ impl AudioSystem {
     }
 
     /// Play a one-shot sound effect
-    pub fn play_sfx(&mut self, clip: AudioClipId, position: Option<Vec3>, volume: f32) -> AudioSourceId {
+    pub fn play_sfx(
+        &mut self,
+        clip: AudioClipId,
+        position: Option<Vec3>,
+        volume: f32,
+    ) -> AudioSourceId {
         let id = self.create_source();
         if let Some(source) = self.sources.get_mut(&id) {
             source.clip = Some(clip);
@@ -293,7 +301,7 @@ impl AudioSystem {
         }
 
         let distance = (source.position - self.listener.position).length();
-        
+
         if distance <= source.min_distance {
             source.volume
         } else if distance >= source.max_distance {

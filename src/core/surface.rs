@@ -16,11 +16,11 @@ impl SurfaceInfo {
         let capabilities = unsafe {
             surface_loader.get_physical_device_surface_capabilities(physical_device, surface)?
         };
-        
+
         let formats = unsafe {
             surface_loader.get_physical_device_surface_formats(physical_device, surface)?
         };
-        
+
         let present_modes = unsafe {
             surface_loader.get_physical_device_surface_present_modes(physical_device, surface)?
         };
@@ -28,7 +28,10 @@ impl SurfaceInfo {
         // Prefer SRGB format
         let format = formats
             .iter()
-            .find(|f| f.format == vk::Format::B8G8R8A8_SRGB && f.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR)
+            .find(|f| {
+                f.format == vk::Format::B8G8R8A8_SRGB
+                    && f.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
+            })
             .unwrap_or(&formats[0])
             .clone();
 
@@ -39,10 +42,6 @@ impl SurfaceInfo {
             .copied()
             .unwrap_or(vk::PresentModeKHR::FIFO);
 
-        Ok(Self {
-            format,
-            present_mode,
-            capabilities,
-        })
+        Ok(Self { format, present_mode, capabilities })
     }
 }

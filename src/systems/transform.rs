@@ -1,4 +1,4 @@
-use glam::{Mat4, Vec3, Quat};
+use glam::{Mat4, Quat, Vec3};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Transform {

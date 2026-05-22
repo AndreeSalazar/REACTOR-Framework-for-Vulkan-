@@ -15,10 +15,14 @@ pub struct DeviceInfo {
 }
 
 impl DeviceInfo {
-    pub fn from_physical_device(instance: &ash::Instance, physical_device: vk::PhysicalDevice) -> Self {
+    pub fn from_physical_device(
+        instance: &ash::Instance,
+        physical_device: vk::PhysicalDevice,
+    ) -> Self {
         let props = unsafe { instance.get_physical_device_properties(physical_device) };
-        let memory_props = unsafe { instance.get_physical_device_memory_properties(physical_device) };
-        
+        let memory_props =
+            unsafe { instance.get_physical_device_memory_properties(physical_device) };
+
         let name = unsafe {
             std::ffi::CStr::from_ptr(props.device_name.as_ptr())
                 .to_string_lossy()

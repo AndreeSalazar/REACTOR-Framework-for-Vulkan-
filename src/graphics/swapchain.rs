@@ -1,6 +1,6 @@
-use ash::{vk, Device};
-use ash::khr::swapchain;
 use crate::vulkan_context::VulkanContext;
+use ash::khr::swapchain;
+use ash::{vk, Device};
 use std::error::Error;
 
 pub struct Swapchain {
@@ -19,12 +19,12 @@ impl Swapchain {
             ctx.surface_loader
                 .get_physical_device_surface_capabilities(ctx.physical_device, ctx.surface)?
         };
-        
+
         let surface_formats = unsafe {
             ctx.surface_loader
                 .get_physical_device_surface_formats(ctx.physical_device, ctx.surface)?
         };
-        
+
         let present_modes = unsafe {
             ctx.surface_loader
                 .get_physical_device_surface_present_modes(ctx.physical_device, ctx.surface)?
@@ -32,7 +32,10 @@ impl Swapchain {
 
         let format = surface_formats
             .iter()
-            .find(|f| f.format == vk::Format::B8G8R8A8_SRGB && f.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR)
+            .find(|f| {
+                f.format == vk::Format::B8G8R8A8_SRGB
+                    && f.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
+            })
             .unwrap_or(&surface_formats[0]);
 
         let present_mode = present_modes
@@ -78,7 +81,7 @@ impl Swapchain {
         let loader = swapchain::Device::new(&ctx.instance, &ctx.device);
         let handle = unsafe { loader.create_swapchain(&create_info, None)? };
         let images = unsafe { loader.get_swapchain_images(handle)? };
-        
+
         let image_views = images
             .iter()
             .map(|&image| {

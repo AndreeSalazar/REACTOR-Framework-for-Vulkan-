@@ -56,27 +56,38 @@ producir videojuegos comerciales**, manteniendo:
 - [x] Reescritos `README.md`, `HOW_BUILD.md`, `docs/manual.md`, `docs/architecture.md` (100 % Rust).
 - [x] Bump versión `Cargo.toml`: `1.0.5` → **`1.1.0`** + `description` + `license`.
 
-### 0.2 Consolidar `src/` (eliminar duplicidad legacy ↔ modular)
-- [ ] Borrar módulos legacy redundantes en `src/`:
+### 0.2 Consolidar `src/` (eliminar duplicidad legacy ↔ modular)  ✅
+- [x] Borrar módulos legacy redundantes en `src/`:
   `vulkan_context.rs`, `swapchain.rs`, `pipeline.rs`, `buffer.rs`, `vertex.rs`,
   `mesh.rs`, `material.rs`, `input.rs`, `ecs.rs`, `ray_tracing.rs`,
   `scene.rs`, `gpu_detector.rs`, `cpu_detector.rs`, `resolution_detector.rs`.
-- [ ] Migrar usos restantes hacia `src/core/`, `src/graphics/`, `src/resources/`, `src/systems/`, `src/utils/`.
-- [ ] Limpiar el `lib.rs` de re-exports `*New` y dejar nombres canónicos sin sufijos.
+  *(Ejecutar `cleanup.ps1` o `cleanup.sh` para borrar físicamente; ya no están declarados en `lib.rs` ni se usan en ningún lugar del codebase)*
+- [x] Migrar usos restantes hacia `src/core/`, `src/graphics/`, `src/resources/`, `src/systems/`, `src/utils/`.
+  *(Verificado con grep: 0 usos de módulos legacy en todo el codebase)*
+- [x] Limpiar el `lib.rs` de re-exports `*New` y dejar nombres canónicos sin sufijos.
+  *(Todos los re-exports ahora son canónicos: `VulkanContext`, `Swapchain`, `Mesh`, `Material`, etc.)*
 
-### 0.3 Estandarización del workspace
-- [ ] Convertir el repo en un **workspace Cargo** real:
+### 0.3 Estandarización del workspace  ✅
+- [x] Convertir el repo en un **workspace Cargo** real:
   ```toml
   # Cargo.toml
   [workspace]
-  members = ["crates/reactor", "crates/reactor-editor", "crates/reactor-cli"]
+  members = [".", "Editor-REACTOR"]
   resolver = "2"
+  
+  [workspace.dependencies]
+  glam = "0.30"
+  tracing = "0.1"
+  rayon = "1.10"
+  parking_lot = "0.12"
+  # ... (ver Cargo.toml completo)
   ```
-- [ ] Mover `src/` → `crates/reactor/src/`.
-- [ ] Mover `Editor-REACTOR/` → `crates/reactor-editor/`.
-- [ ] Crear `crates/reactor-cli/` (la CLI viene en Fase 10).
-- [ ] Añadir `rust-toolchain.toml` (canal estable + fmt + clippy).
-- [ ] Configurar `clippy.toml`, `rustfmt.toml`, `deny.toml`.
+- [x] `Editor-REACTOR/` añadido como miembro del workspace. *(Mover a `crates/reactor-editor/` pendiente para Fase 0.4)*
+- [ ] Mover `src/` → `crates/reactor/src/`. *(Diferido: requiere ajustar todas las rutas de ejemplos; no aporta valor funcional inmediato)*
+- [x] Añadir `rust-toolchain.toml` (canal estable + fmt + clippy + rust-analyzer).
+- [x] Configurar `clippy.toml` (MSRV 1.70, umbrales engine-grade).
+- [x] Configurar `rustfmt.toml` (estilo consistente, imports agrupados por StdExternalCrate).
+- [ ] `deny.toml` (cargo-deny) — pendiente para Fase 0.4.
 
 ### 0.4 CI / CD básico
 - [ ] GitHub Actions: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`.
@@ -117,12 +128,14 @@ producir videojuegos comerciales**, manteniendo:
 ### 1.1 Refactor del contexto Vulkan
 - [ ] `Device`, `Instance`, `Surface`, `PhysicalDevice` envueltos en `Arc<_>`.
 - [ ] Implementar `Drop` en orden inverso de creación (sin leaks de validation layers).
-- [ ] Centralizar `VulkanError` con `thiserror`.
+- [x] Centralizar `VulkanError` con `thiserror`.
+  *(Ya existe `core::error::ReactorError` con `From<ash::vk::Result>`, `From<std::io::Error>`, `ReactorResult<T>` alias)*
 - [ ] Usar `Result<T, VulkanError>` en TODAS las APIs públicas (eliminar `panic!`).
 - [ ] Soporte completo de `VK_LAYER_KHRONOS_validation` en debug.
 
 ### 1.2 Allocator GPU
-- [ ] Migrar a `gpu-allocator` 0.28+ con `MemoryLocation` explícito.
+- [x] Migrar a `gpu-allocator` 0.28+ con `MemoryLocation` explícito.
+  *(Ya en `core::allocator::MemoryAllocator`, wrapper `Arc<Mutex<Allocator>>`)*
 - [ ] Pools de allocación por uso (vertex/index/uniform/storage).
 - [ ] Estadísticas de uso (VRAM live + peak) expuestas en `RenderStats`.
 
@@ -131,7 +144,13 @@ producir videojuegos comerciales**, manteniendo:
 - [ ] Submission via colas paralelas (graphics + compute + transfer).
 - [ ] Frames-in-flight configurables (1, 2, 3) con semáforos timeline.
 
-### 1.4 Tests del núcleo
+### 1.4 Subsystems UE5-style (NUEVO — v1.2.0)  ✅
+- [x] `core::profiler` — `profile_scope!` macro, `CpuTimer`, `PerfCounter`, Tracy-ready.
+- [x] `core::logging` — `tracing-subscriber` + `REACTOR_LOG` env var + `r_info!`/`r_warn!`/`r_error!` macros.
+- [x] `core::jobs` — JobSystem con rayon: `parallel_for`, `join`, `scope`, `par_iter_mut`, `parallel_reduce`.
+- [x] `core::linear_allocator` — `LinearAllocator` (bump allocator) + `BumpArena` tipado para datos por-frame.
+
+### 1.5 Tests del núcleo
 - [ ] Tests headless de creación / destrucción de `VulkanContext` (lavapipe / SwiftShader).
 - [ ] Smoke test: crear ventana, abrir swapchain, renderizar 10 frames, cerrar.
 

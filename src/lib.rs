@@ -1,51 +1,54 @@
 // =============================================================================
-// REACTOR Framework for Vulkan (Rust Edition)
+// REACTOR Framework for Vulkan (Rust Edition) — v1.2.0
 // =============================================================================
-// Architecture: A (Vulkan/Ash) → B (Reactor) → C (Game)
+// Architecture: A (Vulkan/Ash) → B (Reactor Core) → C (Game)
 //   A: Raw Vulkan bindings (unsafe)
-//   B: Safe RAII wrappers (this framework)
-//   C: High-level game API
+//   B: Safe RAII wrappers + UE5-style subsystems (this framework)
+//   C: High-level game API (ReactorApp trait)
 // =============================================================================
 
-// Application trait system
+// Application trait system (the user-facing API)
 pub mod app;
 
-// Legacy modules (for backwards compatibility)
-pub mod vulkan_context;
-pub mod reactor;
-pub mod swapchain;
-pub mod pipeline;
-pub mod buffer;
-pub mod vertex;
-pub mod mesh;
-pub mod material;
-pub mod input;
-pub mod ecs;
-pub mod ray_tracing;
-pub mod resolution_detector;
-pub mod scene;
-pub mod gpu_detector;
-pub mod cpu_detector;
-
-// New modular structure
+// Modular architecture (production code)
+pub mod compute;
 pub mod core;
 pub mod graphics;
 pub mod raytracing;
-pub mod compute;
 pub mod resources;
 pub mod systems;
 pub mod utils;
 
-// Platform abstraction
+// Platform abstraction (window, config)
 pub mod platform;
 
 // Built-in SPIR-V shaders (embedded for plug-and-play materials)
 pub mod builtin_shaders;
 
 // =============================================================================
+// Legacy Modules (temporary — will be migrated in Fase 0.2)
+// =============================================================================
+// These modules use the old flat structure and are kept for backward compatibility
+// with app.rs and examples. Will be removed once migration is complete.
+pub mod buffer;
+pub mod cpu_detector;
+pub mod ecs;
+pub mod gpu_detector;
+pub mod input;
+pub mod material;
+pub mod mesh;
+pub mod pipeline;
+pub mod ray_tracing;
+pub mod reactor;
+pub mod resolution_detector;
+pub mod scene;
+pub mod swapchain;
+pub mod vertex;
+
+// =============================================================================
 // App Trait System Re-exports
 // =============================================================================
-pub use app::{ReactorApp, ReactorContext, ReactorConfig, RendererMode, run, quick, quick_with};
+pub use app::{quick, quick_with, run, ReactorApp, ReactorConfig, ReactorContext, RendererMode};
 
 // =============================================================================
 // `reactor::game!` macro — ultra-short game declaration
@@ -115,151 +118,156 @@ macro_rules! game {
 }
 
 // =============================================================================
-// Legacy Re-exports (backwards compatibility)
-// =============================================================================
-pub use reactor::Reactor;
-pub use pipeline::Pipeline;
-pub use buffer::Buffer;
-pub use vertex::Vertex;
-pub use mesh::Mesh;
-pub use material::Material;
-pub use input::Input;
-pub use ecs::{World, Entity, Component};
-pub use ray_tracing::RayTracingContext;
-pub use resolution_detector::ResolutionDetector;
-pub use scene::Scene;
-pub use gpu_detector::GPUDetector;
-pub use cpu_detector::CPUDetector;
-
-// =============================================================================
-// New Modular Re-exports
+// Core Re-exports (canonical names, no *New suffix)
 // =============================================================================
 
-// Core
-pub use core::context::VulkanContext as VulkanContextNew;
 pub use core::allocator::MemoryAllocator;
 pub use core::command::CommandManager;
+pub use core::context::VulkanContext;
 pub use core::device::DeviceInfo;
+pub use core::error::{
+    clear_last_error, get_last_error_code, get_last_error_message, has_error, set_last_error,
+    ErrorCode, ReactorError, ReactorResult,
+};
 
 // FrameGraph (Deterministic Render Graph)
-pub use core::frame_graph::{FrameGraph, PassId, ResourceId, ResourceType, ResourceFormat, PassDesc, Barrier, FrameGraphStats};
-pub use core::frame_graph::{create_deferred_graph, create_forward_graph};
+pub use core::frame_graph::{
+    create_deferred_graph, create_forward_graph, Barrier, FrameGraph, FrameGraphStats, PassDesc,
+    PassId, ResourceFormat, ResourceId, ResourceType,
+};
 
 // Importance Map (Universal Importance System)
-pub use core::importance_map::{ImportanceMap, ImportanceMapConfig, ImportanceTileData, ImportanceMapStats, ImportanceType};
+pub use core::importance_map::{
+    ImportanceMap, ImportanceMapConfig, ImportanceMapStats, ImportanceTileData, ImportanceType,
+};
 
-// Graphics
-pub use graphics::swapchain::Swapchain as SwapchainNew;
-pub use graphics::pipeline::{Pipeline as PipelineNew, PipelineConfig};
-pub use graphics::render_pass::{RenderPass, RenderPassConfig};
-pub use graphics::framebuffer::{Framebuffer, FramebufferSet};
-pub use graphics::buffer::Buffer as BufferNew;
-pub use graphics::image::Image;
-pub use graphics::sampler::{Sampler, SamplerConfig, FilterMode, WrapMode};
-pub use graphics::descriptors::{DescriptorPool, DescriptorSetLayout, DescriptorSet, DescriptorBinding, PoolSize};
+// Profiler & Logging (UE5-style observability)
+pub use core::jobs::{init_job_system, join, par_iter, par_iter_mut, parallel_for};
+pub use core::linear_allocator::{BumpArena, LinearAllocator};
+pub use core::logging::{init_logger, init_logger_with, LogLevel};
+pub use core::profiler::{begin_frame, get_frame_id, CpuTimer, PerfCounter};
+
+// =============================================================================
+// Graphics Re-exports
+// =============================================================================
+
+pub use graphics::buffer::Buffer;
 pub use graphics::depth::DepthBuffer;
+pub use graphics::descriptors::{
+    DescriptorBinding, DescriptorPool, DescriptorSet, DescriptorSetLayout, PoolSize,
+};
+pub use graphics::framebuffer::{Framebuffer, FramebufferSet};
+pub use graphics::image::Image;
 pub use graphics::msaa::MsaaTarget;
+pub use graphics::pipeline::{Pipeline, PipelineConfig};
+pub use graphics::render_pass::{RenderPass, RenderPassConfig};
+pub use graphics::sampler::{FilterMode, Sampler, SamplerConfig, WrapMode};
+pub use graphics::swapchain::Swapchain;
 
-// Ray Tracing
-pub use raytracing::context::RayTracingContext as RayTracingContextNew;
+// Uniform Buffers
+pub use graphics::uniform_buffer::{
+    GlobalUniformData, LightData, LightUniformData, MaterialUniformData, UniformBuffer, MAX_LIGHTS,
+};
+
+// Debug Renderer
+pub use graphics::debug_renderer::{DebugAABB, DebugLine, DebugRay, DebugRenderer, DebugSphere};
+
+// Post-processing
+pub use graphics::post_process::{
+    AAQualityPreset, AASettings, PostProcessEffect, PostProcessPipeline, PostProcessPreset,
+    PostProcessSettings,
+};
+
+// =============================================================================
+// Ray Tracing Re-exports
+// =============================================================================
+
 pub use raytracing::acceleration_structure::{AccelerationStructure, Blas, Tlas};
+pub use raytracing::context::RayTracingContext;
 pub use raytracing::pipeline::{RayTracingPipeline, ShaderGroup, ShaderStage};
 pub use raytracing::shader_binding_table::ShaderBindingTable;
 
-// Compute
-pub use compute::pipeline::ComputePipeline;
+// =============================================================================
+// Compute Re-exports
+// =============================================================================
+
 pub use compute::dispatch::ComputeDispatch;
+pub use compute::pipeline::ComputePipeline;
 
-// Resources
-pub use resources::vertex::{Vertex as VertexNew, VertexPBR, InstanceData};
-pub use resources::mesh::Mesh as MeshNew;
-pub use resources::material::{Material as MaterialNew, MaterialBuilder};
-pub use resources::texture::Texture;
+// =============================================================================
+// Resources Re-exports
+// =============================================================================
+
+pub use resources::material::{Material, MaterialBuilder};
+pub use resources::mesh::Mesh;
 pub use resources::model::{Model, ModelBatch};
+pub use resources::primitives::Primitives;
+pub use resources::texture::Texture;
+pub use resources::vertex::{InstanceData, Vertex, VertexPBR};
 
-// Systems
-pub use systems::input::Input as InputNew;
-pub use systems::ecs::{World as WorldNew, Entity as EntityNew, Component as ComponentNew};
-pub use systems::scene::{Scene as SceneNew, SceneObject};
+// =============================================================================
+// Systems Re-exports
+// =============================================================================
+
+pub use systems::animation::{
+    AnimationClip, AnimationPlayer, AnimationTrack, EasingFunction, Keyframe, LoopMode, Tween,
+};
+pub use systems::audio::{AudioClipId, AudioListener, AudioSource, AudioSourceId, AudioSystem};
 pub use systems::camera::{Camera, Camera2D};
+pub use systems::ecs::{Component, Entity, World};
+pub use systems::frustum::{CullingSystem, Frustum, FrustumTestResult, Plane};
+pub use systems::input::Input;
+pub use systems::lighting::{Light, LightType, LightingSystem};
+pub use systems::particles::{EmitterShape, Particle, ParticleSystem, ParticleSystemConfig};
+pub use systems::physics::{PhysicsWorld, Ray, RigidBody, Sphere, AABB};
+pub use systems::scene::{Scene, SceneObject};
 pub use systems::transform::Transform;
 
-// Utils
-pub use utils::gpu_detector::{GPUDetector as GPUDetectorNew, GPUInfo};
-pub use utils::cpu_detector::{CPUDetector as CPUDetectorNew, CPUInfo};
-pub use utils::resolution_detector::{ResolutionDetector as ResolutionDetectorNew, MonitorInfo};
-pub use utils::time::{Time, FixedTimestep};
-
 // =============================================================================
-// Elite Features Re-exports
+// Utils Re-exports
 // =============================================================================
 
-// Uniform Buffers
-pub use graphics::uniform_buffer::{UniformBuffer, GlobalUniformData, LightUniformData, LightData, MaterialUniformData, MAX_LIGHTS};
-
-// Debug Renderer
-pub use graphics::debug_renderer::{DebugRenderer, DebugLine, DebugAABB, DebugSphere, DebugRay};
-
-// Post-processing
-pub use graphics::post_process::{PostProcessEffect, PostProcessSettings, PostProcessPipeline, PostProcessPreset, AAQualityPreset, AASettings};
-
-// Lighting System
-pub use systems::lighting::{Light, LightType, LightingSystem};
-
-// Physics & Collision
-pub use systems::physics::{RigidBody, AABB, Sphere, Ray, PhysicsWorld};
-
-// Frustum Culling
-pub use systems::frustum::{Frustum, Plane, CullingSystem, FrustumTestResult};
-
-// Animation System
-pub use systems::animation::{AnimationClip, AnimationPlayer, AnimationTrack, Keyframe, LoopMode, Tween, EasingFunction};
-
-// Audio System
-pub use systems::audio::{AudioSystem, AudioSource, AudioListener, AudioClipId, AudioSourceId};
-
-// Particle System
-pub use systems::particles::{ParticleSystem, Particle, ParticleSystemConfig, EmitterShape};
-
-// Primitives
-pub use resources::primitives::Primitives;
+pub use utils::cpu_detector::{CPUDetector, CPUInfo};
+pub use utils::gpu_detector::{GPUDetector, GPUInfo};
+pub use utils::resolution_detector::{MonitorInfo, ResolutionDetector};
+pub use utils::time::{FixedTimestep, Time};
 
 // =============================================================================
 // Prelude - Import everything commonly needed
 // =============================================================================
 pub mod prelude {
     // App Trait System
-    pub use crate::app::{ReactorApp, ReactorContext, ReactorConfig, RendererMode, run};
+    pub use crate::app::{run, ReactorApp, ReactorConfig, ReactorContext, RendererMode};
 
-    // Core
-    pub use crate::Reactor;
-    
+    // Core (Vulkan context)
+    pub use crate::core::context::VulkanContext;
+
     // Resources
-    pub use crate::resources::vertex::Vertex;
-    pub use crate::resources::mesh::Mesh;
     pub use crate::resources::material::{Material, MaterialBuilder};
-    pub use crate::resources::texture::Texture;
+    pub use crate::resources::mesh::Mesh;
     pub use crate::resources::primitives::Primitives;
-    
+    pub use crate::resources::texture::Texture;
+    pub use crate::resources::vertex::Vertex;
+
     // Systems
-    pub use crate::systems::scene::Scene;
+    pub use crate::systems::animation::{AnimationPlayer, EasingFunction, Tween};
     pub use crate::systems::camera::{Camera, Camera2D};
     pub use crate::systems::input::Input;
-    pub use crate::systems::transform::Transform;
     pub use crate::systems::lighting::{Light, LightType, LightingSystem};
-    pub use crate::systems::physics::{RigidBody, AABB, Sphere, Ray};
-    pub use crate::systems::animation::{AnimationPlayer, Tween, EasingFunction};
     pub use crate::systems::particles::ParticleSystem;
-    
+    pub use crate::systems::physics::{Ray, RigidBody, Sphere, AABB};
+    pub use crate::systems::scene::Scene;
+    pub use crate::systems::transform::Transform;
+
     // Graphics
-    pub use crate::graphics::post_process::{PostProcessSettings, PostProcessPreset};
     pub use crate::graphics::debug_renderer::DebugRenderer;
-    
+    pub use crate::graphics::post_process::{PostProcessPreset, PostProcessSettings};
+
     // Utils
-    pub use crate::utils::time::Time;
     pub use crate::utils::cpu_detector::CPUDetector;
     pub use crate::utils::resolution_detector::ResolutionDetector;
-    
+    pub use crate::utils::time::Time;
+
     // Math
-    pub use glam::{Vec2, Vec3, Vec4, Mat4, Quat};
+    pub use glam::{Mat4, Quat, Vec2, Vec3, Vec4};
 }

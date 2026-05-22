@@ -1,0 +1,26 @@
+# REACTOR — Rustfmt Configuration
+# =============================================================================
+# Consistent code style across the entire codebase.
+# Run: cargo fmt --all
+# =============================================================================
+
+edition = "2021"
+max_width = 100
+tab_spaces = 4
+use_field_init_shorthand = true
+use_try_shorthand = true
+newline_style = "Unix"
+
+# Imports
+reorder_imports = true
+group_imports = "StdExternalCrate"
+imports_granularity = "Crate"
+
+# Structs & enums
+struct_lit_width = 40
+struct_variant_width = 40
+
+# Comments
+wrap_comments = true
+comment_width = 90
+normalize_comments = true

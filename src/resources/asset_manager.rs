@@ -3,13 +3,13 @@
 // =============================================================================
 
 use std::collections::HashMap;
+use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::error::Error;
 
-use crate::resources::texture::Texture;
 use crate::resources::mesh::Mesh;
-use crate::resources::model::{ObjData, GltfData};
+use crate::resources::model::{GltfData, ObjData};
+use crate::resources::texture::Texture;
 use crate::Vertex;
 
 /// Asset handle for type-safe asset references
@@ -20,7 +20,7 @@ impl AssetHandle {
     pub fn invalid() -> Self {
         Self(0)
     }
-    
+
     pub fn is_valid(&self) -> bool {
         self.0 != 0
     }
@@ -104,17 +104,20 @@ impl AssetManager {
     pub fn cache_texture(&mut self, path: &Path, texture: Texture) -> AssetHandle {
         let handle = self.next_handle();
         let path_buf = path.to_path_buf();
-        
-        self.texture_cache.insert(path_buf.clone(), TextureEntry {
-            texture,
-            meta: AssetMeta {
-                handle,
-                path: path_buf.clone(),
-                state: AssetState::Loaded,
-                ref_count: 1,
+
+        self.texture_cache.insert(
+            path_buf.clone(),
+            TextureEntry {
+                texture,
+                meta: AssetMeta {
+                    handle,
+                    path: path_buf.clone(),
+                    state: AssetState::Loaded,
+                    ref_count: 1,
+                },
             },
-        });
-        
+        );
+
         self.handle_to_path.insert(handle, path_buf);
         handle
     }
@@ -123,17 +126,20 @@ impl AssetManager {
     pub fn cache_mesh(&mut self, path: &Path, mesh: Arc<Mesh>) -> AssetHandle {
         let handle = self.next_handle();
         let path_buf = path.to_path_buf();
-        
-        self.mesh_cache.insert(path_buf.clone(), MeshEntry {
-            mesh,
-            meta: AssetMeta {
-                handle,
-                path: path_buf.clone(),
-                state: AssetState::Loaded,
-                ref_count: 1,
+
+        self.mesh_cache.insert(
+            path_buf.clone(),
+            MeshEntry {
+                mesh,
+                meta: AssetMeta {
+                    handle,
+                    path: path_buf.clone(),
+                    state: AssetState::Loaded,
+                    ref_count: 1,
+                },
             },
-        });
-        
+        );
+
         self.handle_to_path.insert(handle, path_buf);
         handle
     }
@@ -168,7 +174,7 @@ impl AssetManager {
         if let Some(path) = self.handle_to_path.get(&handle).cloned() {
             let mut should_remove_texture = false;
             let mut should_remove_mesh = false;
-            
+
             if let Some(entry) = self.texture_cache.get_mut(&path) {
                 entry.meta.ref_count = entry.meta.ref_count.saturating_sub(1);
                 if entry.meta.ref_count == 0 {
@@ -181,7 +187,7 @@ impl AssetManager {
                     should_remove_mesh = true;
                 }
             }
-            
+
             if should_remove_texture {
                 self.texture_cache.remove(&path);
                 self.handle_to_path.remove(&handle);
@@ -242,11 +248,12 @@ pub fn load_gltf_mesh(path: &Path) -> Result<(Vec<Vertex>, Vec<u32>), Box<dyn Er
 
 /// Load any supported model format based on extension
 pub fn load_model_auto(path: &Path) -> Result<(Vec<Vertex>, Vec<u32>), Box<dyn Error>> {
-    let ext = path.extension()
+    let ext = path
+        .extension()
         .and_then(|e| e.to_str())
         .map(|e| e.to_lowercase())
         .unwrap_or_default();
-    
+
     match ext.as_str() {
         "obj" => load_obj_mesh(path),
         "gltf" | "glb" => load_gltf_mesh(path),

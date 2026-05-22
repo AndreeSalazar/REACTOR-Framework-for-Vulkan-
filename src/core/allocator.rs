@@ -1,6 +1,6 @@
 use gpu_allocator::vulkan::*;
-use std::sync::{Arc, Mutex};
 use std::error::Error;
+use std::sync::{Arc, Mutex};
 
 use crate::core::context::VulkanContext;
 

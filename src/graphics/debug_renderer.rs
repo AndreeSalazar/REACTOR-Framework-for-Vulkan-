@@ -1,4 +1,4 @@
-use glam::{Vec3, Vec4, Mat4};
+use glam::{Mat4, Vec3, Vec4};
 
 /// Simple AABB for debug rendering
 #[derive(Clone, Copy, Debug)]
@@ -97,7 +97,8 @@ impl DebugRenderer {
 
     pub fn line_persistent(&mut self, start: Vec3, end: Vec3, color: Vec4) {
         if self.enabled && self.persistent_lines.len() < self.max_lines {
-            self.persistent_lines.push(DebugLine::new(start, end, color));
+            self.persistent_lines
+                .push(DebugLine::new(start, end, color));
         }
     }
 
@@ -110,22 +111,70 @@ impl DebugRenderer {
         let max = aabb.max;
 
         // Bottom face
-        self.line(Vec3::new(min.x, min.y, min.z), Vec3::new(max.x, min.y, min.z), color);
-        self.line(Vec3::new(max.x, min.y, min.z), Vec3::new(max.x, min.y, max.z), color);
-        self.line(Vec3::new(max.x, min.y, max.z), Vec3::new(min.x, min.y, max.z), color);
-        self.line(Vec3::new(min.x, min.y, max.z), Vec3::new(min.x, min.y, min.z), color);
+        self.line(
+            Vec3::new(min.x, min.y, min.z),
+            Vec3::new(max.x, min.y, min.z),
+            color,
+        );
+        self.line(
+            Vec3::new(max.x, min.y, min.z),
+            Vec3::new(max.x, min.y, max.z),
+            color,
+        );
+        self.line(
+            Vec3::new(max.x, min.y, max.z),
+            Vec3::new(min.x, min.y, max.z),
+            color,
+        );
+        self.line(
+            Vec3::new(min.x, min.y, max.z),
+            Vec3::new(min.x, min.y, min.z),
+            color,
+        );
 
         // Top face
-        self.line(Vec3::new(min.x, max.y, min.z), Vec3::new(max.x, max.y, min.z), color);
-        self.line(Vec3::new(max.x, max.y, min.z), Vec3::new(max.x, max.y, max.z), color);
-        self.line(Vec3::new(max.x, max.y, max.z), Vec3::new(min.x, max.y, max.z), color);
-        self.line(Vec3::new(min.x, max.y, max.z), Vec3::new(min.x, max.y, min.z), color);
+        self.line(
+            Vec3::new(min.x, max.y, min.z),
+            Vec3::new(max.x, max.y, min.z),
+            color,
+        );
+        self.line(
+            Vec3::new(max.x, max.y, min.z),
+            Vec3::new(max.x, max.y, max.z),
+            color,
+        );
+        self.line(
+            Vec3::new(max.x, max.y, max.z),
+            Vec3::new(min.x, max.y, max.z),
+            color,
+        );
+        self.line(
+            Vec3::new(min.x, max.y, max.z),
+            Vec3::new(min.x, max.y, min.z),
+            color,
+        );
 
         // Vertical edges
-        self.line(Vec3::new(min.x, min.y, min.z), Vec3::new(min.x, max.y, min.z), color);
-        self.line(Vec3::new(max.x, min.y, min.z), Vec3::new(max.x, max.y, min.z), color);
-        self.line(Vec3::new(max.x, min.y, max.z), Vec3::new(max.x, max.y, max.z), color);
-        self.line(Vec3::new(min.x, min.y, max.z), Vec3::new(min.x, max.y, max.z), color);
+        self.line(
+            Vec3::new(min.x, min.y, min.z),
+            Vec3::new(min.x, max.y, min.z),
+            color,
+        );
+        self.line(
+            Vec3::new(max.x, min.y, min.z),
+            Vec3::new(max.x, max.y, min.z),
+            color,
+        );
+        self.line(
+            Vec3::new(max.x, min.y, max.z),
+            Vec3::new(max.x, max.y, max.z),
+            color,
+        );
+        self.line(
+            Vec3::new(min.x, min.y, max.z),
+            Vec3::new(min.x, max.y, max.z),
+            color,
+        );
     }
 
     pub fn sphere(&mut self, sphere: &DebugSphere, color: Vec4, segments: u32) {
@@ -161,16 +210,40 @@ impl DebugRenderer {
     }
 
     pub fn axes(&mut self, origin: Vec3, size: f32) {
-        self.line(origin, origin + Vec3::X * size, Vec4::new(1.0, 0.0, 0.0, 1.0));
-        self.line(origin, origin + Vec3::Y * size, Vec4::new(0.0, 1.0, 0.0, 1.0));
-        self.line(origin, origin + Vec3::Z * size, Vec4::new(0.0, 0.0, 1.0, 1.0));
+        self.line(
+            origin,
+            origin + Vec3::X * size,
+            Vec4::new(1.0, 0.0, 0.0, 1.0),
+        );
+        self.line(
+            origin,
+            origin + Vec3::Y * size,
+            Vec4::new(0.0, 1.0, 0.0, 1.0),
+        );
+        self.line(
+            origin,
+            origin + Vec3::Z * size,
+            Vec4::new(0.0, 0.0, 1.0, 1.0),
+        );
     }
 
     pub fn transform(&mut self, transform: &crate::systems::transform::Transform, size: f32) {
         let origin = transform.position;
-        self.line(origin, origin + transform.right() * size, Vec4::new(1.0, 0.0, 0.0, 1.0));
-        self.line(origin, origin + transform.up() * size, Vec4::new(0.0, 1.0, 0.0, 1.0));
-        self.line(origin, origin + transform.forward() * size, Vec4::new(0.0, 0.0, 1.0, 1.0));
+        self.line(
+            origin,
+            origin + transform.right() * size,
+            Vec4::new(1.0, 0.0, 0.0, 1.0),
+        );
+        self.line(
+            origin,
+            origin + transform.up() * size,
+            Vec4::new(0.0, 1.0, 0.0, 1.0),
+        );
+        self.line(
+            origin,
+            origin + transform.forward() * size,
+            Vec4::new(0.0, 0.0, 1.0, 1.0),
+        );
     }
 
     pub fn grid(&mut self, center: Vec3, size: f32, divisions: u32, color: Vec4) {
@@ -179,14 +252,14 @@ impl DebugRenderer {
 
         for i in 0..=divisions {
             let offset = -half + i as f32 * step;
-            
+
             // X lines
             self.line(
                 center + Vec3::new(-half, 0.0, offset),
                 center + Vec3::new(half, 0.0, offset),
                 color,
             );
-            
+
             // Z lines
             self.line(
                 center + Vec3::new(offset, 0.0, -half),
@@ -200,13 +273,13 @@ impl DebugRenderer {
         // NDC corners
         let ndc_corners = [
             Vec3::new(-1.0, -1.0, 0.0), // near bottom left
-            Vec3::new( 1.0, -1.0, 0.0), // near bottom right
-            Vec3::new( 1.0,  1.0, 0.0), // near top right
-            Vec3::new(-1.0,  1.0, 0.0), // near top left
+            Vec3::new(1.0, -1.0, 0.0),  // near bottom right
+            Vec3::new(1.0, 1.0, 0.0),   // near top right
+            Vec3::new(-1.0, 1.0, 0.0),  // near top left
             Vec3::new(-1.0, -1.0, 1.0), // far bottom left
-            Vec3::new( 1.0, -1.0, 1.0), // far bottom right
-            Vec3::new( 1.0,  1.0, 1.0), // far top right
-            Vec3::new(-1.0,  1.0, 1.0), // far top left
+            Vec3::new(1.0, -1.0, 1.0),  // far bottom right
+            Vec3::new(1.0, 1.0, 1.0),   // far top right
+            Vec3::new(-1.0, 1.0, 1.0),  // far top left
         ];
 
         let world_corners: Vec<Vec3> = ndc_corners

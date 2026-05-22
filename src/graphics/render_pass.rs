@@ -1,5 +1,5 @@
-use ash::vk;
 use crate::vulkan_context::VulkanContext;
+use ash::vk;
 use std::error::Error;
 
 pub struct RenderPass {
@@ -33,8 +33,12 @@ impl RenderPass {
         let mut attachment_refs = Vec::new();
 
         // Color attachment
-        let color_load_op = if config.clear_color { vk::AttachmentLoadOp::CLEAR } else { vk::AttachmentLoadOp::LOAD };
-        
+        let color_load_op = if config.clear_color {
+            vk::AttachmentLoadOp::CLEAR
+        } else {
+            vk::AttachmentLoadOp::LOAD
+        };
+
         let color_attachment = vk::AttachmentDescription::default()
             .format(config.color_format)
             .samples(config.samples)
@@ -54,8 +58,12 @@ impl RenderPass {
 
         // Depth attachment (optional)
         let depth_attachment_ref = if let Some(depth_format) = config.depth_format {
-            let depth_load_op = if config.clear_depth { vk::AttachmentLoadOp::CLEAR } else { vk::AttachmentLoadOp::LOAD };
-            
+            let depth_load_op = if config.clear_depth {
+                vk::AttachmentLoadOp::CLEAR
+            } else {
+                vk::AttachmentLoadOp::LOAD
+            };
+
             let depth_attachment = vk::AttachmentDescription::default()
                 .format(depth_format)
                 .samples(config.samples)
@@ -68,9 +76,11 @@ impl RenderPass {
 
             attachments.push(depth_attachment);
 
-            Some(vk::AttachmentReference::default()
-                .attachment(1)
-                .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL))
+            Some(
+                vk::AttachmentReference::default()
+                    .attachment(1)
+                    .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
+            )
         } else {
             None
         };
@@ -87,10 +97,19 @@ impl RenderPass {
         let dependency = vk::SubpassDependency::default()
             .src_subpass(vk::SUBPASS_EXTERNAL)
             .dst_subpass(0)
-            .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
+            .src_stage_mask(
+                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                    | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+            )
             .src_access_mask(vk::AccessFlags::empty())
-            .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
-            .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE);
+            .dst_stage_mask(
+                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                    | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+            )
+            .dst_access_mask(
+                vk::AccessFlags::COLOR_ATTACHMENT_WRITE
+                    | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+            );
 
         let subpasses = [subpass];
         let dependencies = [dependency];
@@ -102,26 +121,33 @@ impl RenderPass {
 
         let handle = unsafe { ctx.device.create_render_pass(&render_pass_info, None)? };
 
-        Ok(Self {
-            handle,
-            device: ctx.device.clone(),
-        })
+        Ok(Self { handle, device: ctx.device.clone() })
     }
 
     pub fn simple(ctx: &VulkanContext, color_format: vk::Format) -> Result<Self, Box<dyn Error>> {
-        Self::new(ctx, &RenderPassConfig {
-            color_format,
-            depth_format: None,
-            ..Default::default()
-        })
+        Self::new(
+            ctx,
+            &RenderPassConfig {
+                color_format,
+                depth_format: None,
+                ..Default::default()
+            },
+        )
     }
 
-    pub fn with_depth(ctx: &VulkanContext, color_format: vk::Format, depth_format: vk::Format) -> Result<Self, Box<dyn Error>> {
-        Self::new(ctx, &RenderPassConfig {
-            color_format,
-            depth_format: Some(depth_format),
-            ..Default::default()
-        })
+    pub fn with_depth(
+        ctx: &VulkanContext,
+        color_format: vk::Format,
+        depth_format: vk::Format,
+    ) -> Result<Self, Box<dyn Error>> {
+        Self::new(
+            ctx,
+            &RenderPassConfig {
+                color_format,
+                depth_format: Some(depth_format),
+                ..Default::default()
+            },
+        )
     }
 }
 

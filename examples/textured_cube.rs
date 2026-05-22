@@ -6,8 +6,8 @@
 // =============================================================================
 
 use reactor_vulkan::prelude::*;
-use reactor_vulkan::Vertex;
 use reactor_vulkan::resources::texture::Texture;
+use reactor_vulkan::Vertex;
 use std::sync::Arc;
 
 // =============================================================================
@@ -41,29 +41,38 @@ impl ReactorApp for TexturedCube {
         ));
 
         // Create a cube mesh with UV coordinates
-        let mesh = Arc::new(ctx.create_mesh(&cube_vertices_uv(), &cube_indices()).unwrap());
-        
+        let mesh = Arc::new(
+            ctx.create_mesh(&cube_vertices_uv(), &cube_indices())
+                .unwrap(),
+        );
+
         // =====================================================================
         // TEXTURED MATERIAL - Load texture and create material with it
         // =====================================================================
-        
+
         // Load texture from file and store it in self to keep it alive
-        let texture = ctx.load_texture("assets/textures/container.jpg")
+        let texture = ctx
+            .load_texture("assets/textures/container.jpg")
             .expect("Failed to load container.jpg texture");
-        println!("✅ Loaded container.jpg: {}x{}", texture.width, texture.height);
+        println!(
+            "✅ Loaded container.jpg: {}x{}",
+            texture.width, texture.height
+        );
 
         // Load texture shaders (with sampler support)
-        let vert = ash::util::read_spv(&mut std::io::Cursor::new(
-            include_bytes!("../shaders/texture_vert.spv")
-        )).unwrap();
-        let frag = ash::util::read_spv(&mut std::io::Cursor::new(
-            include_bytes!("../shaders/texture_frag.spv")
-        )).unwrap();
+        let vert = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
+            "../shaders/texture_vert.spv"
+        )))
+        .unwrap();
+        let frag = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
+            "../shaders/texture_frag.spv"
+        )))
+        .unwrap();
 
         // Create textured material
         let material = Arc::new(
             ctx.create_textured_material(&vert, &frag, &texture)
-                .expect("Failed to create textured material")
+                .expect("Failed to create textured material"),
         );
 
         // Store texture to keep it alive for the lifetime of the app
@@ -71,7 +80,7 @@ impl ReactorApp for TexturedCube {
 
         // Add cube to scene with textured material
         ctx.scene.add_object(mesh, material, Mat4::IDENTITY);
-        
+
         println!("🖼️ Textured Cube initialized!");
         println!("   - Texture applied to cube material");
         println!("   - Using texture shaders with sampler");
@@ -80,8 +89,9 @@ impl ReactorApp for TexturedCube {
     fn update(&mut self, ctx: &mut ReactorContext) {
         // Rotate cube
         self.rotation += ctx.time.delta() * 1.0;
-        let transform = Mat4::from_rotation_y(self.rotation) * Mat4::from_rotation_x(self.rotation * 0.5);
-        
+        let transform =
+            Mat4::from_rotation_y(self.rotation) * Mat4::from_rotation_x(self.rotation * 0.5);
+
         if !ctx.scene.objects.is_empty() {
             ctx.scene.objects[0].transform = transform;
         }
@@ -109,48 +119,139 @@ fn cube_vertices_uv() -> [Vertex; 24] {
     // Each face has 4 vertices with proper UVs for texturing
     [
         // Front face (Z+)
-        Vertex::new(Vec3::new(-0.5, -0.5,  0.5), Vec3::new(0.0, 0.0, 1.0), Vec2::new(0.0, 1.0)),
-        Vertex::new(Vec3::new( 0.5, -0.5,  0.5), Vec3::new(0.0, 0.0, 1.0), Vec2::new(1.0, 1.0)),
-        Vertex::new(Vec3::new( 0.5,  0.5,  0.5), Vec3::new(0.0, 0.0, 1.0), Vec2::new(1.0, 0.0)),
-        Vertex::new(Vec3::new(-0.5,  0.5,  0.5), Vec3::new(0.0, 0.0, 1.0), Vec2::new(0.0, 0.0)),
-        
+        Vertex::new(
+            Vec3::new(-0.5, -0.5, 0.5),
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec2::new(0.0, 1.0),
+        ),
+        Vertex::new(
+            Vec3::new(0.5, -0.5, 0.5),
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec2::new(1.0, 1.0),
+        ),
+        Vertex::new(
+            Vec3::new(0.5, 0.5, 0.5),
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec2::new(1.0, 0.0),
+        ),
+        Vertex::new(
+            Vec3::new(-0.5, 0.5, 0.5),
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec2::new(0.0, 0.0),
+        ),
         // Back face (Z-)
-        Vertex::new(Vec3::new( 0.5, -0.5, -0.5), Vec3::new(0.0, 0.0, -1.0), Vec2::new(0.0, 1.0)),
-        Vertex::new(Vec3::new(-0.5, -0.5, -0.5), Vec3::new(0.0, 0.0, -1.0), Vec2::new(1.0, 1.0)),
-        Vertex::new(Vec3::new(-0.5,  0.5, -0.5), Vec3::new(0.0, 0.0, -1.0), Vec2::new(1.0, 0.0)),
-        Vertex::new(Vec3::new( 0.5,  0.5, -0.5), Vec3::new(0.0, 0.0, -1.0), Vec2::new(0.0, 0.0)),
-        
+        Vertex::new(
+            Vec3::new(0.5, -0.5, -0.5),
+            Vec3::new(0.0, 0.0, -1.0),
+            Vec2::new(0.0, 1.0),
+        ),
+        Vertex::new(
+            Vec3::new(-0.5, -0.5, -0.5),
+            Vec3::new(0.0, 0.0, -1.0),
+            Vec2::new(1.0, 1.0),
+        ),
+        Vertex::new(
+            Vec3::new(-0.5, 0.5, -0.5),
+            Vec3::new(0.0, 0.0, -1.0),
+            Vec2::new(1.0, 0.0),
+        ),
+        Vertex::new(
+            Vec3::new(0.5, 0.5, -0.5),
+            Vec3::new(0.0, 0.0, -1.0),
+            Vec2::new(0.0, 0.0),
+        ),
         // Right face (X+)
-        Vertex::new(Vec3::new( 0.5, -0.5,  0.5), Vec3::new(1.0, 0.0, 0.0), Vec2::new(0.0, 1.0)),
-        Vertex::new(Vec3::new( 0.5, -0.5, -0.5), Vec3::new(1.0, 0.0, 0.0), Vec2::new(1.0, 1.0)),
-        Vertex::new(Vec3::new( 0.5,  0.5, -0.5), Vec3::new(1.0, 0.0, 0.0), Vec2::new(1.0, 0.0)),
-        Vertex::new(Vec3::new( 0.5,  0.5,  0.5), Vec3::new(1.0, 0.0, 0.0), Vec2::new(0.0, 0.0)),
-        
+        Vertex::new(
+            Vec3::new(0.5, -0.5, 0.5),
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec2::new(0.0, 1.0),
+        ),
+        Vertex::new(
+            Vec3::new(0.5, -0.5, -0.5),
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec2::new(1.0, 1.0),
+        ),
+        Vertex::new(
+            Vec3::new(0.5, 0.5, -0.5),
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec2::new(1.0, 0.0),
+        ),
+        Vertex::new(
+            Vec3::new(0.5, 0.5, 0.5),
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec2::new(0.0, 0.0),
+        ),
         // Left face (X-)
-        Vertex::new(Vec3::new(-0.5, -0.5, -0.5), Vec3::new(-1.0, 0.0, 0.0), Vec2::new(0.0, 1.0)),
-        Vertex::new(Vec3::new(-0.5, -0.5,  0.5), Vec3::new(-1.0, 0.0, 0.0), Vec2::new(1.0, 1.0)),
-        Vertex::new(Vec3::new(-0.5,  0.5,  0.5), Vec3::new(-1.0, 0.0, 0.0), Vec2::new(1.0, 0.0)),
-        Vertex::new(Vec3::new(-0.5,  0.5, -0.5), Vec3::new(-1.0, 0.0, 0.0), Vec2::new(0.0, 0.0)),
-        
+        Vertex::new(
+            Vec3::new(-0.5, -0.5, -0.5),
+            Vec3::new(-1.0, 0.0, 0.0),
+            Vec2::new(0.0, 1.0),
+        ),
+        Vertex::new(
+            Vec3::new(-0.5, -0.5, 0.5),
+            Vec3::new(-1.0, 0.0, 0.0),
+            Vec2::new(1.0, 1.0),
+        ),
+        Vertex::new(
+            Vec3::new(-0.5, 0.5, 0.5),
+            Vec3::new(-1.0, 0.0, 0.0),
+            Vec2::new(1.0, 0.0),
+        ),
+        Vertex::new(
+            Vec3::new(-0.5, 0.5, -0.5),
+            Vec3::new(-1.0, 0.0, 0.0),
+            Vec2::new(0.0, 0.0),
+        ),
         // Top face (Y+)
-        Vertex::new(Vec3::new(-0.5,  0.5,  0.5), Vec3::new(0.0, 1.0, 0.0), Vec2::new(0.0, 1.0)),
-        Vertex::new(Vec3::new( 0.5,  0.5,  0.5), Vec3::new(0.0, 1.0, 0.0), Vec2::new(1.0, 1.0)),
-        Vertex::new(Vec3::new( 0.5,  0.5, -0.5), Vec3::new(0.0, 1.0, 0.0), Vec2::new(1.0, 0.0)),
-        Vertex::new(Vec3::new(-0.5,  0.5, -0.5), Vec3::new(0.0, 1.0, 0.0), Vec2::new(0.0, 0.0)),
-        
+        Vertex::new(
+            Vec3::new(-0.5, 0.5, 0.5),
+            Vec3::new(0.0, 1.0, 0.0),
+            Vec2::new(0.0, 1.0),
+        ),
+        Vertex::new(
+            Vec3::new(0.5, 0.5, 0.5),
+            Vec3::new(0.0, 1.0, 0.0),
+            Vec2::new(1.0, 1.0),
+        ),
+        Vertex::new(
+            Vec3::new(0.5, 0.5, -0.5),
+            Vec3::new(0.0, 1.0, 0.0),
+            Vec2::new(1.0, 0.0),
+        ),
+        Vertex::new(
+            Vec3::new(-0.5, 0.5, -0.5),
+            Vec3::new(0.0, 1.0, 0.0),
+            Vec2::new(0.0, 0.0),
+        ),
         // Bottom face (Y-)
-        Vertex::new(Vec3::new(-0.5, -0.5, -0.5), Vec3::new(0.0, -1.0, 0.0), Vec2::new(0.0, 1.0)),
-        Vertex::new(Vec3::new( 0.5, -0.5, -0.5), Vec3::new(0.0, -1.0, 0.0), Vec2::new(1.0, 1.0)),
-        Vertex::new(Vec3::new( 0.5, -0.5,  0.5), Vec3::new(0.0, -1.0, 0.0), Vec2::new(1.0, 0.0)),
-        Vertex::new(Vec3::new(-0.5, -0.5,  0.5), Vec3::new(0.0, -1.0, 0.0), Vec2::new(0.0, 0.0)),
+        Vertex::new(
+            Vec3::new(-0.5, -0.5, -0.5),
+            Vec3::new(0.0, -1.0, 0.0),
+            Vec2::new(0.0, 1.0),
+        ),
+        Vertex::new(
+            Vec3::new(0.5, -0.5, -0.5),
+            Vec3::new(0.0, -1.0, 0.0),
+            Vec2::new(1.0, 1.0),
+        ),
+        Vertex::new(
+            Vec3::new(0.5, -0.5, 0.5),
+            Vec3::new(0.0, -1.0, 0.0),
+            Vec2::new(1.0, 0.0),
+        ),
+        Vertex::new(
+            Vec3::new(-0.5, -0.5, 0.5),
+            Vec3::new(0.0, -1.0, 0.0),
+            Vec2::new(0.0, 0.0),
+        ),
     ]
 }
 
 fn cube_indices() -> [u32; 36] {
     [
-        0, 1, 2,  2, 3, 0,      // Front
-        4, 5, 6,  6, 7, 4,      // Back
-        8, 9, 10, 10, 11, 8,    // Right
+        0, 1, 2, 2, 3, 0, // Front
+        4, 5, 6, 6, 7, 4, // Back
+        8, 9, 10, 10, 11, 8, // Right
         12, 13, 14, 14, 15, 12, // Left
         16, 17, 18, 18, 19, 16, // Top
         20, 21, 22, 22, 23, 20, // Bottom

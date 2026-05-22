@@ -144,7 +144,8 @@ impl RandomRange<f32> {
         let t = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .subsec_nanos() as f32 / 1_000_000_000.0;
+            .subsec_nanos() as f32
+            / 1_000_000_000.0;
         self.min + (self.max - self.min) * t
     }
 }
@@ -154,7 +155,8 @@ impl RandomRange<Vec3> {
         let t = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .subsec_nanos() as f32 / 1_000_000_000.0;
+            .subsec_nanos() as f32
+            / 1_000_000_000.0;
         self.min.lerp(self.max, t)
     }
 }
@@ -242,10 +244,7 @@ impl ParticleSystem {
                 start: Vec4::new(1.0, 0.8, 0.0, 1.0),
                 end: Vec4::new(1.0, 0.0, 0.0, 0.0),
             },
-            size_over_lifetime: ValueOverLifetime::Linear {
-                start: 1.0,
-                end: 0.0,
-            },
+            size_over_lifetime: ValueOverLifetime::Linear { start: 1.0, end: 0.0 },
             shape: EmitterShape::Cone { angle: 15.0, radius: 0.1 },
             ..Default::default()
         })
@@ -263,10 +262,7 @@ impl ParticleSystem {
                 start: Vec4::new(0.5, 0.5, 0.5, 0.5),
                 end: Vec4::new(0.3, 0.3, 0.3, 0.0),
             },
-            size_over_lifetime: ValueOverLifetime::Linear {
-                start: 1.0,
-                end: 2.0,
-            },
+            size_over_lifetime: ValueOverLifetime::Linear { start: 1.0, end: 2.0 },
             shape: EmitterShape::Circle { radius: 0.2 },
             ..Default::default()
         })
@@ -357,7 +353,11 @@ impl ParticleSystem {
                 let theta = random_range(0.0, std::f32::consts::TAU);
                 let pos = Vec3::new(r * theta.cos(), 0.0, r * theta.sin());
                 let spread = random_range(0.0, angle_rad);
-                let dir = Vec3::new(spread.sin() * theta.cos(), spread.cos(), spread.sin() * theta.sin());
+                let dir = Vec3::new(
+                    spread.sin() * theta.cos(),
+                    spread.cos(),
+                    spread.sin() * theta.sin(),
+                );
                 (pos, dir.normalize())
             }
             EmitterShape::Circle { radius } => {
@@ -421,7 +421,7 @@ impl ParticleSystem {
             let age = particle.age();
             let _size_mult = self.config.size_over_lifetime.sample(age);
             let color = self.config.color_over_lifetime.sample(age);
-            
+
             particle.color = color;
             // Size is base size * multiplier
             // (stored size is the base, we'd apply multiplier at render time)
@@ -446,7 +446,8 @@ fn random_range(min: f32, max: f32) -> f32 {
     let t = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
-        .subsec_nanos() as f32 / 1_000_000_000.0;
+        .subsec_nanos() as f32
+        / 1_000_000_000.0;
     min + (max - min) * t
 }
 
@@ -457,9 +458,5 @@ fn random_unit_sphere() -> Vec3 {
         .subsec_nanos() as f32;
     let theta = t * 0.001 % std::f32::consts::TAU;
     let phi = (t * 0.0001 % 1.0) * std::f32::consts::PI;
-    Vec3::new(
-        phi.sin() * theta.cos(),
-        phi.cos(),
-        phi.sin() * theta.sin(),
-    )
+    Vec3::new(phi.sin() * theta.cos(), phi.cos(), phi.sin() * theta.sin())
 }

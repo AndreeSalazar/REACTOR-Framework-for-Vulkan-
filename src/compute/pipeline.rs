@@ -1,5 +1,5 @@
-use ash::vk;
 use crate::core::context::VulkanContext;
+use ash::vk;
 use std::error::Error;
 use std::ffi::CStr;
 
@@ -48,11 +48,14 @@ impl ComputePipeline {
             .layout(layout);
 
         let pipelines = unsafe {
-            ctx.device.create_compute_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
+            ctx.device
+                .create_compute_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
                 .map_err(|(_, e)| e)?
         };
 
-        unsafe { ctx.device.destroy_shader_module(shader_module, None); }
+        unsafe {
+            ctx.device.destroy_shader_module(shader_module, None);
+        }
 
         Ok(Self {
             pipeline: pipelines[0],
@@ -63,7 +66,11 @@ impl ComputePipeline {
 
     pub fn bind(&self, command_buffer: vk::CommandBuffer, device: &ash::Device) {
         unsafe {
-            device.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::COMPUTE, self.pipeline);
+            device.cmd_bind_pipeline(
+                command_buffer,
+                vk::PipelineBindPoint::COMPUTE,
+                self.pipeline,
+            );
         }
     }
 }

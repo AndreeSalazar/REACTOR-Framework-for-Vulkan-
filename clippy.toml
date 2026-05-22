@@ -1,0 +1,20 @@
+# REACTOR — Clippy Configuration
+# =============================================================================
+# Strict linting for production-grade code.
+# Run: cargo clippy --workspace --all-targets -- -D warnings
+# =============================================================================
+
+# Minimum Rust version for clippy to know about
+msrv = "1.70.0"
+
+# Allow these names (REACTOR uses PascalCase for some Vulkan types)
+allowed-scripts = ["Latin"]
+
+# Too many arguments is OK for engine APIs (builder patterns, Vulkan wrappers)
+too-many-arguments-threshold = 10
+
+# Cognitive complexity — engine code can be complex by nature
+cognitive-complexity-threshold = 50
+
+# Type complexity — generic-heavy code is expected in engines
+type-complexity-threshold = 500

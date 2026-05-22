@@ -1,5 +1,5 @@
-use ash::vk;
 use crate::compute::pipeline::ComputePipeline;
+use ash::vk;
 
 pub struct ComputeDispatch;
 
@@ -14,8 +14,12 @@ impl ComputeDispatch {
         group_count_z: u32,
     ) {
         unsafe {
-            device.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::COMPUTE, pipeline.pipeline);
-            
+            device.cmd_bind_pipeline(
+                command_buffer,
+                vk::PipelineBindPoint::COMPUTE,
+                pipeline.pipeline,
+            );
+
             if !descriptor_sets.is_empty() {
                 device.cmd_bind_descriptor_sets(
                     command_buffer,
@@ -40,8 +44,12 @@ impl ComputeDispatch {
         offset: u64,
     ) {
         unsafe {
-            device.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::COMPUTE, pipeline.pipeline);
-            
+            device.cmd_bind_pipeline(
+                command_buffer,
+                vk::PipelineBindPoint::COMPUTE,
+                pipeline.pipeline,
+            );
+
             if !descriptor_sets.is_empty() {
                 device.cmd_bind_descriptor_sets(
                     command_buffer,

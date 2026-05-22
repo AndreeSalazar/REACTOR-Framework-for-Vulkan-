@@ -1,5 +1,5 @@
-use glam::{Vec2, Vec3};
 use crate::resources::vertex::Vertex;
+use glam::{Vec2, Vec3};
 
 /// Primitive mesh generators
 pub struct Primitives;
@@ -9,41 +9,137 @@ impl Primitives {
     pub fn cube() -> (Vec<Vertex>, Vec<u32>) {
         let vertices = vec![
             // Front face (Z+)
-            Vertex::new(Vec3::new(-0.5, -0.5,  0.5), Vec3::new(0.0, 0.0, 1.0), Vec2::new(0.0, 1.0)),
-            Vertex::new(Vec3::new( 0.5, -0.5,  0.5), Vec3::new(0.0, 0.0, 1.0), Vec2::new(1.0, 1.0)),
-            Vertex::new(Vec3::new( 0.5,  0.5,  0.5), Vec3::new(0.0, 0.0, 1.0), Vec2::new(1.0, 0.0)),
-            Vertex::new(Vec3::new(-0.5,  0.5,  0.5), Vec3::new(0.0, 0.0, 1.0), Vec2::new(0.0, 0.0)),
+            Vertex::new(
+                Vec3::new(-0.5, -0.5, 0.5),
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec2::new(0.0, 1.0),
+            ),
+            Vertex::new(
+                Vec3::new(0.5, -0.5, 0.5),
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec2::new(1.0, 1.0),
+            ),
+            Vertex::new(
+                Vec3::new(0.5, 0.5, 0.5),
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec2::new(1.0, 0.0),
+            ),
+            Vertex::new(
+                Vec3::new(-0.5, 0.5, 0.5),
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec2::new(0.0, 0.0),
+            ),
             // Back face (Z-)
-            Vertex::new(Vec3::new( 0.5, -0.5, -0.5), Vec3::new(0.0, 0.0, -1.0), Vec2::new(0.0, 1.0)),
-            Vertex::new(Vec3::new(-0.5, -0.5, -0.5), Vec3::new(0.0, 0.0, -1.0), Vec2::new(1.0, 1.0)),
-            Vertex::new(Vec3::new(-0.5,  0.5, -0.5), Vec3::new(0.0, 0.0, -1.0), Vec2::new(1.0, 0.0)),
-            Vertex::new(Vec3::new( 0.5,  0.5, -0.5), Vec3::new(0.0, 0.0, -1.0), Vec2::new(0.0, 0.0)),
+            Vertex::new(
+                Vec3::new(0.5, -0.5, -0.5),
+                Vec3::new(0.0, 0.0, -1.0),
+                Vec2::new(0.0, 1.0),
+            ),
+            Vertex::new(
+                Vec3::new(-0.5, -0.5, -0.5),
+                Vec3::new(0.0, 0.0, -1.0),
+                Vec2::new(1.0, 1.0),
+            ),
+            Vertex::new(
+                Vec3::new(-0.5, 0.5, -0.5),
+                Vec3::new(0.0, 0.0, -1.0),
+                Vec2::new(1.0, 0.0),
+            ),
+            Vertex::new(
+                Vec3::new(0.5, 0.5, -0.5),
+                Vec3::new(0.0, 0.0, -1.0),
+                Vec2::new(0.0, 0.0),
+            ),
             // Right face (X+)
-            Vertex::new(Vec3::new( 0.5, -0.5,  0.5), Vec3::new(1.0, 0.0, 0.0), Vec2::new(0.0, 1.0)),
-            Vertex::new(Vec3::new( 0.5, -0.5, -0.5), Vec3::new(1.0, 0.0, 0.0), Vec2::new(1.0, 1.0)),
-            Vertex::new(Vec3::new( 0.5,  0.5, -0.5), Vec3::new(1.0, 0.0, 0.0), Vec2::new(1.0, 0.0)),
-            Vertex::new(Vec3::new( 0.5,  0.5,  0.5), Vec3::new(1.0, 0.0, 0.0), Vec2::new(0.0, 0.0)),
+            Vertex::new(
+                Vec3::new(0.5, -0.5, 0.5),
+                Vec3::new(1.0, 0.0, 0.0),
+                Vec2::new(0.0, 1.0),
+            ),
+            Vertex::new(
+                Vec3::new(0.5, -0.5, -0.5),
+                Vec3::new(1.0, 0.0, 0.0),
+                Vec2::new(1.0, 1.0),
+            ),
+            Vertex::new(
+                Vec3::new(0.5, 0.5, -0.5),
+                Vec3::new(1.0, 0.0, 0.0),
+                Vec2::new(1.0, 0.0),
+            ),
+            Vertex::new(
+                Vec3::new(0.5, 0.5, 0.5),
+                Vec3::new(1.0, 0.0, 0.0),
+                Vec2::new(0.0, 0.0),
+            ),
             // Left face (X-)
-            Vertex::new(Vec3::new(-0.5, -0.5, -0.5), Vec3::new(-1.0, 0.0, 0.0), Vec2::new(0.0, 1.0)),
-            Vertex::new(Vec3::new(-0.5, -0.5,  0.5), Vec3::new(-1.0, 0.0, 0.0), Vec2::new(1.0, 1.0)),
-            Vertex::new(Vec3::new(-0.5,  0.5,  0.5), Vec3::new(-1.0, 0.0, 0.0), Vec2::new(1.0, 0.0)),
-            Vertex::new(Vec3::new(-0.5,  0.5, -0.5), Vec3::new(-1.0, 0.0, 0.0), Vec2::new(0.0, 0.0)),
+            Vertex::new(
+                Vec3::new(-0.5, -0.5, -0.5),
+                Vec3::new(-1.0, 0.0, 0.0),
+                Vec2::new(0.0, 1.0),
+            ),
+            Vertex::new(
+                Vec3::new(-0.5, -0.5, 0.5),
+                Vec3::new(-1.0, 0.0, 0.0),
+                Vec2::new(1.0, 1.0),
+            ),
+            Vertex::new(
+                Vec3::new(-0.5, 0.5, 0.5),
+                Vec3::new(-1.0, 0.0, 0.0),
+                Vec2::new(1.0, 0.0),
+            ),
+            Vertex::new(
+                Vec3::new(-0.5, 0.5, -0.5),
+                Vec3::new(-1.0, 0.0, 0.0),
+                Vec2::new(0.0, 0.0),
+            ),
             // Top face (Y+)
-            Vertex::new(Vec3::new(-0.5,  0.5,  0.5), Vec3::new(0.0, 1.0, 0.0), Vec2::new(0.0, 1.0)),
-            Vertex::new(Vec3::new( 0.5,  0.5,  0.5), Vec3::new(0.0, 1.0, 0.0), Vec2::new(1.0, 1.0)),
-            Vertex::new(Vec3::new( 0.5,  0.5, -0.5), Vec3::new(0.0, 1.0, 0.0), Vec2::new(1.0, 0.0)),
-            Vertex::new(Vec3::new(-0.5,  0.5, -0.5), Vec3::new(0.0, 1.0, 0.0), Vec2::new(0.0, 0.0)),
+            Vertex::new(
+                Vec3::new(-0.5, 0.5, 0.5),
+                Vec3::new(0.0, 1.0, 0.0),
+                Vec2::new(0.0, 1.0),
+            ),
+            Vertex::new(
+                Vec3::new(0.5, 0.5, 0.5),
+                Vec3::new(0.0, 1.0, 0.0),
+                Vec2::new(1.0, 1.0),
+            ),
+            Vertex::new(
+                Vec3::new(0.5, 0.5, -0.5),
+                Vec3::new(0.0, 1.0, 0.0),
+                Vec2::new(1.0, 0.0),
+            ),
+            Vertex::new(
+                Vec3::new(-0.5, 0.5, -0.5),
+                Vec3::new(0.0, 1.0, 0.0),
+                Vec2::new(0.0, 0.0),
+            ),
             // Bottom face (Y-)
-            Vertex::new(Vec3::new(-0.5, -0.5, -0.5), Vec3::new(0.0, -1.0, 0.0), Vec2::new(0.0, 1.0)),
-            Vertex::new(Vec3::new( 0.5, -0.5, -0.5), Vec3::new(0.0, -1.0, 0.0), Vec2::new(1.0, 1.0)),
-            Vertex::new(Vec3::new( 0.5, -0.5,  0.5), Vec3::new(0.0, -1.0, 0.0), Vec2::new(1.0, 0.0)),
-            Vertex::new(Vec3::new(-0.5, -0.5,  0.5), Vec3::new(0.0, -1.0, 0.0), Vec2::new(0.0, 0.0)),
+            Vertex::new(
+                Vec3::new(-0.5, -0.5, -0.5),
+                Vec3::new(0.0, -1.0, 0.0),
+                Vec2::new(0.0, 1.0),
+            ),
+            Vertex::new(
+                Vec3::new(0.5, -0.5, -0.5),
+                Vec3::new(0.0, -1.0, 0.0),
+                Vec2::new(1.0, 1.0),
+            ),
+            Vertex::new(
+                Vec3::new(0.5, -0.5, 0.5),
+                Vec3::new(0.0, -1.0, 0.0),
+                Vec2::new(1.0, 0.0),
+            ),
+            Vertex::new(
+                Vec3::new(-0.5, -0.5, 0.5),
+                Vec3::new(0.0, -1.0, 0.0),
+                Vec2::new(0.0, 0.0),
+            ),
         ];
 
         let indices = vec![
-            0, 1, 2, 2, 3, 0,       // Front
-            4, 5, 6, 6, 7, 4,       // Back
-            8, 9, 10, 10, 11, 8,   // Right
+            0, 1, 2, 2, 3, 0, // Front
+            4, 5, 6, 6, 7, 4, // Back
+            8, 9, 10, 10, 11, 8, // Right
             12, 13, 14, 14, 15, 12, // Left
             16, 17, 18, 18, 19, 16, // Top
             20, 21, 22, 22, 23, 20, // Bottom
@@ -303,7 +399,12 @@ impl Primitives {
     }
 
     /// Generate a torus
-    pub fn torus(ring_segments: u32, tube_segments: u32, ring_radius: f32, tube_radius: f32) -> (Vec<Vertex>, Vec<u32>) {
+    pub fn torus(
+        ring_segments: u32,
+        tube_segments: u32,
+        ring_radius: f32,
+        tube_radius: f32,
+    ) -> (Vec<Vertex>, Vec<u32>) {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
 
@@ -321,16 +422,16 @@ impl Primitives {
                 let y = tube_radius * tube_sin;
                 let z = (ring_radius + tube_radius * tube_cos) * ring_sin;
 
-                let normal = Vec3::new(
-                    tube_cos * ring_cos,
-                    tube_sin,
-                    tube_cos * ring_sin,
-                ).normalize();
+                let normal =
+                    Vec3::new(tube_cos * ring_cos, tube_sin, tube_cos * ring_sin).normalize();
 
                 vertices.push(Vertex::new(
                     Vec3::new(x, y, z),
                     normal,
-                    Vec2::new(ring as f32 / ring_segments as f32, tube as f32 / tube_segments as f32),
+                    Vec2::new(
+                        ring as f32 / ring_segments as f32,
+                        tube as f32 / tube_segments as f32,
+                    ),
                 ));
             }
         }
@@ -357,9 +458,9 @@ impl Primitives {
     pub fn quad() -> (Vec<Vertex>, Vec<u32>) {
         let vertices = vec![
             Vertex::new(Vec3::new(-0.5, -0.5, 0.0), Vec3::Z, Vec2::new(0.0, 1.0)),
-            Vertex::new(Vec3::new( 0.5, -0.5, 0.0), Vec3::Z, Vec2::new(1.0, 1.0)),
-            Vertex::new(Vec3::new( 0.5,  0.5, 0.0), Vec3::Z, Vec2::new(1.0, 0.0)),
-            Vertex::new(Vec3::new(-0.5,  0.5, 0.0), Vec3::Z, Vec2::new(0.0, 0.0)),
+            Vertex::new(Vec3::new(0.5, -0.5, 0.0), Vec3::Z, Vec2::new(1.0, 1.0)),
+            Vertex::new(Vec3::new(0.5, 0.5, 0.0), Vec3::Z, Vec2::new(1.0, 0.0)),
+            Vertex::new(Vec3::new(-0.5, 0.5, 0.0), Vec3::Z, Vec2::new(0.0, 0.0)),
         ];
 
         let indices = vec![0, 1, 2, 2, 3, 0];
@@ -371,8 +472,8 @@ impl Primitives {
     pub fn fullscreen_triangle() -> (Vec<Vertex>, Vec<u32>) {
         let vertices = vec![
             Vertex::new(Vec3::new(-1.0, -1.0, 0.0), Vec3::Z, Vec2::new(0.0, 0.0)),
-            Vertex::new(Vec3::new( 3.0, -1.0, 0.0), Vec3::Z, Vec2::new(2.0, 0.0)),
-            Vertex::new(Vec3::new(-1.0,  3.0, 0.0), Vec3::Z, Vec2::new(0.0, 2.0)),
+            Vertex::new(Vec3::new(3.0, -1.0, 0.0), Vec3::Z, Vec2::new(2.0, 0.0)),
+            Vertex::new(Vec3::new(-1.0, 3.0, 0.0), Vec3::Z, Vec2::new(0.0, 2.0)),
         ];
 
         let indices = vec![0, 1, 2];

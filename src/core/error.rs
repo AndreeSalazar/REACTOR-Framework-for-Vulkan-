@@ -5,8 +5,8 @@
 // All errors flow through ReactorError for consistent handling.
 // =============================================================================
 
-use std::fmt;
 use std::error::Error;
+use std::fmt;
 
 /// Error codes that can be returned through C ABI
 #[repr(u32)]
@@ -14,7 +14,7 @@ use std::error::Error;
 pub enum ErrorCode {
     /// No error
     None = 0,
-    
+
     // Vulkan errors (100-199)
     /// Vulkan instance creation failed
     VulkanInstanceCreation = 100,
@@ -44,7 +44,7 @@ pub enum ErrorCode {
     VulkanDescriptorSet = 112,
     /// Vulkan validation layer error
     VulkanValidation = 113,
-    
+
     // Resource errors (200-299)
     /// File not found
     FileNotFound = 200,
@@ -58,13 +58,13 @@ pub enum ErrorCode {
     ShaderLoadFailed = 204,
     /// Asset not found in cache
     AssetNotFound = 205,
-    
+
     // Window errors (300-399)
     /// Window creation failed
     WindowCreation = 300,
     /// Event loop error
     EventLoopError = 301,
-    
+
     // System errors (400-499)
     /// Out of memory
     OutOfMemory = 400,
@@ -78,7 +78,7 @@ pub enum ErrorCode {
     NotSupported = 404,
     /// Internal error
     InternalError = 405,
-    
+
     // Scene errors (500-599)
     /// Invalid object index
     InvalidObjectIndex = 500,
@@ -86,7 +86,7 @@ pub enum ErrorCode {
     InvalidMeshHandle = 501,
     /// Invalid material handle
     InvalidMaterialHandle = 502,
-    
+
     /// Unknown error
     Unknown = 999,
 }
@@ -152,7 +152,7 @@ impl ReactorError {
             source: None,
         }
     }
-    
+
     /// Create an error with a source error
     pub fn with_source<E: Error + Send + Sync + 'static>(
         code: ErrorCode,
@@ -165,61 +165,67 @@ impl ReactorError {
             source: Some(Box::new(source)),
         }
     }
-    
+
     // Convenience constructors for common errors
-    
+
     pub fn vulkan_instance(msg: impl Into<String>) -> Self {
         Self::new(ErrorCode::VulkanInstanceCreation, msg)
     }
-    
+
     pub fn vulkan_device(msg: impl Into<String>) -> Self {
         Self::new(ErrorCode::VulkanDeviceCreation, msg)
     }
-    
+
     pub fn vulkan_surface(msg: impl Into<String>) -> Self {
         Self::new(ErrorCode::VulkanSurfaceCreation, msg)
     }
-    
+
     pub fn vulkan_swapchain(msg: impl Into<String>) -> Self {
         Self::new(ErrorCode::VulkanSwapchainCreation, msg)
     }
-    
+
     pub fn vulkan_pipeline(msg: impl Into<String>) -> Self {
         Self::new(ErrorCode::VulkanPipelineCreation, msg)
     }
-    
+
     pub fn vulkan_buffer(msg: impl Into<String>) -> Self {
         Self::new(ErrorCode::VulkanBufferCreation, msg)
     }
-    
+
     pub fn vulkan_image(msg: impl Into<String>) -> Self {
         Self::new(ErrorCode::VulkanImageCreation, msg)
     }
-    
+
     pub fn vulkan_memory(msg: impl Into<String>) -> Self {
         Self::new(ErrorCode::VulkanMemoryAllocation, msg)
     }
-    
+
     pub fn vulkan_shader(msg: impl Into<String>) -> Self {
         Self::new(ErrorCode::VulkanShaderCompilation, msg)
     }
-    
+
     pub fn file_not_found(path: impl Into<String>) -> Self {
-        Self::new(ErrorCode::FileNotFound, format!("File not found: {}", path.into()))
+        Self::new(
+            ErrorCode::FileNotFound,
+            format!("File not found: {}", path.into()),
+        )
     }
-    
+
     pub fn invalid_format(msg: impl Into<String>) -> Self {
         Self::new(ErrorCode::InvalidFormat, msg)
     }
-    
+
     pub fn invalid_parameter(msg: impl Into<String>) -> Self {
         Self::new(ErrorCode::InvalidParameter, msg)
     }
-    
+
     pub fn not_initialized(what: impl Into<String>) -> Self {
-        Self::new(ErrorCode::NotInitialized, format!("{} not initialized", what.into()))
+        Self::new(
+            ErrorCode::NotInitialized,
+            format!("{} not initialized", what.into()),
+        )
     }
-    
+
     pub fn internal(msg: impl Into<String>) -> Self {
         Self::new(ErrorCode::InternalError, msg)
     }
@@ -227,9 +233,11 @@ impl ReactorError {
 
 impl fmt::Display for ReactorError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[REACTOR-{:03}] {}: {}", 
-            self.code as u32, 
-            self.code.description(), 
+        write!(
+            f,
+            "[REACTOR-{:03}] {}: {}",
+            self.code as u32,
+            self.code.description(),
             self.message
         )
     }
@@ -237,7 +245,9 @@ impl fmt::Display for ReactorError {
 
 impl Error for ReactorError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        self.source.as_ref().map(|e| e.as_ref() as &(dyn Error + 'static))
+        self.source
+            .as_ref()
+            .map(|e| e.as_ref() as &(dyn Error + 'static))
     }
 }
 
@@ -261,7 +271,9 @@ pub fn set_last_error(error: ReactorError) {
 
 /// Get the last error code
 pub fn get_last_error_code() -> ErrorCode {
-    LAST_ERROR.lock().unwrap()
+    LAST_ERROR
+        .lock()
+        .unwrap()
         .as_ref()
         .map(|e| e.code)
         .unwrap_or(ErrorCode::None)
@@ -269,7 +281,9 @@ pub fn get_last_error_code() -> ErrorCode {
 
 /// Get the last error message
 pub fn get_last_error_message() -> Option<String> {
-    LAST_ERROR.lock().unwrap()
+    LAST_ERROR
+        .lock()
+        .unwrap()
         .as_ref()
         .map(|e| e.message.clone())
 }
@@ -302,8 +316,8 @@ impl From<std::io::Error> for ReactorError {
 impl From<ash::vk::Result> for ReactorError {
     fn from(result: ash::vk::Result) -> Self {
         let code = match result {
-            ash::vk::Result::ERROR_OUT_OF_HOST_MEMORY |
-            ash::vk::Result::ERROR_OUT_OF_DEVICE_MEMORY => ErrorCode::VulkanMemoryAllocation,
+            ash::vk::Result::ERROR_OUT_OF_HOST_MEMORY
+            | ash::vk::Result::ERROR_OUT_OF_DEVICE_MEMORY => ErrorCode::VulkanMemoryAllocation,
             ash::vk::Result::ERROR_INITIALIZATION_FAILED => ErrorCode::VulkanInstanceCreation,
             ash::vk::Result::ERROR_DEVICE_LOST => ErrorCode::VulkanDeviceCreation,
             ash::vk::Result::ERROR_SURFACE_LOST_KHR => ErrorCode::VulkanSurfaceCreation,
@@ -316,14 +330,14 @@ impl From<ash::vk::Result> for ReactorError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_error_creation() {
         let err = ReactorError::new(ErrorCode::FileNotFound, "test.png");
         assert_eq!(err.code, ErrorCode::FileNotFound);
         assert!(err.message.contains("test.png"));
     }
-    
+
     #[test]
     fn test_error_display() {
         let err = ReactorError::vulkan_pipeline("Invalid shader");
@@ -331,16 +345,16 @@ mod tests {
         assert!(display.contains("105")); // ErrorCode::VulkanPipelineCreation
         assert!(display.contains("Invalid shader"));
     }
-    
+
     #[test]
     fn test_global_error_state() {
         clear_last_error();
         assert!(!has_error());
-        
+
         set_last_error(ReactorError::file_not_found("missing.obj"));
         assert!(has_error());
         assert_eq!(get_last_error_code(), ErrorCode::FileNotFound);
-        
+
         clear_last_error();
         assert!(!has_error());
     }

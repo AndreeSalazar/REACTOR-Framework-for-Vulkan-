@@ -1,5 +1,5 @@
-use glam::{Vec3, Mat4};
-use crate::systems::physics::{AABB, Sphere};
+use crate::systems::physics::{Sphere, AABB};
+use glam::{Mat4, Vec3};
 
 /// Frustum plane
 #[derive(Clone, Copy, Debug)]
@@ -15,10 +15,7 @@ impl Plane {
 
     pub fn from_point_normal(point: Vec3, normal: Vec3) -> Self {
         let n = normal.normalize();
-        Self {
-            normal: n,
-            distance: -n.dot(point),
-        }
+        Self { normal: n, distance: -n.dot(point) }
     }
 
     pub fn normalize(&mut self) {
@@ -47,7 +44,7 @@ pub struct Frustum {
 impl Frustum {
     pub fn from_view_projection(vp: Mat4) -> Self {
         let m = vp.to_cols_array_2d();
-        
+
         // Extract planes from view-projection matrix
         let mut planes = [
             // Left
@@ -112,9 +109,21 @@ impl Frustum {
         for plane in &self.planes {
             // Get the positive vertex (furthest along plane normal)
             let p = Vec3::new(
-                if plane.normal.x >= 0.0 { aabb.max.x } else { aabb.min.x },
-                if plane.normal.y >= 0.0 { aabb.max.y } else { aabb.min.y },
-                if plane.normal.z >= 0.0 { aabb.max.z } else { aabb.min.z },
+                if plane.normal.x >= 0.0 {
+                    aabb.max.x
+                } else {
+                    aabb.min.x
+                },
+                if plane.normal.y >= 0.0 {
+                    aabb.max.y
+                } else {
+                    aabb.min.y
+                },
+                if plane.normal.z >= 0.0 {
+                    aabb.max.z
+                } else {
+                    aabb.min.z
+                },
             );
 
             if plane.distance_to_point(p) < 0.0 {
@@ -130,15 +139,39 @@ impl Frustum {
 
         for plane in &self.planes {
             let p = Vec3::new(
-                if plane.normal.x >= 0.0 { aabb.max.x } else { aabb.min.x },
-                if plane.normal.y >= 0.0 { aabb.max.y } else { aabb.min.y },
-                if plane.normal.z >= 0.0 { aabb.max.z } else { aabb.min.z },
+                if plane.normal.x >= 0.0 {
+                    aabb.max.x
+                } else {
+                    aabb.min.x
+                },
+                if plane.normal.y >= 0.0 {
+                    aabb.max.y
+                } else {
+                    aabb.min.y
+                },
+                if plane.normal.z >= 0.0 {
+                    aabb.max.z
+                } else {
+                    aabb.min.z
+                },
             );
 
             let n = Vec3::new(
-                if plane.normal.x >= 0.0 { aabb.min.x } else { aabb.max.x },
-                if plane.normal.y >= 0.0 { aabb.min.y } else { aabb.max.y },
-                if plane.normal.z >= 0.0 { aabb.min.z } else { aabb.max.z },
+                if plane.normal.x >= 0.0 {
+                    aabb.min.x
+                } else {
+                    aabb.max.x
+                },
+                if plane.normal.y >= 0.0 {
+                    aabb.min.y
+                } else {
+                    aabb.max.y
+                },
+                if plane.normal.z >= 0.0 {
+                    aabb.min.z
+                } else {
+                    aabb.max.z
+                },
             );
 
             if plane.distance_to_point(p) < 0.0 {

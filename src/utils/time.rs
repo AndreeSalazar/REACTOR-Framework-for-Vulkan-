@@ -91,12 +91,12 @@ impl FixedTimestep {
     pub fn update(&mut self, delta: Duration) -> u32 {
         self.accumulator += delta;
         let mut steps = 0;
-        
+
         while self.accumulator >= self.timestep {
             self.accumulator -= self.timestep;
             steps += 1;
         }
-        
+
         steps
     }
 

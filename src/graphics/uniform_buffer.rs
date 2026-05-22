@@ -1,11 +1,11 @@
+use crate::graphics::buffer::Buffer;
+use crate::vulkan_context::VulkanContext;
 use ash::vk;
+use bytemuck::{Pod, Zeroable};
 use gpu_allocator::vulkan::Allocator;
 use gpu_allocator::MemoryLocation;
-use crate::vulkan_context::VulkanContext;
-use crate::graphics::buffer::Buffer;
 use std::error::Error;
 use std::sync::{Arc, Mutex};
-use bytemuck::{Pod, Zeroable};
 
 /// Global scene data passed to shaders
 #[repr(C)]
@@ -24,9 +24,24 @@ pub struct GlobalUniformData {
 impl Default for GlobalUniformData {
     fn default() -> Self {
         Self {
-            view: [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
-            projection: [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
-            view_projection: [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+            view: [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+            projection: [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+            view_projection: [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
             camera_position: [0.0, 0.0, 0.0, 1.0],
             time: 0.0,
             delta_time: 0.0,
@@ -63,10 +78,10 @@ impl GlobalUniformData {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 pub struct LightData {
-    pub position: [f32; 4],      // w = range for point/spot
-    pub direction: [f32; 4],     // w = spot angle
-    pub color: [f32; 4],         // w = intensity
-    pub light_type: u32,         // 0 = directional, 1 = point, 2 = spot
+    pub position: [f32; 4],  // w = range for point/spot
+    pub direction: [f32; 4], // w = spot angle
+    pub color: [f32; 4],     // w = intensity
+    pub light_type: u32,     // 0 = directional, 1 = point, 2 = spot
     pub cast_shadows: u32,
     pub _padding: [u32; 2],
 }
@@ -116,7 +131,7 @@ pub struct MaterialUniformData {
     pub ao: f32,
     pub emissive_strength: f32,
     pub emissive_color: [f32; 4],
-    pub use_textures: u32,  // Bitflags: 1=albedo, 2=normal, 4=metallic, 8=roughness
+    pub use_textures: u32, // Bitflags: 1=albedo, 2=normal, 4=metallic, 8=roughness
     pub _padding: [u32; 3],
 }
 

@@ -38,33 +38,33 @@ use winit::keyboard::KeyCode;
 // CONSTANTES DE GAMEPLAY — ajústalas a tu gusto
 // =============================================================================
 
-const RAIL_SPEED: f32 = 3.5;              // Velocidad de avance (m/s)
-const RAIL_LENGTH: f32 = 90.0;            // Longitud total del corredor
+const RAIL_SPEED: f32 = 3.5; // Velocidad de avance (m/s)
+const RAIL_LENGTH: f32 = 90.0; // Longitud total del corredor
 
-const AIM_FOV_SCALE: f32 = 0.55;          // Escala del FOV para el raycast del mouse
-const MAX_AMMO: u32 = 8;                  // Balas por cargador
-const RELOAD_TIME: f32 = 1.2;             // Segundos para recargar
-const FIRE_COOLDOWN: f32 = 0.18;          // Segundos entre disparos
+const AIM_FOV_SCALE: f32 = 0.55; // Escala del FOV para el raycast del mouse
+const MAX_AMMO: u32 = 8; // Balas por cargador
+const RELOAD_TIME: f32 = 1.2; // Segundos para recargar
+const FIRE_COOLDOWN: f32 = 0.18; // Segundos entre disparos
 
-const TRACER_SPEED: f32 = 150.0;          // Velocidad del trazador (m/s)
-const TRACER_LIFETIME: f32 = 0.4;         // Tiempo de vida del trazador (s)
-const TRACER_POOL_SIZE: usize = 12;       // Trazadores simultáneos
-const IMPACT_POOL_SIZE: usize = 20;       // Impactos simultáneos
-const IMPACT_LIFETIME: f32 = 0.35;        // Duración del impacto (s)
+const TRACER_SPEED: f32 = 150.0; // Velocidad del trazador (m/s)
+const TRACER_LIFETIME: f32 = 0.4; // Tiempo de vida del trazador (s)
+const TRACER_POOL_SIZE: usize = 12; // Trazadores simultáneos
+const IMPACT_POOL_SIZE: usize = 20; // Impactos simultáneos
+const IMPACT_LIFETIME: f32 = 0.35; // Duración del impacto (s)
 
-const ENEMY_BASE_SPEED: f32 = 2.0;        // Velocidad base de los zombies (m/s)
-const ENEMY_HIT_RADIUS: f32 = 0.9;        // Radio de colisión del enemigo
-const ENEMY_ATTACK_DIST: f32 = 2.5;       // Distancia a la que hacen daño
-const ENEMY_ATTACK_COOLDOWN: f32 = 1.2;   // Cooldown entre ataques del zombie
-const ENEMY_DEATH_DURATION: f32 = 0.6;    // Duración de la animación de muerte
+const ENEMY_BASE_SPEED: f32 = 2.0; // Velocidad base de los zombies (m/s)
+const ENEMY_HIT_RADIUS: f32 = 0.9; // Radio de colisión del enemigo
+const ENEMY_ATTACK_DIST: f32 = 2.5; // Distancia a la que hacen daño
+const ENEMY_ATTACK_COOLDOWN: f32 = 1.2; // Cooldown entre ataques del zombie
+const ENEMY_DEATH_DURATION: f32 = 0.6; // Duración de la animación de muerte
 
 const PLAYER_MAX_HP: i32 = 100;
-const DAMAGE_PER_HIT: i32 = 12;           // Daño que hace un zombie al jugador
+const DAMAGE_PER_HIT: i32 = 12; // Daño que hace un zombie al jugador
 const SCORE_PER_KILL: u32 = 100;
-const COMBO_TIMEOUT: f32 = 2.5;           // Segundos antes de resetear el combo
-const HEADSHOT_MULTIPLIER: u32 = 3;       // Multiplicador por headshot
+const COMBO_TIMEOUT: f32 = 2.5; // Segundos antes de resetear el combo
+const HEADSHOT_MULTIPLIER: u32 = 3; // Multiplicador por headshot
 
-const MUZZLE_FLASH_DURATION: f32 = 0.06;  // Duración del flash del disparo
+const MUZZLE_FLASH_DURATION: f32 = 0.06; // Duración del flash del disparo
 
 // =============================================================================
 // TIPOS
@@ -162,7 +162,11 @@ fn ray_sphere_intersect(origin: Vec3, dir: Vec3, center: Vec3, radius: f32) -> O
         None
     } else {
         let t = (-b - disc.sqrt()) / (2.0 * a);
-        if t > 0.0 { Some(t) } else { None }
+        if t > 0.0 {
+            Some(t)
+        } else {
+            None
+        }
     }
 }
 
@@ -209,8 +213,8 @@ struct Xenofall {
     active_impacts: Vec<Impact>,
 
     // Pools de objetos pre-creados (para evitar alloc en runtime)
-    tracer_pool: Vec<usize>,       // scene indices
-    impact_pool: Vec<usize>,       // scene indices
+    tracer_pool: Vec<usize>, // scene indices
+    impact_pool: Vec<usize>, // scene indices
     muzzle_flash_index: Option<usize>,
 
     // Escenario
@@ -277,21 +281,85 @@ impl Xenofall {
     fn build_waves() -> Vec<WaveDef> {
         vec![
             // Oleada 1: Introducción — pocos zombies lentos
-            WaveDef { trigger_z: 8.0,  count: 3,  spread: 3.0, depth: 5.0,  height_range: (0.8, 0.8), speed_mult: 0.7, enemy_hp: 1 },
+            WaveDef {
+                trigger_z: 8.0,
+                count: 3,
+                spread: 3.0,
+                depth: 5.0,
+                height_range: (0.8, 0.8),
+                speed_mult: 0.7,
+                enemy_hp: 1,
+            },
             // Oleada 2: Más enemigos, un poco más rápidos
-            WaveDef { trigger_z: 18.0, count: 5,  spread: 4.0, depth: 6.0,  height_range: (0.8, 1.0), speed_mult: 0.8, enemy_hp: 1 },
+            WaveDef {
+                trigger_z: 18.0,
+                count: 5,
+                spread: 4.0,
+                depth: 6.0,
+                height_range: (0.8, 1.0),
+                speed_mult: 0.8,
+                enemy_hp: 1,
+            },
             // Oleada 3: Mezcla de alturas
-            WaveDef { trigger_z: 28.0, count: 4,  spread: 5.0, depth: 4.0,  height_range: (0.8, 2.0), speed_mult: 0.9, enemy_hp: 2 },
+            WaveDef {
+                trigger_z: 28.0,
+                count: 4,
+                spread: 5.0,
+                depth: 4.0,
+                height_range: (0.8, 2.0),
+                speed_mult: 0.9,
+                enemy_hp: 2,
+            },
             // Oleada 4: Emboscada lateral
-            WaveDef { trigger_z: 38.0, count: 7,  spread: 5.5, depth: 8.0,  height_range: (0.8, 0.8), speed_mult: 1.0, enemy_hp: 2 },
+            WaveDef {
+                trigger_z: 38.0,
+                count: 7,
+                spread: 5.5,
+                depth: 8.0,
+                height_range: (0.8, 0.8),
+                speed_mult: 1.0,
+                enemy_hp: 2,
+            },
             // Oleada 5: Horda densa
-            WaveDef { trigger_z: 48.0, count: 6,  spread: 6.0, depth: 5.0,  height_range: (0.8, 1.5), speed_mult: 1.1, enemy_hp: 2 },
+            WaveDef {
+                trigger_z: 48.0,
+                count: 6,
+                spread: 6.0,
+                depth: 5.0,
+                height_range: (0.8, 1.5),
+                speed_mult: 1.1,
+                enemy_hp: 2,
+            },
             // Oleada 6: Rápidos y resistentes
-            WaveDef { trigger_z: 58.0, count: 8,  spread: 5.0, depth: 10.0, height_range: (0.8, 2.0), speed_mult: 1.2, enemy_hp: 3 },
+            WaveDef {
+                trigger_z: 58.0,
+                count: 8,
+                spread: 5.0,
+                depth: 10.0,
+                height_range: (0.8, 2.0),
+                speed_mult: 1.2,
+                enemy_hp: 3,
+            },
             // Oleada 7: Caos total
-            WaveDef { trigger_z: 68.0, count: 7,  spread: 6.0, depth: 8.0,  height_range: (0.8, 2.5), speed_mult: 1.3, enemy_hp: 3 },
+            WaveDef {
+                trigger_z: 68.0,
+                count: 7,
+                spread: 6.0,
+                depth: 8.0,
+                height_range: (0.8, 2.5),
+                speed_mult: 1.3,
+                enemy_hp: 3,
+            },
             // Oleada 8: JEFE FINAL — muchos zombies fuertes
-            WaveDef { trigger_z: 78.0, count: 12, spread: 7.0, depth: 12.0, height_range: (0.8, 1.5), speed_mult: 1.0, enemy_hp: 4 },
+            WaveDef {
+                trigger_z: 78.0,
+                count: 12,
+                spread: 7.0,
+                depth: 12.0,
+                height_range: (0.8, 1.5),
+                speed_mult: 1.0,
+                enemy_hp: 4,
+            },
         ]
     }
 
@@ -313,20 +381,26 @@ impl Xenofall {
             let z = -(i as f32 * 5.0 + 2.5);
             // Pared izquierda
             if let Ok(left) = ctx.spawn_cube(Vec3::ZERO) {
-                ctx.set_transform(left, Mat4::from_scale_rotation_translation(
-                    Vec3::new(0.3, 5.0, 5.0),
-                    Quat::IDENTITY,
-                    Vec3::new(-6.5, 2.5, z),
-                ));
+                ctx.set_transform(
+                    left,
+                    Mat4::from_scale_rotation_translation(
+                        Vec3::new(0.3, 5.0, 5.0),
+                        Quat::IDENTITY,
+                        Vec3::new(-6.5, 2.5, z),
+                    ),
+                );
                 self.wall_indices.push(left);
             }
             // Pared derecha
             if let Ok(right) = ctx.spawn_cube(Vec3::ZERO) {
-                ctx.set_transform(right, Mat4::from_scale_rotation_translation(
-                    Vec3::new(0.3, 5.0, 5.0),
-                    Quat::IDENTITY,
-                    Vec3::new(6.5, 2.5, z),
-                ));
+                ctx.set_transform(
+                    right,
+                    Mat4::from_scale_rotation_translation(
+                        Vec3::new(0.3, 5.0, 5.0),
+                        Quat::IDENTITY,
+                        Vec3::new(6.5, 2.5, z),
+                    ),
+                );
                 self.wall_indices.push(right);
             }
         }
@@ -335,19 +409,25 @@ impl Xenofall {
         for i in 0..9 {
             let z = -(i as f32 * 10.0 + 7.0);
             if let Ok(idx) = ctx.spawn_cube(Vec3::ZERO) {
-                ctx.set_transform(idx, Mat4::from_scale_rotation_translation(
-                    Vec3::new(0.6, 4.5, 0.6),
-                    Quat::IDENTITY,
-                    Vec3::new(-5.0, 2.25, z),
-                ));
+                ctx.set_transform(
+                    idx,
+                    Mat4::from_scale_rotation_translation(
+                        Vec3::new(0.6, 4.5, 0.6),
+                        Quat::IDENTITY,
+                        Vec3::new(-5.0, 2.25, z),
+                    ),
+                );
                 self.pillar_indices.push(idx);
             }
             if let Ok(idx) = ctx.spawn_cube(Vec3::ZERO) {
-                ctx.set_transform(idx, Mat4::from_scale_rotation_translation(
-                    Vec3::new(0.6, 4.5, 0.6),
-                    Quat::IDENTITY,
-                    Vec3::new(5.0, 2.25, z),
-                ));
+                ctx.set_transform(
+                    idx,
+                    Mat4::from_scale_rotation_translation(
+                        Vec3::new(0.6, 4.5, 0.6),
+                        Quat::IDENTITY,
+                        Vec3::new(5.0, 2.25, z),
+                    ),
+                );
                 self.pillar_indices.push(idx);
             }
         }
@@ -356,11 +436,14 @@ impl Xenofall {
         for i in 0..9 {
             let z = -(i as f32 * 10.0 + 5.0);
             if let Ok(idx) = ctx.spawn_cube(Vec3::ZERO) {
-                ctx.set_transform(idx, Mat4::from_scale_rotation_translation(
-                    Vec3::new(13.0, 0.2, 0.5),
-                    Quat::IDENTITY,
-                    Vec3::new(0.0, 5.0, z),
-                ));
+                ctx.set_transform(
+                    idx,
+                    Mat4::from_scale_rotation_translation(
+                        Vec3::new(13.0, 0.2, 0.5),
+                        Quat::IDENTITY,
+                        Vec3::new(0.0, 5.0, z),
+                    ),
+                );
                 self.wall_indices.push(idx);
             }
         }
@@ -452,7 +535,9 @@ impl Xenofall {
         // Check headshots first (smaller hitbox, higher priority)
         let mut closest_headshot = f32::MAX;
         for (i, enemy) in self.enemies.iter().enumerate() {
-            if enemy.state != EnemyState::Alive { continue; }
+            if enemy.state != EnemyState::Alive {
+                continue;
+            }
             if let Some(t) = ray_headshot_intersect(ray_origin, ray_dir, enemy.position) {
                 if t < closest_headshot && t < 100.0 {
                     closest_headshot = t;
@@ -467,8 +552,12 @@ impl Xenofall {
         if hit_enemy_idx.is_none() {
             let mut closest_body = f32::MAX;
             for (i, enemy) in self.enemies.iter().enumerate() {
-                if enemy.state != EnemyState::Alive { continue; }
-                if let Some(t) = ray_sphere_intersect(ray_origin, ray_dir, enemy.position, ENEMY_HIT_RADIUS) {
+                if enemy.state != EnemyState::Alive {
+                    continue;
+                }
+                if let Some(t) =
+                    ray_sphere_intersect(ray_origin, ray_dir, enemy.position, ENEMY_HIT_RADIUS)
+                {
                     if t < closest_body && t < 100.0 {
                         closest_body = t;
                         hit_enemy_idx = Some(i);
@@ -482,7 +571,7 @@ impl Xenofall {
         // Apply hit
         if let Some(idx) = hit_enemy_idx {
             self.shots_hit += 1;
-            
+
             // Extraer datos del enemigo antes de cualquier llamada a &mut self
             let (damage, died, was_headshot) = {
                 let enemy = &mut self.enemies[idx];
@@ -557,7 +646,9 @@ impl Xenofall {
     // =========================================================================
 
     fn update_rail(&mut self, dt: f32) {
-        if self.state != GameState::Playing { return; }
+        if self.state != GameState::Playing {
+            return;
+        }
         if self.rail_progress < RAIL_LENGTH {
             self.rail_progress += RAIL_SPEED * dt;
         }
@@ -620,7 +711,8 @@ impl Xenofall {
         }
 
         // Manual reload
-        if ctx.input().is_key_just_pressed(KeyCode::KeyR) && !self.reloading && self.ammo < MAX_AMMO {
+        if ctx.input().is_key_just_pressed(KeyCode::KeyR) && !self.reloading && self.ammo < MAX_AMMO
+        {
             self.reloading = true;
             self.reload_timer = RELOAD_TIME;
         }
@@ -647,7 +739,9 @@ impl Xenofall {
             std::process::exit(0);
         }
 
-        if self.state != GameState::Playing { return; }
+        if self.state != GameState::Playing {
+            return;
+        }
 
         // Fire on click
         let (ray_origin, ray_dir) = self.get_aim_ray(ctx);
@@ -658,12 +752,16 @@ impl Xenofall {
         // Muzzle flash visual
         if let Some(flash_idx) = self.muzzle_flash_index {
             if self.muzzle_flash_timer > 0.0 {
-                let flash_pos = ctx.camera.position + ctx.camera.forward() * 0.8
+                let flash_pos = ctx.camera.position
+                    + ctx.camera.forward() * 0.8
                     + ctx.camera.right() * 0.3
                     + ctx.camera.up() * (-0.2);
                 ctx.set_transform(flash_idx, Mat4::from_translation(flash_pos));
             } else {
-                ctx.set_transform(flash_idx, Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)));
+                ctx.set_transform(
+                    flash_idx,
+                    Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)),
+                );
             }
         }
     }
@@ -744,9 +842,7 @@ impl Xenofall {
                         enemy.position += move_dir * enemy.speed * dt;
 
                         // Face the player
-                        let facing = Quat::from_rotation_y(
-                            (-move_dir.x).atan2(-move_dir.z)
-                        );
+                        let facing = Quat::from_rotation_y((-move_dir.x).atan2(-move_dir.z));
                         ctx.set_transform(
                             enemy.scene_index,
                             Mat4::from_scale_rotation_translation(
@@ -801,7 +897,9 @@ impl Xenofall {
         let dt = ctx.delta();
 
         // Damage from enemies (accumulated in update_enemies)
-        if self.state != GameState::Playing { return; }
+        if self.state != GameState::Playing {
+            return;
+        }
 
         if self.damage_pending > 0 {
             self.hp -= self.damage_pending;
@@ -829,7 +927,8 @@ impl Xenofall {
         }
 
         // Victory check
-        if self.rail_progress >= RAIL_LENGTH && self.total_enemies_alive == 0
+        if self.rail_progress >= RAIL_LENGTH
+            && self.total_enemies_alive == 0
             && self.wave_index >= self.waves.len()
         {
             self.state = GameState::Victory;
@@ -837,10 +936,14 @@ impl Xenofall {
     }
 
     fn update_waves(&mut self, ctx: &mut ReactorContext) {
-        if self.state != GameState::Playing { return; }
-        if self.wave_index >= self.waves.len() { return; }
+        if self.state != GameState::Playing {
+            return;
+        }
+        if self.wave_index >= self.waves.len() {
+            return;
+        }
 
-        let wave = self.waves[self.wave_index];  // Copy, no referencia
+        let wave = self.waves[self.wave_index]; // Copy, no referencia
 
         // Check if we've reached the trigger point
         if self.rail_progress >= wave.trigger_z {
@@ -854,14 +957,10 @@ impl Xenofall {
                 let y = wave.height_range.0
                     + hash_rand(seed * 19 + 5) * (wave.height_range.1 - wave.height_range.0);
 
-                let pos = Vec3::new(
-                    x_offset,
-                    y,
-                    -(self.rail_progress + 12.0 + z_offset),
-                );
+                let pos = Vec3::new(x_offset, y, -(self.rail_progress + 12.0 + z_offset));
 
-                let speed = ENEMY_BASE_SPEED * wave.speed_mult
-                    * (0.8 + hash_rand(seed * 23 + 7) * 0.4);
+                let speed =
+                    ENEMY_BASE_SPEED * wave.speed_mult * (0.8 + hash_rand(seed * 23 + 7) * 0.4);
 
                 self.spawn_enemy(ctx, pos, wave.enemy_hp, speed);
             }
@@ -896,7 +995,11 @@ impl Xenofall {
             String::new()
         };
 
-        let flash = if self.damage_flash > 0.0 { "⚠️ " } else { "" };
+        let flash = if self.damage_flash > 0.0 {
+            "⚠️ "
+        } else {
+            ""
+        };
 
         ctx.set_title(&format!(
             "{}{} XENOFALL · {} HP · {} balas · {} pts{} · {} kills · {}% · Ola {}/{} · {:.0} FPS",
@@ -948,18 +1051,14 @@ impl ReactorApp for Xenofall {
 
         // Iluminación atmosférica
         ctx.add_sun();
-        ctx.add_directional_light(
-            Vec3::new(-0.3, -1.0, -0.5),
-            Vec3::new(0.6, 0.5, 0.4),
-            0.8,
-        );
+        ctx.add_directional_light(Vec3::new(-0.3, -1.0, -0.5), Vec3::new(0.6, 0.5, 0.4), 0.8);
 
         // Luces a lo largo del corredor
         for i in 0..10 {
             let z = -(i as f32 * 9.0 + 4.5);
             ctx.add_point_light(
                 Vec3::new(0.0, 4.5, z),
-                Vec3::new(1.0, 0.7, 0.4),  // Luz cálida tipo antorcha
+                Vec3::new(1.0, 0.7, 0.4), // Luz cálida tipo antorcha
                 2.5,
                 12.0,
             );
@@ -977,8 +1076,15 @@ impl ReactorApp for Xenofall {
         self.build_corridor(ctx);
         self.build_pools(ctx);
 
-        println!("[XENOFALL] Corredor construido · {} segmentos de suelo", self.floor_indices.len());
-        println!("[XENOFALL] Pools: {} trazadores, {} impactos", self.tracer_pool.len(), self.impact_pool.len());
+        println!(
+            "[XENOFALL] Corredor construido · {} segmentos de suelo",
+            self.floor_indices.len()
+        );
+        println!(
+            "[XENOFALL] Pools: {} trazadores, {} impactos",
+            self.tracer_pool.len(),
+            self.impact_pool.len()
+        );
         println!("[XENOFALL] {} oleadas cargadas", self.waves.len());
         println!("[XENOFALL] ¡Sobrevive al corredor, comandante!");
     }
@@ -1006,20 +1112,28 @@ impl ReactorApp for Xenofall {
         println!("╔═══════════════════════════════════════════════════╗");
         println!("║         ⚡ XENOFALL — After Action Report ⚡     ║");
         println!("╠═══════════════════════════════════════════════════╣");
-        println!("║  Resultado:  {}", match self.state {
-            GameState::Victory => "🏆 ¡VICTORIA!",
-            GameState::GameOver => "💀 GAME OVER",
-            _ => "🏁 Abandonado",
-        });
+        println!(
+            "║  Resultado:  {}",
+            match self.state {
+                GameState::Victory => "🏆 ¡VICTORIA!",
+                GameState::GameOver => "💀 GAME OVER",
+                _ => "🏁 Abandonado",
+            }
+        );
         println!("║  Puntuación: {:>37} ║", self.score);
         println!("║  Kills:      {:>37} ║", self.kills);
         println!("║  Headshots:  {:>37} ║", self.headshots);
         println!("║  Disparos:   {:>37} ║", self.shots_fired);
         let acc = if self.shots_fired > 0 {
             (self.shots_hit as f32 / self.shots_fired as f32 * 100.0) as u32
-        } else { 0 };
+        } else {
+            0
+        };
         println!("║  Precisión:  {:>36}% ║", acc);
-        println!("║  Oleadas:    {:>37} ║", format!("{}/{}", self.current_wave, self.waves.len()));
+        println!(
+            "║  Oleadas:    {:>37} ║",
+            format!("{}/{}", self.current_wave, self.waves.len())
+        );
         println!("╚═══════════════════════════════════════════════════╝");
     }
 }

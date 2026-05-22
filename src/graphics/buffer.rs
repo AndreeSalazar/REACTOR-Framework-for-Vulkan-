@@ -1,7 +1,7 @@
+use crate::vulkan_context::VulkanContext;
 use ash::vk;
 use gpu_allocator::vulkan::*;
 use gpu_allocator::MemoryLocation;
-use crate::vulkan_context::VulkanContext;
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 
@@ -38,7 +38,8 @@ impl Buffer {
         })?;
 
         unsafe {
-            ctx.device.bind_buffer_memory(handle, allocation.memory(), allocation.offset())?;
+            ctx.device
+                .bind_buffer_memory(handle, allocation.memory(), allocation.offset())?;
         }
 
         Ok(Self {
@@ -55,7 +56,13 @@ impl Buffer {
         allocator: Arc<Mutex<Allocator>>,
         size: u64,
     ) -> Result<Self, Box<dyn Error>> {
-        Self::new(ctx, allocator, size, vk::BufferUsageFlags::TRANSFER_SRC, MemoryLocation::CpuToGpu)
+        Self::new(
+            ctx,
+            allocator,
+            size,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            MemoryLocation::CpuToGpu,
+        )
     }
 
     pub fn new_vertex(
@@ -115,7 +122,8 @@ impl Buffer {
     }
 
     pub fn map<T>(&self) -> Option<*mut T> {
-        self.allocation.as_ref()
+        self.allocation
+            .as_ref()
             .and_then(|a| a.mapped_ptr())
             .map(|p| p.as_ptr() as *mut T)
     }

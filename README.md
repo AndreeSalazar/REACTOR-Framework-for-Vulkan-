@@ -16,7 +16,7 @@
   <a href="https://opensource.org/licenses/TECHNE"><img src="https://img.shields.io/badge/License-TECHNE-yellow.svg" alt="License: TECHNE"/></a>
   <a href="https://www.vulkan.org/"><img src="https://img.shields.io/badge/Vulkan-1.3-red.svg" alt="Vulkan"/></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.70+-orange.svg" alt="Rust"/></a>
-  <img src="https://img.shields.io/badge/Version-1.1.0--rust-green.svg" alt="Version 1.1.0-rust"/>
+  <img src="https://img.shields.io/badge/Version-1.2.0--rust-green.svg" alt="Version 1.2.0-rust"/>
   <img src="https://img.shields.io/badge/Status-Rust%20Only-blueviolet.svg" alt="Status"/>
 </p>
 
@@ -342,6 +342,16 @@ cargo run --example obj_loader_demo   # Carga de modelos OBJ
 ---
 
 ## 🔄 Changelog
+
+### v1.2.0 — UE5-style Core (Mayo 2026)
+- Workspace Cargo real (reactor-vulkan + reactor-editor).
+- Sistema de profiling jerárquico (`profile_scope!`, `CpuTimer`, `PerfCounter`).
+- Logging estructurado (`tracing-subscriber`, `REACTOR_LOG` env var, `r_info!`/`r_warn!`/`r_error!`).
+- Job System paralelo (rayon-backed: `parallel_for`, `join`, `scope`, `par_iter_mut`).
+- Linear Allocator para datos por-frame (`LinearAllocator`, `BumpArena`, zero-fragmentation).
+- Limpiado `lib.rs` de legacy y `*New` suffix — todos los exports ahora canónicos.
+- Configuración de calidad: `rust-toolchain.toml`, `rustfmt.toml`, `clippy.toml`.
+- Script `cleanup.ps1` / `cleanup.sh` para eliminar 14 archivos legacy dead-code.
 
 ### v1.1.0 — Rust Only (Mayo 2026)
 

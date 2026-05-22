@@ -1,7 +1,7 @@
+use crate::vulkan_context::VulkanContext;
 use ash::vk;
 use gpu_allocator::vulkan::*;
 use gpu_allocator::MemoryLocation;
-use crate::vulkan_context::VulkanContext;
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 
@@ -53,7 +53,8 @@ impl Image {
         })?;
 
         unsafe {
-            ctx.device.bind_image_memory(handle, allocation.memory(), allocation.offset())?;
+            ctx.device
+                .bind_image_memory(handle, allocation.memory(), allocation.offset())?;
         }
 
         let view_info = vk::ImageViewCreateInfo::default()
@@ -96,7 +97,9 @@ impl Image {
             width,
             height,
             vk::Format::R8G8B8A8_SRGB,
-            vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_SRC,
+            vk::ImageUsageFlags::TRANSFER_DST
+                | vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::TRANSFER_SRC,
             vk::ImageAspectFlags::COLOR,
             mip_levels,
         )
@@ -142,7 +145,8 @@ impl Image {
             ),
             (vk::ImageLayout::UNDEFINED, vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL) => (
                 vk::AccessFlags::empty(),
-                vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+                vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ
+                    | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
                 vk::PipelineStageFlags::TOP_OF_PIPE,
                 vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
             ),

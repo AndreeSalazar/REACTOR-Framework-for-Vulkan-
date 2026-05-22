@@ -135,7 +135,12 @@ impl GPUParticleSystem {
     }
 
     /// Get push constants for compute shader
-    pub fn get_push_constants(&self, delta_time: f32, emit_count: u32, time: f32) -> ParticlePushConstants {
+    pub fn get_push_constants(
+        &self,
+        delta_time: f32,
+        emit_count: u32,
+        time: f32,
+    ) -> ParticlePushConstants {
         ParticlePushConstants {
             delta_time,
             emit_count,
