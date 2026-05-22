@@ -1,8 +1,9 @@
 ﻿//! Indirect Draw System - GPU-Driven Rendering
 use std::sync::Arc;
 use ash::vk;
-use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, MemoryLocation};
-use crate::core::error::ReactorResult;
+use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc};
+use gpu_allocator::MemoryLocation;
+use crate::core::error::{ReactorError, ReactorResult, ErrorCode};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
@@ -44,14 +45,14 @@ impl IndirectDrawBuffer {
             name: "indirect_draw_buffer", requirements,
             location: MemoryLocation::CpuToGpu, linear: true,
             allocation_scheme: gpu_allocator::vulkan::AllocationScheme::GpuAllocatorManaged,
-        }).map_err(|e| crate::core::error::ReactorError::Other(format!("Alloc: {:?}", e)))?;
+        }).map_err(|e| ReactorError::with_source(ErrorCode::OutOfMemory, "Indirect buffer alloc failed", e))?;
         unsafe { device.bind_buffer_memory(buffer, allocation.memory(), allocation.offset())?; }
         Ok(Self { device, buffer, allocation, capacity: max_commands, count: 0 })
     }
 
     pub fn push(&mut self, cmd: IndirectCommandWithMaterial) -> ReactorResult<()> {
         if self.count >= self.capacity {
-            return Err(crate::core::error::ReactorError::Other("Indirect buffer full".into()));
+            return Err(ReactorError::new(ErrorCode::ResourceLimit, "Indirect buffer full"));
         }
         let stride = std::mem::size_of::<IndirectCommandWithMaterial>();
         let offset = (self.count as usize) * stride;

@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // REACTOR Error Handling System
 // =============================================================================
 // Unified error types for the entire engine.
@@ -97,7 +97,12 @@ pub enum ErrorCode {
 
     /// Unknown error
     Unknown = 999,
-}
+
+    // Variantes agregadas para Fase 2
+    ResourceLimit,
+    InvalidArgument,
+    IoError,
+    }
 
 impl ErrorCode {
     /// Get a human-readable description of the error code
@@ -369,7 +374,7 @@ use std::num::{ParseFloatError, ParseIntError};
 /// Convert ParseFloatError to ReactorError
 impl From<ParseFloatError> for ReactorError {
     fn from(err: ParseFloatError) -> Self {
-        ReactorError::internal(format!("Error parseando número: {}", err))
+        ReactorError::internal(format!("Error parseando nÃºmero: {}", err))
     }
 }
 
@@ -407,7 +412,7 @@ impl From<gpu_allocator::AllocationError> for ReactorError {
     fn from(err: gpu_allocator::AllocationError) -> Self {
         ReactorError::with_source(
             ErrorCode::VulkanMemoryAllocation,
-            format!("Fallo de asignación de memoria Vulkan: {}", err),
+            format!("Fallo de asignaciÃ³n de memoria Vulkan: {}", err),
             err,
         )
     }
@@ -445,3 +450,4 @@ mod tests {
         assert!(!has_error());
     }
 }
+

@@ -3,10 +3,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::io::{self, Read, Write, BufReader, BufWriter};
+use std::io::{self, Write, BufReader, BufWriter};
 use ash::vk;
 use serde::{Serialize, Deserialize};
-use crate::core::error::{ReactorError, ReactorResult};
+use crate::core::error::{ReactorError, ReactorResult, ErrorCode};
 use crate::graphics::pso_hash::PsoHash;
 
 const PSO_CACHE_MAGIC: u32 = 0x50534F43;
@@ -81,8 +81,10 @@ pub struct PsoCache {
 
 impl PsoCache {
     pub fn new(device: Arc<ash::Device>, cache_dir: &Path) -> ReactorResult<Self> {
+        let manager = PsoCacheManager::new(cache_dir)
+            .map_err(|e| ReactorError::with_source(ErrorCode::IoError, "PSO cache init failed", e))?;
         Ok(Self {
-            manager: PsoCacheManager::new(cache_dir).map_err(ReactorError::Io)?,
+            manager,
             pipelines: Arc::new(Mutex::new(HashMap::new())),
             device,
         })
@@ -98,6 +100,7 @@ impl PsoCache {
 
     pub fn clear(&self) -> ReactorResult<()> {
         self.pipelines.lock().unwrap().clear();
-        self.manager.clear().map_err(ReactorError::Io)
+        self.manager.clear()
+            .map_err(|e| ReactorError::with_source(ErrorCode::IoError, "PSO cache clear failed", e))
     }
 }

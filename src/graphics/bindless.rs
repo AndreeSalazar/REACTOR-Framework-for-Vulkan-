@@ -1,10 +1,7 @@
 ﻿//! Bindless Descriptor System (VK_EXT_descriptor_indexing)
-//!
-//! Permite acceder a miles de texturas y buffers desde el shader sin rebind.
-
 use std::sync::Arc;
 use ash::vk;
-use crate::core::error::{ReactorError, ReactorResult};
+use crate::core::error::{ReactorError, ReactorResult, ErrorCode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TextureHandle(pub u32);
@@ -61,7 +58,7 @@ pub fn check_bindless_support(
     }))
 }
 
-pub fn bindless_feature_chain() -> vk::PhysicalDeviceDescriptorIndexingFeatures {
+pub fn bindless_feature_chain() -> vk::PhysicalDeviceDescriptorIndexingFeatures<'static> {
     vk::PhysicalDeviceDescriptorIndexingFeatures::default()
         .shader_sampled_image_array_non_uniform_indexing(true)
         .shader_storage_buffer_array_non_uniform_indexing(true)
@@ -164,7 +161,7 @@ impl BindlessRegistry {
 
     pub fn register_texture(&mut self, image_view: vk::ImageView) -> ReactorResult<TextureHandle> {
         let slot = self.free_texture_slots.pop()
-            .ok_or_else(|| ReactorError::Other("Bindless texture slots exhausted".into()))?;
+            .ok_or_else(|| ReactorError::new(ErrorCode::ResourceLimit, "Bindless texture slots exhausted"))?;
         let image_info = vk::DescriptorImageInfo::default()
             .image_view(image_view)
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
@@ -183,7 +180,7 @@ impl BindlessRegistry {
 
     pub fn register_buffer(&mut self, buffer: vk::Buffer, offset: vk::DeviceSize, range: vk::DeviceSize) -> ReactorResult<BufferHandle> {
         let slot = self.free_buffer_slots.pop()
-            .ok_or_else(|| ReactorError::Other("Bindless buffer slots exhausted".into()))?;
+            .ok_or_else(|| ReactorError::new(ErrorCode::ResourceLimit, "Bindless buffer slots exhausted"))?;
         let buffer_info = vk::DescriptorBufferInfo::default().buffer(buffer).offset(offset).range(range);
         let write = vk::WriteDescriptorSet::default()
             .dst_set(self.descriptor_set).dst_binding(2).dst_array_element(slot)
