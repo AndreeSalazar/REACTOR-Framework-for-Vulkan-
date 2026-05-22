@@ -1,12 +1,16 @@
-// REACTOR Utils Module
-// Contains utility functions and hardware detection
+//! Utility functions and helpers
+//! 
+//! General-purpose utilities for the REACTOR framework.
 
 pub mod cpu_detector;
 pub mod gpu_detector;
+pub mod hash;
+pub mod math;
 pub mod resolution_detector;
-pub mod time;
 
 pub use cpu_detector::{CPUDetector, CPUInfo};
 pub use gpu_detector::{GPUDetector, GPUInfo};
 pub use resolution_detector::ResolutionDetector;
-pub use time::Time;
+
+// Re-export glam for convenience
+pub use glam;

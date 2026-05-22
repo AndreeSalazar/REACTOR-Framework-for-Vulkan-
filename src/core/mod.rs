@@ -1,9 +1,6 @@
-// =============================================================================
-// REACTOR Core Module
-// =============================================================================
-// Fundamental engine primitives: Vulkan context, memory, concurrency,
-// profiling, and error handling. All other crates/modules depend on this.
-// =============================================================================
+//! Core framework modules
+//! 
+//! This module contains the foundational systems that power REACTOR.
 
 // Vulkan abstractions
 pub mod allocator;
@@ -22,7 +19,7 @@ pub mod importance_map;
 // Error handling (ReactorError, ReactorResult, ErrorCode)
 pub mod error;
 
-// --- New UE5-style core subsystems ------------------------------------------
+// --- Core subsystems ----------------------------------------------------------
 
 /// Hierarchical profiler (tracing-backed, Tracy-ready).
 /// Use `profile_scope!("name")` to instrument any scope.
@@ -43,15 +40,12 @@ pub mod linear_allocator;
 // Re-exports
 // =============================================================================
 
+pub use error::{ReactorError, ReactorResult, ErrorCode};
+pub use context::VulkanContext;
 pub use allocator::MemoryAllocator;
 pub use arc_handle::{ArcDevice, ArcInstance, ArcSurface};
 pub use command::CommandManager;
-pub use context::VulkanContext;
 pub use device::DeviceInfo;
-pub use error::{
-    clear_last_error, get_last_error_code, get_last_error_message, has_error, set_last_error,
-    ErrorCode, ReactorError, ReactorResult,
-};
 pub use frame_graph::{
     Barrier, FrameGraph, FrameGraphStats, PassDesc, PassId, ResourceFormat, ResourceId,
     ResourceType,

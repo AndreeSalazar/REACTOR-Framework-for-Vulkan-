@@ -1,5 +1,6 @@
-// REACTOR Resources Module
-// Contains game asset abstractions (meshes, materials, textures, vertices)
+//! Asset and resource management
+//! 
+//! Loading, caching, and managing game assets.
 
 pub mod asset_manager;
 pub mod material;

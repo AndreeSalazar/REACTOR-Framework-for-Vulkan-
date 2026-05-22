@@ -1,5 +1,6 @@
-// REACTOR Graphics Module
-// Contains all rendering-related abstractions
+//! Vulkan graphics rendering
+//! 
+//! Low-level rendering primitives and pipeline management.
 
 pub mod buffer;
 pub mod debug_renderer;
@@ -16,7 +17,7 @@ pub mod shadows;
 pub mod swapchain;
 pub mod uniform_buffer;
 
-pub use buffer::Buffer;
+pub use buffer::{Buffer, VertexBuffer, IndexBuffer};
 pub use debug_renderer::{DebugLine, DebugRenderer};
 pub use depth::DepthBuffer;
 pub use descriptors::{
