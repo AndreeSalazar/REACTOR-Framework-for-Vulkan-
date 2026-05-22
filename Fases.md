@@ -200,7 +200,7 @@ producir videojuegos comerciales**, manteniendo:
 - [ ] Hot-reload de shaders con recompilaciÃ³n incremental.
 
 ### 2.4 Shader system
-- [ ] Soporte de **WGSL** + **GLSL** + **HLSL** vÃ­a `shaderc` y/o `naga`.
+- [x] âœ… Soporte de **WGSL** + **GLSL** + **HLSL** vÃ­a `naga` (integrado, compila 18 shaders).
 - [ ] Reflection automÃ¡tica (descriptor layouts derivados del SPIR-V).
 - [x] ✅ `ShaderCompiler` con macro `shader!` declarativa.
 
