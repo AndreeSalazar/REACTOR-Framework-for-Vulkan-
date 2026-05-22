@@ -47,7 +47,7 @@ pub struct Reactor {
 const MAX_FRAMES_IN_FLIGHT: usize = 3;
 
 impl Reactor {
-    pub fn init(window: &Window) -> ReactorResult<Self> {
+    pub fn init(window: &Window, requested_msaa: u32) -> ReactorResult<Self> {
         let context = VulkanContext::new(window)?;
 
         let allocator = Allocator::new(&AllocatorCreateDesc {
@@ -64,8 +64,8 @@ impl Reactor {
         let inner_size = window.inner_size();
         let swapchain = Swapchain::new(&context, inner_size.width, inner_size.height)?;
 
-        // Get MSAA samples (4x for good quality/performance balance)
-        let msaa_samples = Self::get_max_msaa_samples_static(&context);
+        // Convert user-requested MSAA to Vulkan SampleCountFlags
+        let msaa_samples = Self::msaa_from_u32(requested_msaa, &context);
         println!(
             "ðŸ”· MSAA: {:?} samples enabled for anti-aliasing",
             msaa_samples
@@ -411,6 +411,40 @@ impl Reactor {
             vk::SampleCountFlags::TYPE_2
         } else {
             vk::SampleCountFlags::TYPE_1
+        }
+    }
+
+    /// Convert user-requested MSAA sample count to Vulkan SampleCountFlags
+    /// Falls back to the maximum supported by the GPU if requested count is not supported
+    fn msaa_from_u32(requested: u32, context: &VulkanContext) -> vk::SampleCountFlags {
+        let props = unsafe {
+            context
+                .instance
+                .get_physical_device_properties(context.physical_device)
+        };
+        let counts = props.limits.framebuffer_color_sample_counts
+            & props.limits.framebuffer_depth_sample_counts;
+
+        let requested_flag = match requested {
+            1 => vk::SampleCountFlags::TYPE_1,
+            2 => vk::SampleCountFlags::TYPE_2,
+            4 => vk::SampleCountFlags::TYPE_4,
+            8 => vk::SampleCountFlags::TYPE_8,
+            _ => vk::SampleCountFlags::TYPE_1,
+        };
+
+        // Check if the requested MSAA is supported
+        if counts.contains(requested_flag) {
+            requested_flag
+        } else {
+            // Fall back to maximum supported
+            if counts.contains(vk::SampleCountFlags::TYPE_4) {
+                vk::SampleCountFlags::TYPE_4
+            } else if counts.contains(vk::SampleCountFlags::TYPE_2) {
+                vk::SampleCountFlags::TYPE_2
+            } else {
+                vk::SampleCountFlags::TYPE_1
+            }
         }
     }
 

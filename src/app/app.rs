@@ -702,7 +702,7 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
         };
 
         // Initialize Reactor
-        let reactor = match Reactor::init(&window) {
+        let reactor = match Reactor::init(&window, config.msaa_samples) {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("Failed to initialize Reactor: {}", e);
