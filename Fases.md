@@ -192,16 +192,16 @@ producir videojuegos comerciales**, manteniendo:
 - [x] ✅ Habilitar `VK_EXT_descriptor_indexing` con feature chain completo.
 - [x] ✅ Global texture array bindless (8192 slots UE5-style).
 - [x] ✅ Global buffer array bindless (mesh + material data, 4096 slots).
-- [ ] `MeshHandle` / `MaterialHandle` / `TextureHandle` como Ã­ndices u32.
+- [x] âœ… `MeshHandle` / `MaterialHandle` / `TextureHandle` como Ã­ndices u32.
 
 ### 2.3 Pipeline State Object (PSO) cache
-- [ ] Cache en disco (`.reactor/pipeline_cache.bin`).
-- [ ] Hash de (shader SPIR-V + render state) â†’ PSO.
-- [ ] Hot-reload de shaders con recompilaciÃ³n incremental.
+- [x] âœ… Cache en disco (`.reactor/pipeline_cache.bin`).
+- [x] âœ… Hash de (shader SPIR-V + render state) â†’ PSO.
+- [x] âœ… Hot-reload de shaders con recompilaciÃ³n incremental.
 
 ### 2.4 Shader system
 - [x] âœ… Soporte de **WGSL** + **GLSL** + **HLSL** vÃ­a `naga` (integrado, compila 18 shaders).
-- [ ] Reflection automÃ¡tica (descriptor layouts derivados del SPIR-V).
+- [x] âœ… Reflection automÃ¡tica (descriptor layouts derivados del SPIR-V).
 - [x] ✅ `ShaderCompiler` con macro `shader!` declarativa.
 
 ### 2.5 GPU-driven rendering
