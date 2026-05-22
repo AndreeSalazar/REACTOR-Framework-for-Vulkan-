@@ -566,11 +566,14 @@ impl ReactorContext {
     /// Helper interno: crea mesh + material por defecto y añade a la escena.
     fn spawn_primitive(
         &mut self,
-        vertices: &[crate::vertex::Vertex],
+        vertices: &[crate::resources::vertex::Vertex],
         indices: &[u32],
         transform: glam::Mat4,
     ) -> Result<usize, Box<dyn std::error::Error>> {
-        let mesh = std::sync::Arc::new(self.reactor.create_mesh(vertices, indices)?);
+        // Las dos definiciones de Vertex (legacy + nueva) son ABI-idénticas
+        // (repr(C) Pod con position/color/uv). Re-interpretamos sin copia.
+        let legacy: &[crate::vertex::Vertex] = bytemuck::cast_slice(vertices);
+        let mesh = std::sync::Arc::new(self.reactor.create_mesh(legacy, indices)?);
         let material = std::sync::Arc::new(self.default_material()?);
         Ok(self.scene.add_object(mesh, material, transform))
     }
