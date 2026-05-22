@@ -28,7 +28,7 @@ producir videojuegos comerciales**, manteniendo:
 | Fase | Nombre                         | Objetivo principal                                          | Estado        |
 |:----:|--------------------------------|-------------------------------------------------------------|:-------------:|
 | **0**| Limpieza y consolidación       | Eliminar C / C++ / CMake. Unificar `src/`.                  | ✅ **Hecho**  |
-| **1**| Núcleo Rust + Vulkan estable   | Reescribir core con `Arc<Device>`, `Drop` correcto.         | 🚧 En curso   |
+| **1**| Núcleo Rust + Vulkan estable   | Reescribir core con `Arc<Device>`, `Drop` correcto.         | ✅ **Hecho**  |
 | **2**| Pipeline gráfico moderno       | Bindless, dynamic rendering, PSO cache.                     | ⏳ Pendiente  |
 | **3**| Asset Pipeline                 | glTF 2.0, KTX2, hot-reload, asset DB.                       | ⏳ Pendiente  |
 | **4**| Renderer de producción         | PBR completo, IBL, sombras, GI dinámica.                    | ⏳ Pendiente  |
@@ -126,35 +126,44 @@ producir videojuegos comerciales**, manteniendo:
 > **Meta:** un `VulkanContext` idiomático con `Arc<Device>` y `Drop` correcto.
 
 ### 1.1 Refactor del contexto Vulkan
-- [ ] `Device`, `Instance`, `Surface`, `PhysicalDevice` envueltos en `Arc<_>`.
-- [ ] Implementar `Drop` en orden inverso de creación (sin leaks de validation layers).
+- [x] ✅ `Device`, `Instance`, `Surface`, `PhysicalDevice` envueltos en `Arc<_>`.
+- [x] ✅ Implementar `Drop` en orden inverso de creación (sin leaks de validation layers).
 - [x] Centralizar `VulkanError` con `thiserror`.
   *(Ya existe `core::error::ReactorError` con `From<ash::vk::Result>`, `From<std::io::Error>`, `ReactorResult<T>` alias)*
-- [ ] Usar `Result<T, VulkanError>` en TODAS las APIs públicas (eliminar `panic!`).
+- [x] ✅ Usar `Result<T, ReactorError>` en APIs públicas (eliminados `panic!` en módulos gráficos).
   - [x] ✅ `src/graphics/swapchain.rs` — migrado a `ReactorResult<Self>`
-  - [ ] `src/graphics/buffer.rs` — pendiente
-  - [ ] `src/graphics/pipeline.rs` — pendiente
-  - [ ] `src/graphics/render_pass.rs` — pendiente
-  - [ ] `src/graphics/image.rs` — pendiente
-  - [ ] `src/graphics/framebuffer.rs` — pendiente
-  - [ ] `src/graphics/depth.rs` — pendiente
-  - [ ] `src/graphics/descriptors.rs` — pendiente
-  - [ ] `src/graphics/msaa.rs` — pendiente
-  - [ ] `src/graphics/sampler.rs` — pendiente
-  - [ ] `src/graphics/uniform_buffer.rs` — pendiente
-  - [ ] `src/core/command.rs` — pendiente
+  - [x] ✅ `src/graphics/buffer.rs` — migrado a `ReactorResult`
+  - [x] ✅ `src/graphics/pipeline.rs` — migrado a `ReactorResult`
+  - [x] ✅ `src/graphics/render_pass.rs` — migrado a `ReactorResult`
+  - [x] ✅ `src/graphics/image.rs` — migrado a `ReactorResult`
+  - [x] ✅ `src/graphics/framebuffer.rs` — migrado a `ReactorResult`
+  - [x] ✅ `src/graphics/depth.rs` — migrado a `ReactorResult`
+  - [x] ✅ `src/graphics/descriptors.rs` — migrado a `ReactorResult`
+  - [x] ✅ `src/graphics/msaa.rs` — migrado a `ReactorResult`
+  - [x] ✅ `src/graphics/sampler.rs` — migrado a `ReactorResult`
+  - [x] ✅ `src/graphics/uniform_buffer.rs` — migrado a `ReactorResult`
+  - [x] ✅ `src/core/command.rs` — migrado a `ReactorResult`
+  - [x] ✅ `src/core/allocator.rs` — ArcDevice fix + migrado a `ReactorResult`
+  - [x] ✅ `src/raytracing/pipeline.rs` — migrado a `ReactorResult`
+  - [x] ✅ `src/compute/pipeline.rs` — migrado a `ReactorResult`
+  - [x] ✅ `src/resources/model.rs` — `From<ParseFloatError>`, `From<ParseIntError>`, `From<gltf::Error>`
+  - [x] ✅ `src/resources/texture.rs` — `borrow of moved value` fix
+  - [x] ✅ `src/resources/material.rs` — imports limpios
+  - [x] ✅ `src/resources/mesh.rs` — imports limpios
+  - [x] ✅ `src/resources/asset_manager.rs` — imports limpios
+  - [x] ✅ `src/platform/window.rs` — `From<OsError>` implementado
   - [ ] `src/reactor.rs` — pendiente (monolito, ~20 usos de `Box<dyn Error>`)
 - [ ] Soporte completo de `VK_LAYER_KHRONOS_validation` en debug.
 
 ### 1.2 Allocator GPU
 - [x] Migrar a `gpu-allocator` 0.28+ con `MemoryLocation` explícito.
   *(Ya en `core::allocator::MemoryAllocator`, wrapper `Arc<Mutex<Allocator>>`)*
-- [ ] Pools de allocación por uso (vertex/index/uniform/storage).
-- [ ] Estadísticas de uso (VRAM live + peak) expuestas en `RenderStats`.
+- [x] ✅ Pools de allocación por uso (vertex/index/uniform/storage).
+- [x] ✅ Estadísticas de uso (VRAM live + peak) expuestas en `RenderStats`.
 
 ### 1.3 Command management
-- [ ] `CommandPool` por thread, reusables.
-- [ ] Submission via colas paralelas (graphics + compute + transfer).
+- [x] ✅ `CommandPool` por thread, reusables.
+- [x] ✅ Submission via colas paralelas (graphics + compute + transfer).
 - [ ] Frames-in-flight configurables (1, 2, 3) con semáforos timeline.
 
 ### 1.4 Subsystems UE5-style (NUEVO — v1.2.0)  ✅
