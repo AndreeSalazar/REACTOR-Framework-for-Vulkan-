@@ -1,5 +1,5 @@
 use crate::graphics::buffer::Buffer;
-use crate::vulkan_context::VulkanContext;
+use crate::core::VulkanContext;
 use ash::vk;
 use bytemuck::{Pod, Zeroable};
 use gpu_allocator::vulkan::Allocator;

@@ -1,6 +1,6 @@
 use crate::graphics::pipeline::{Pipeline, PipelineConfig};
 use crate::resources::texture::Texture;
-use crate::vulkan_context::VulkanContext;
+use crate::core::VulkanContext;
 use ash::vk;
 use std::error::Error;
 use std::sync::Arc;
@@ -13,7 +13,35 @@ pub struct Material {
     device: Option<ash::Device>,
 }
 
+
+
 impl Material {
+    /// Crea un material con soporte para MSAA (Multi-Sample Anti-Aliasing)
+    pub fn new_with_msaa(
+        ctx: &VulkanContext,
+        render_pass: vk::RenderPass,
+        vert_code: &[u32],
+        frag_code: &[u32],
+        width: u32,
+        height: u32,
+        msaa_samples: vk::SampleCountFlags,
+    ) -> Result<Self, Box<dyn Error>> {
+        let config = PipelineConfig {
+            samples: msaa_samples,
+            ..PipelineConfig::default()
+        };
+        Self::with_config(
+            ctx,
+            render_pass,
+            vert_code,
+            frag_code,
+            width,
+            height,
+            &config,
+            &[],
+        )
+    }
+
     pub fn new(
         ctx: &VulkanContext,
         render_pass: vk::RenderPass,

@@ -1,16 +1,16 @@
-use crate::material::Material;
-use crate::mesh::Mesh;
-use crate::swapchain::Swapchain;
-use crate::vulkan_context::VulkanContext;
+use crate::resources::material::Material;
+use crate::resources::mesh::Mesh;
+use crate::graphics::swapchain::Swapchain;
+use crate::core::VulkanContext;
 use ash::vk;
 use gpu_allocator::vulkan::*;
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 use winit::window::Window;
 
-use crate::ecs::World;
-use crate::input::Input;
-use crate::ray_tracing::RayTracingContext;
+use crate::systems::ecs::World;
+use crate::systems::input::Input;
+use crate::raytracing::RayTracingContext;
 use winit::event::WindowEvent;
 
 pub struct Reactor {
@@ -324,7 +324,7 @@ impl Reactor {
 
     pub fn create_mesh(
         &self,
-        vertices: &[crate::vertex::Vertex],
+        vertices: &[crate::resources::vertex::Vertex],
         indices: &[u32],
     ) -> Result<Mesh, Box<dyn Error>> {
         Mesh::new(&self.context, &self.allocator, vertices, indices)
@@ -777,7 +777,7 @@ impl Reactor {
 
     pub fn draw_scene(
         &mut self,
-        scene: &crate::scene::Scene,
+        scene: &crate::systems::scene::Scene,
         view_projection: &glam::Mat4,
     ) -> Result<(), Box<dyn Error>> {
         if self.resized {

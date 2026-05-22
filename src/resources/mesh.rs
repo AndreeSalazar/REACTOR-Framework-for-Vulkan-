@@ -1,6 +1,6 @@
 use crate::graphics::buffer::Buffer;
 use crate::resources::vertex::Vertex;
-use crate::vulkan_context::VulkanContext;
+use crate::core::VulkanContext;
 use ash::vk;
 use gpu_allocator::vulkan::Allocator;
 use gpu_allocator::MemoryLocation;

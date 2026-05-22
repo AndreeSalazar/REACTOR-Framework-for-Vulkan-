@@ -573,7 +573,7 @@ impl Xenofall {
             self.shots_hit += 1;
 
             // Extraer datos del enemigo antes de cualquier llamada a &mut self
-            let (damage, died, was_headshot) = {
+            let (_damage, died, was_headshot) = {
                 let enemy = &mut self.enemies[idx];
                 let damage = if is_headshot { enemy.max_health } else { 1 };
                 enemy.health -= damage;

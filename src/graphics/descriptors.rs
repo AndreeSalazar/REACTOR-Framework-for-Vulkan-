@@ -1,4 +1,4 @@
-use crate::vulkan_context::VulkanContext;
+use crate::core::VulkanContext;
 use ash::vk;
 use std::error::Error;
 

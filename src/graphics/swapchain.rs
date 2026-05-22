@@ -1,4 +1,4 @@
-use crate::vulkan_context::VulkanContext;
+use crate::core::VulkanContext;
 use ash::khr::swapchain;
 use ash::{vk, Device};
 use std::error::Error;
