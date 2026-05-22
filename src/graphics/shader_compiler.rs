@@ -60,7 +60,7 @@ impl ShaderCompiler {
 
     /// Compila un archivo de shader a SPIR-V
     pub fn compile_file(
-        &self,
+        &mut self,
         path: &Path,
         stage: ShaderStage,
         entry_point: &str,
@@ -86,7 +86,7 @@ impl ShaderCompiler {
 
     /// Compila codigo fuente a SPIR-V
     pub fn compile_source(
-        &self,
+        &mut self,
         source: &str,
         lang: ShaderLanguage,
         stage: ShaderStage,
@@ -141,12 +141,12 @@ impl ShaderCompiler {
         let options = spv::Options {
             lang_version: (1, 3), // Vulkan 1.3
             flags: spv::WriterFlags::DEBUG,
-            capabilities: caps,
+            capabilities: Some(caps),
             bounds_check_policies: naga::proc::BoundsCheckPolicies::default(),
             ..Default::default()
         };
 
-        let spirv = spv::write_vec(&module, &info, &options).map_err(|e| {
+        let spirv = spv::write_vec(&module, &info, &options, None).map_err(|e| {
             ReactorError::new(
                 ErrorCode::ShaderCompilation,
                 format!("SPIR-V generation error: {:?}", e),

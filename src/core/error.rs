@@ -102,6 +102,7 @@ pub enum ErrorCode {
     ResourceLimit,
     InvalidArgument,
     IoError,
+    ShaderCompilation,
     }
 
 impl ErrorCode {
@@ -145,6 +146,10 @@ impl ErrorCode {
             ErrorCode::InvalidMeshHandle => "Invalid mesh handle",
             ErrorCode::InvalidMaterialHandle => "Invalid material handle",
             ErrorCode::Unknown => "Unknown error",
+            ErrorCode::ResourceLimit => "Resource limit exceeded",
+            ErrorCode::InvalidArgument => "Invalid argument provided",
+            ErrorCode::IoError => "I/O operation failed",
+            ErrorCode::ShaderCompilation => "Shader compilation failed",
         }
     }
 }
