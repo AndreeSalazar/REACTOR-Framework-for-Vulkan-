@@ -20,8 +20,8 @@ use winit::{
 };
 
 use crate::reactor::Reactor;
-use crate::systems::input::Input;
-use crate::utils::time::Time;
+use crate::platform::input::Input;
+use crate::platform::time::Time;
 
 use std::sync::Arc;
 
@@ -72,6 +72,7 @@ pub struct ReactorConfig {
     pub vsync: bool,
     pub fullscreen: bool,
     pub resizable: bool,
+    pub maximized: bool,
     pub msaa_samples: u32,
     pub renderer: RendererMode,
     pub physics_hz: u32,
@@ -107,6 +108,11 @@ impl ReactorConfig {
         self
     }
 
+    pub fn with_maximized(mut self, maximized: bool) -> Self {
+        self.maximized = maximized;
+        self
+    }
+
     pub fn with_msaa(mut self, samples: u32) -> Self {
         self.msaa_samples = samples;
         self
@@ -137,6 +143,7 @@ impl Default for ReactorConfig {
             vsync: true,
             fullscreen: false,
             resizable: true,
+            maximized: false,
             msaa_samples: 4,
             renderer: RendererMode::default(),
             physics_hz: 60,
@@ -233,7 +240,7 @@ pub struct ReactorContext {
     pub config: ReactorConfig,
 
     // Game systems — ALL inherited and ready
-    pub camera: crate::systems::camera::Camera,
+    pub camera: crate::scene::camera::Camera,
     pub scene: crate::systems::scene::Scene,
     pub lighting: crate::systems::lighting::LightingSystem,
     pub physics: crate::systems::physics::PhysicsWorld,
@@ -729,7 +736,7 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
             window,
             time: Time::new(),
             config: config.clone(),
-            camera: crate::systems::camera::Camera::perspective(60.0, aspect, 0.1, 1000.0),
+            camera: crate::scene::camera::Camera::perspective(60.0, aspect, 0.1, 1000.0),
             scene: crate::systems::scene::Scene::new(),
             lighting: crate::systems::lighting::LightingSystem::new(),
             physics: crate::systems::physics::PhysicsWorld::new(),

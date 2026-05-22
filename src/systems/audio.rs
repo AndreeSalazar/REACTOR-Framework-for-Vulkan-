@@ -116,7 +116,7 @@ impl Default for AudioListener {
 }
 
 impl AudioListener {
-    pub fn from_camera(camera: &crate::systems::camera::Camera) -> Self {
+    pub fn from_camera(camera: &crate::scene::camera::Camera) -> Self {
         Self {
             position: camera.position,
             forward: camera.forward(),

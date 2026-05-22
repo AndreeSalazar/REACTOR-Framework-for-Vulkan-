@@ -66,7 +66,7 @@ pub fn init_logger_with(level: LogLevel, log_file: Option<&str>) {
 }
 
 /// Log engine shutdown with final statistics.
-pub fn log_shutdown(stats: &crate::utils::time::Time) {
+pub fn log_shutdown(stats: &crate::platform::time::Time) {
     tracing::info!(
         target: "reactor::shutdown",
         elapsed_secs = stats.elapsed(),

@@ -9,7 +9,7 @@ use std::sync::Arc;
 use crate::resources::mesh::Mesh;
 use crate::resources::model::{GltfData, ObjData};
 use crate::resources::texture::Texture;
-use crate::Vertex;
+use crate::resources::vertex::Vertex;
 
 /// Asset handle for type-safe asset references
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

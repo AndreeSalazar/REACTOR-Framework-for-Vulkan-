@@ -61,6 +61,7 @@ pub use scene::camera::Camera;
 pub use scene::transform::Transform;
 pub use resources::mesh::Mesh;
 pub use resources::material::Material;
+pub use resources::vertex::Vertex;
 
 // Re-export glam types for convenience
 pub use glam::{Vec2, Vec3, Vec4, Mat3, Mat4, Quat};
@@ -85,13 +86,13 @@ pub mod prelude {
     };
     
     // Re-export the ReactorContext type alias if it exists
-    pub use crate::reactor::ReactorContext;
+    pub use crate::app::ReactorContext;
 }
 
 /// Quick start function - create a game in one line
 pub fn quick<F>(title: &str, width: u32, height: u32, update_fn: F)
 where
-    F: FnMut(&mut crate::reactor::ReactorContext) + 'static,
+    F: FnMut(&mut app::ReactorContext) + 'static,
 {
     struct QuickGame<F> {
         title: String,
@@ -102,7 +103,7 @@ where
     
     impl<F> ReactorApp for QuickGame<F>
     where
-        F: FnMut(&mut crate::reactor::ReactorContext),
+        F: FnMut(&mut app::ReactorContext),
     {
         fn config(&self) -> ReactorConfig {
             ReactorConfig::new(&self.title)
@@ -110,7 +111,9 @@ where
                 .with_vsync(true)
         }
         
-        fn update(&mut self, ctx: &mut crate::reactor::ReactorContext) {
+        fn init(&mut self, _ctx: &mut app::ReactorContext) {}
+        
+        fn update(&mut self, ctx: &mut app::ReactorContext) {
             (self.update_fn)(ctx);
         }
     }
@@ -144,11 +147,11 @@ macro_rules! game {
                     .with_msaa($msaa)
             }
             
-            fn init(&mut self, ctx: &mut $crate::reactor::ReactorContext) {
+            fn init(&mut self, ctx: &mut $crate::app::ReactorContext) {
                 $init(ctx);
             }
             
-            fn update(&mut self, ctx: &mut $crate::reactor::ReactorContext) {
+            fn update(&mut self, ctx: &mut $crate::app::ReactorContext) {
                 $update(ctx);
             }
         }

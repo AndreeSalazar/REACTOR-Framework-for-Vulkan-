@@ -8,8 +8,8 @@ use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
 use std::sync::{Arc, Mutex};
 use winit::window::Window;
 
-use crate::systems::ecs::World;
-use crate::systems::input::Input;
+use crate::scene::ecs::World;
+use crate::platform::input::Input;
 use crate::raytracing::RayTracingContext;
 use winit::event::WindowEvent;
 
@@ -835,7 +835,7 @@ impl Reactor {
                     depth_stencil: vk::ClearDepthStencilValue { depth: 1.0, stencil: 0 },
                 });
 
-            let mut rendering_info = vk::RenderingInfo::default()
+            let rendering_info = vk::RenderingInfo::default()
                 .render_area(vk::Rect2D {
                     offset: vk::Offset2D { x: 0, y: 0 },
                     extent: self.swapchain.extent,
@@ -1144,7 +1144,7 @@ impl Reactor {
                     depth_stencil: vk::ClearDepthStencilValue { depth: 1.0, stencil: 0 },
                 });
 
-            let mut rendering_info = vk::RenderingInfo::default()
+            let rendering_info = vk::RenderingInfo::default()
                 .render_area(vk::Rect2D {
                     offset: vk::Offset2D { x: 0, y: 0 },
                     extent: self.swapchain.extent,

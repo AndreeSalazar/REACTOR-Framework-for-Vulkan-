@@ -2,7 +2,7 @@
 //! 
 //! High-level forward renderer abstraction.
 
-use crate::reactor::ReactorContext;
+use crate::app::ReactorContext;
 
 /// Forward renderer implementation
 pub struct ForwardRenderer {

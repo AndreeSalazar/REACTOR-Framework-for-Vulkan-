@@ -178,7 +178,7 @@ pub struct AnimationSample {
 }
 
 impl AnimationSample {
-    pub fn apply_to_transform(&self, transform: &mut crate::systems::transform::Transform) {
+    pub fn apply_to_transform(&self, transform: &mut crate::scene::transform::Transform) {
         if let Some(pos) = self.position {
             transform.position = pos;
         }

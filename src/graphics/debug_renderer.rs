@@ -227,7 +227,7 @@ impl DebugRenderer {
         );
     }
 
-    pub fn transform(&mut self, transform: &crate::systems::transform::Transform, size: f32) {
+    pub fn transform(&mut self, transform: &crate::scene::transform::Transform, size: f32) {
         let origin = transform.position;
         self.line(
             origin,

@@ -1,4 +1,4 @@
-use crate::systems::transform::Transform;
+use crate::scene::transform::Transform;
 use glam::{Quat, Vec3};
 
 /// Basic physics body component

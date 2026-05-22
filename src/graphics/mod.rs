@@ -17,7 +17,7 @@ pub mod shadows;
 pub mod swapchain;
 pub mod uniform_buffer;
 
-pub use buffer::{Buffer, VertexBuffer, IndexBuffer};
+pub use buffer::Buffer;
 pub use debug_renderer::{DebugLine, DebugRenderer};
 pub use depth::DepthBuffer;
 pub use descriptors::{

@@ -1,7 +1,7 @@
 use crate::resources::material::Material;
 use crate::core::error::ReactorResult;
 use crate::resources::mesh::Mesh;
-use crate::Vertex;
+use crate::resources::vertex::Vertex;
 use glam::{Mat4, Vec2, Vec3};
 use gltf;
 use std::fs::File;

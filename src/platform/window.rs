@@ -4,7 +4,7 @@ use winit::dpi::LogicalSize;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::Window;
 
-use crate::platform::config::ReactorConfig;
+use crate::app::config::ReactorConfig;
 
 /// Platform window abstraction wrapping winit
 pub struct ReactorWindow {
