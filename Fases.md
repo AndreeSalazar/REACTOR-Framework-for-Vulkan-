@@ -1,73 +1,73 @@
-<p align="center">
+﻿<p align="center">
   <img src="image.svg" alt="REACTOR Logo" width="220"/>
 </p>
 
-<h1 align="center">REACTOR — Fases de Construcción del SDK</h1>
+<h1 align="center">REACTOR â€” Fases de ConstrucciÃ³n del SDK</h1>
 
 <p align="center">
   <strong>Roadmap completo para llegar a un SDK de videojuegos AAA en Rust puro + Vulkan 1.3</strong><br/>
-  <em>Powered by Salazar-interactive · v1.1.0-rust → v2.0.0-sdk</em>
+  <em>Powered by Salazar-interactive Â· v1.2.0-rust â†’ v2.0.0-sdk</em>
 </p>
 
 ---
 
-## 📜 Objetivo
+## ðŸ“œ Objetivo
 
 Transformar **REACTOR** desde un framework de rendering Vulkan en un **SDK completo para
 producir videojuegos comerciales**, manteniendo:
 
-- 🦀 **100 % Rust** — sin C, sin C++, sin CMake, sin vcpkg.
-- ⚡ **Zero-overhead** — abstracciones que se compilan a Vulkan puro.
-- 🛡️ **Memory-safe** por construcción gracias al sistema de ownership.
-- 🎮 **Game-ready** — todo lo que necesita un equipo para enviar un juego.
+- ðŸ¦€ **100 % Rust** â€” sin C, sin C++, sin CMake, sin vcpkg.
+- âš¡ **Zero-overhead** â€” abstracciones que se compilan a Vulkan puro.
+- ðŸ›¡ï¸ **Memory-safe** por construcciÃ³n gracias al sistema de ownership.
+- ðŸŽ® **Game-ready** â€” todo lo que necesita un equipo para enviar un juego.
 
 ---
 
-## 🗂️ Resumen de Fases
+## ðŸ—‚ï¸ Resumen de Fases
 
 | Fase | Nombre                         | Objetivo principal                                          | Estado        |
 |:----:|--------------------------------|-------------------------------------------------------------|:-------------:|
-| **0**| Limpieza y consolidación       | Eliminar C / C++ / CMake. Unificar `src/`.                  | ✅ **Hecho**  |
-| **1**| Núcleo Rust + Vulkan estable   | Reescribir core con `Arc<Device>`, `Drop` correcto.         | ✅ **Hecho**  |
-| **2**| Pipeline gráfico moderno       | Bindless, dynamic rendering, PSO cache.                     | 🚧 En curso   |
-| **3**| Asset Pipeline                 | glTF 2.0, KTX2, hot-reload, asset DB.                       | ⏳ Pendiente  |
-| **4**| Renderer de producción         | PBR completo, IBL, sombras, GI dinámica.                    | ⏳ Pendiente  |
-| **5**| Sistemas de gameplay           | ECS jerárquico, scripting, eventos, navmesh.                | ⏳ Pendiente  |
-| **6**| Físicas y colisiones           | Integrar `rapier3d`, character controller, raycast físico.  | ⏳ Pendiente  |
-| **7**| Audio espacial 3D              | Integrar `kira` o backend custom, HRTF, buses.              | ⏳ Pendiente  |
-| **8**| Networking                     | Cliente/servidor, replicación, predicción, rollback.        | ⏳ Pendiente  |
-| **9**| Editor REACTOR completo        | Viewport, gizmos, scripting visual, play mode in-place.     | ⏳ Pendiente  |
-| **10**| Tooling y build pipeline      | CLI `reactor`, plantillas, cooker, packager, shipping.      | ⏳ Pendiente  |
-| **11**| Plataformas y portabilidad    | Windows, Linux, macOS (MoltenVK), Android, Steam Deck.      | ⏳ Pendiente  |
-| **12**| QA, perf y release v2.0       | Tests, fuzzing, benchmarks, demo AAA y release público.     | ⏳ Pendiente  |
+| **0**| Limpieza y consolidaciÃ³n       | Eliminar C / C++ / CMake. Unificar `src/`.                  | âœ… **Hecho**  |
+| **1**| NÃºcleo Rust + Vulkan estable   | Reescribir core con `Arc<Device>`, `Drop` correcto.         | âœ… **Hecho**  |
+| **2**| Pipeline grÃ¡fico moderno       | Bindless, dynamic rendering, PSO cache.                     | ðŸš§ En curso   |
+| **3**| Asset Pipeline                 | glTF 2.0, KTX2, hot-reload, asset DB.                       | â³ Pendiente  |
+| **4**| Renderer de producciÃ³n         | PBR completo, IBL, sombras, GI dinÃ¡mica.                    | â³ Pendiente  |
+| **5**| Sistemas de gameplay           | ECS jerÃ¡rquico, scripting, eventos, navmesh.                | â³ Pendiente  |
+| **6**| FÃ­sicas y colisiones           | Integrar `rapier3d`, character controller, raycast fÃ­sico.  | â³ Pendiente  |
+| **7**| Audio espacial 3D              | Integrar `kira` o backend custom, HRTF, buses.              | â³ Pendiente  |
+| **8**| Networking                     | Cliente/servidor, replicaciÃ³n, predicciÃ³n, rollback.        | â³ Pendiente  |
+| **9**| Editor REACTOR completo        | Viewport, gizmos, scripting visual, play mode in-place.     | â³ Pendiente  |
+| **10**| Tooling y build pipeline      | CLI `reactor`, plantillas, cooker, packager, shipping.      | â³ Pendiente  |
+| **11**| Plataformas y portabilidad    | Windows, Linux, macOS (MoltenVK), Android, Steam Deck.      | â³ Pendiente  |
+| **12**| QA, perf y release v2.0       | Tests, fuzzing, benchmarks, demo AAA y release pÃºblico.     | â³ Pendiente  |
 
 ---
 
-## 🧹 FASE 0 — Limpieza y consolidación (Rust puro)
+## ðŸ§¹ FASE 0 â€” Limpieza y consolidaciÃ³n (Rust puro)
 
 > **Meta:** dejar el repo 100 % Rust, sin rastro de C / C++ / CMake / vcpkg.
 
-### 0.1 Eliminar capas C / C++  ✅
-- [x] Borrado `cpp/reactor_c_api/` (3300 LOC) — eliminado del repo.
+### 0.1 Eliminar capas C / C++  âœ…
+- [x] Borrado `cpp/reactor_c_api/` (3300 LOC) â€” eliminado del repo.
 - [x] Borrado `cpp/reactor_cpp/` (1477 LOC header-only SDK).
 - [x] Borrado `cpp/examples/3D/` + carpeta `build/` (~2 GB de artefactos CMake).
 - [x] Borrado `vcpkg.json`.
 - [x] Borrado `docs/cpp-guide.md` y `docs/cpp_editor_parity_roadmap.md`.
 - [x] Reescritos `README.md`, `HOW_BUILD.md`, `docs/manual.md`, `docs/architecture.md` (100 % Rust).
-- [x] Bump versión `Cargo.toml`: `1.0.5` → **`1.1.0`** + `description` + `license`.
+- [x] Bump versiÃ³n `Cargo.toml`: `1.0.5` â†’ **`1.1.0`** + `description` + `license`.
 
-### 0.2 Consolidar `src/` (eliminar duplicidad legacy ↔ modular)  ✅
-- [x] Borrar módulos legacy redundantes en `src/`:
+### 0.2 Consolidar `src/` (eliminar duplicidad legacy â†” modular)  âœ…
+- [x] Borrar mÃ³dulos legacy redundantes en `src/`:
   `vulkan_context.rs`, `swapchain.rs`, `pipeline.rs`, `buffer.rs`, `vertex.rs`,
   `mesh.rs`, `material.rs`, `input.rs`, `ecs.rs`, `ray_tracing.rs`,
   `scene.rs`, `gpu_detector.rs`, `cpu_detector.rs`, `resolution_detector.rs`.
-  *(Ejecutar `cleanup.ps1` o `cleanup.sh` para borrar físicamente; ya no están declarados en `lib.rs` ni se usan en ningún lugar del codebase)*
+  *(Ejecutar `cleanup.ps1` o `cleanup.sh` para borrar fÃ­sicamente; ya no estÃ¡n declarados en `lib.rs` ni se usan en ningÃºn lugar del codebase)*
 - [x] Migrar usos restantes hacia `src/core/`, `src/graphics/`, `src/resources/`, `src/systems/`, `src/utils/`.
-  *(Verificado con grep: 0 usos de módulos legacy en todo el codebase)*
-- [x] Limpiar el `lib.rs` de re-exports `*New` y dejar nombres canónicos sin sufijos.
-  *(Todos los re-exports ahora son canónicos: `VulkanContext`, `Swapchain`, `Mesh`, `Material`, etc.)*
+  *(Verificado con grep: 0 usos de mÃ³dulos legacy en todo el codebase)*
+- [x] Limpiar el `lib.rs` de re-exports `*New` y dejar nombres canÃ³nicos sin sufijos.
+  *(Todos los re-exports ahora son canÃ³nicos: `VulkanContext`, `Swapchain`, `Mesh`, `Material`, etc.)*
 
-### 0.3 Estandarización del workspace  ✅
+### 0.3 EstandarizaciÃ³n del workspace  âœ…
 - [x] Convertir el repo en un **workspace Cargo** real:
   ```toml
   # Cargo.toml
@@ -82,179 +82,179 @@ producir videojuegos comerciales**, manteniendo:
   parking_lot = "0.12"
   # ... (ver Cargo.toml completo)
   ```
-- [x] `Editor-REACTOR/` añadido como miembro del workspace. *(Mover a `crates/reactor-editor/` pendiente para Fase 0.4)*
-- [ ] Mover `src/` → `crates/reactor/src/`. *(Diferido: requiere ajustar todas las rutas de ejemplos; no aporta valor funcional inmediato)*
-- [x] Añadir `rust-toolchain.toml` (canal estable + fmt + clippy + rust-analyzer).
+- [x] `Editor-REACTOR/` aÃ±adido como miembro del workspace. *(Mover a `crates/reactor-editor/` pendiente para Fase 0.4)*
+- [ ] Mover `src/` â†’ `crates/reactor/src/`. *(Diferido: requiere ajustar todas las rutas de ejemplos; no aporta valor funcional inmediato)*
+- [x] AÃ±adir `rust-toolchain.toml` (canal estable + fmt + clippy + rust-analyzer).
 - [x] Configurar `clippy.toml` (MSRV 1.70, umbrales engine-grade).
 - [x] Configurar `rustfmt.toml` (estilo consistente, imports agrupados por StdExternalCrate).
-- [ ] `deny.toml` (cargo-deny) — pendiente para Fase 0.4.
+- [ ] `deny.toml` (cargo-deny) â€” pendiente para Fase 0.4.
 
-### 0.4 CI / CD básico
+### 0.4 CI / CD bÃ¡sico
 - [ ] GitHub Actions: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`.
 - [ ] Cache de `target/` y de Vulkan SDK.
 - [ ] Build matricial: Windows + Linux + macOS (Vulkan / MoltenVK).
 
-**Entregable F0:** repo limpio, workspace Cargo, CI verde, cero código C/C++.
+**Entregable F0:** repo limpio, workspace Cargo, CI verde, cero cÃ³digo C/C++.
 
-### 0.5 API corto (facilitar y acortar)  ✅
-- [x] `reactor::quick(title, w, h, |ctx| { … })` — arrancar un juego en una línea.
-- [x] `reactor::quick_with(config, init, update)` — closures init + update.
-- [x] Macro `reactor::game! { title, size, vsync, msaa, init, update }` — declarativa.
+### 0.5 API corto (facilitar y acortar)  âœ…
+- [x] `reactor::quick(title, w, h, |ctx| { â€¦ })` â€” arrancar un juego en una lÃ­nea.
+- [x] `reactor::quick_with(config, init, update)` â€” closures init + update.
+- [x] Macro `reactor::game! { title, size, vsync, msaa, init, update }` â€” declarativa.
 - [x] Ejemplo nuevo `examples/quick.rs` con los 3 modos del API corto.
 
-### 0.6 Ergonomía del `ReactorContext` (helpers cortos)  ✅
+### 0.6 ErgonomÃ­a del `ReactorContext` (helpers cortos)  âœ…
 - [x] `Camera::aim_at(&mut self, eye, target)` y `look_toward` / `set_position` (sin consumir self).
-- [x] `ctx.look_at(eye, target)` — atajo en 1 línea para colocar la cámara.
-- [x] `ctx.move_camera_to(pos)` — mover sin reorientar.
-- [x] `ctx.add_sun()` — sol direccional con defaults agradables.
+- [x] `ctx.look_at(eye, target)` â€” atajo en 1 lÃ­nea para colocar la cÃ¡mara.
+- [x] `ctx.move_camera_to(pos)` â€” mover sin reorientar.
+- [x] `ctx.add_sun()` â€” sol direccional con defaults agradables.
 - [x] `ctx.add_directional_light(dir, color, intensity)`.
 - [x] `ctx.add_point_light(pos, color, intensity, range)`.
 - [x] `ctx.add_spot_light(pos, dir, color, intensity, range, angle)`.
-- [x] `ctx.spawn(mesh, mat, xf)` — añadir objeto a la escena.
-- [x] `ctx.set_transform(index, xf)` — actualizar transform por índice.
-- [x] `ctx.elapsed()` — atajo a `time.elapsed()`.
+- [x] `ctx.spawn(mesh, mat, xf)` â€” aÃ±adir objeto a la escena.
+- [x] `ctx.set_transform(index, xf)` â€” actualizar transform por Ã­ndice.
+- [x] `ctx.elapsed()` â€” atajo a `time.elapsed()`.
 
-### 0.7 Higiene del build  ✅
+### 0.7 Higiene del build  âœ…
 - [x] `cargo check`: **0 warnings**, 0 errors.
 - [x] `cargo build --examples`: **0 warnings**, 0 errors (6 ejemplos OK).
 - [x] `env_logger::try_init()` para no panicar si se inicializa dos veces.
 
 ---
 
-## ⚙️ FASE 1 — Núcleo Rust + Vulkan estable
+## âš™ï¸ FASE 1 â€” NÃºcleo Rust + Vulkan estable
 
-> **Meta:** un `VulkanContext` idiomático con `Arc<Device>` y `Drop` correcto.
+> **Meta:** un `VulkanContext` idiomÃ¡tico con `Arc<Device>` y `Drop` correcto.
 
 ### 1.1 Refactor del contexto Vulkan
-- [x] ✅ `Device`, `Instance`, `Surface`, `PhysicalDevice` envueltos en `Arc<_>`.
-- [x] ✅ Implementar `Drop` en orden inverso de creación (sin leaks de validation layers).
+- [x] âœ… `Device`, `Instance`, `Surface`, `PhysicalDevice` envueltos en `Arc<_>`.
+- [x] âœ… Implementar `Drop` en orden inverso de creaciÃ³n (sin leaks de validation layers).
 - [x] Centralizar `VulkanError` con `thiserror`.
   *(Ya existe `core::error::ReactorError` con `From<ash::vk::Result>`, `From<std::io::Error>`, `ReactorResult<T>` alias)*
-- [x] ✅ Usar `Result<T, ReactorError>` en APIs públicas (eliminados `panic!` en módulos gráficos).
-  - [x] ✅ `src/graphics/swapchain.rs` — migrado a `ReactorResult<Self>`
-  - [x] ✅ `src/graphics/buffer.rs` — migrado a `ReactorResult`
-  - [x] ✅ `src/graphics/pipeline.rs` — migrado a `ReactorResult`
-  - [x] ✅ `src/graphics/render_pass.rs` — migrado a `ReactorResult`
-  - [x] ✅ `src/graphics/image.rs` — migrado a `ReactorResult`
-  - [x] ✅ `src/graphics/framebuffer.rs` — migrado a `ReactorResult`
-  - [x] ✅ `src/graphics/depth.rs` — migrado a `ReactorResult`
-  - [x] ✅ `src/graphics/descriptors.rs` — migrado a `ReactorResult`
-  - [x] ✅ `src/graphics/msaa.rs` — migrado a `ReactorResult`
-  - [x] ✅ `src/graphics/sampler.rs` — migrado a `ReactorResult`
-  - [x] ✅ `src/graphics/uniform_buffer.rs` — migrado a `ReactorResult`
-  - [x] ✅ `src/core/command.rs` — migrado a `ReactorResult`
-  - [x] ✅ `src/core/allocator.rs` — ArcDevice fix + migrado a `ReactorResult`
-  - [x] ✅ `src/raytracing/pipeline.rs` — migrado a `ReactorResult`
-  - [x] ✅ `src/compute/pipeline.rs` — migrado a `ReactorResult`
-  - [x] ✅ `src/resources/model.rs` — `From<ParseFloatError>`, `From<ParseIntError>`, `From<gltf::Error>`
-  - [x] ✅ `src/resources/texture.rs` — `borrow of moved value` fix
-  - [x] ✅ `src/resources/material.rs` — imports limpios
-  - [x] ✅ `src/resources/mesh.rs` — imports limpios
-  - [x] ✅ `src/resources/asset_manager.rs` — imports limpios
-  - [x] ✅ `src/platform/window.rs` — `From<OsError>` implementado
-  - [ ] `src/reactor.rs` — pendiente (monolito, ~20 usos de `Box<dyn Error>`)
+- [x] âœ… Usar `Result<T, ReactorError>` en APIs pÃºblicas (eliminados `panic!` en mÃ³dulos grÃ¡ficos).
+  - [x] âœ… `src/graphics/swapchain.rs` â€” migrado a `ReactorResult<Self>`
+  - [x] âœ… `src/graphics/buffer.rs` â€” migrado a `ReactorResult`
+  - [x] âœ… `src/graphics/pipeline.rs` â€” migrado a `ReactorResult`
+  - [x] âœ… `src/graphics/render_pass.rs` â€” migrado a `ReactorResult`
+  - [x] âœ… `src/graphics/image.rs` â€” migrado a `ReactorResult`
+  - [x] âœ… `src/graphics/framebuffer.rs` â€” migrado a `ReactorResult`
+  - [x] âœ… `src/graphics/depth.rs` â€” migrado a `ReactorResult`
+  - [x] âœ… `src/graphics/descriptors.rs` â€” migrado a `ReactorResult`
+  - [x] âœ… `src/graphics/msaa.rs` â€” migrado a `ReactorResult`
+  - [x] âœ… `src/graphics/sampler.rs` â€” migrado a `ReactorResult`
+  - [x] âœ… `src/graphics/uniform_buffer.rs` â€” migrado a `ReactorResult`
+  - [x] âœ… `src/core/command.rs` â€” migrado a `ReactorResult`
+  - [x] âœ… `src/core/allocator.rs` â€” ArcDevice fix + migrado a `ReactorResult`
+  - [x] âœ… `src/raytracing/pipeline.rs` â€” migrado a `ReactorResult`
+  - [x] âœ… `src/compute/pipeline.rs` â€” migrado a `ReactorResult`
+  - [x] âœ… `src/resources/model.rs` â€” `From<ParseFloatError>`, `From<ParseIntError>`, `From<gltf::Error>`
+  - [x] âœ… `src/resources/texture.rs` â€” `borrow of moved value` fix
+  - [x] âœ… `src/resources/material.rs` â€” imports limpios
+  - [x] âœ… `src/resources/mesh.rs` â€” imports limpios
+  - [x] âœ… `src/resources/asset_manager.rs` â€” imports limpios
+  - [x] âœ… `src/platform/window.rs` â€” `From<OsError>` implementado
+  - [ ] `src/reactor.rs` â€” pendiente (monolito, ~20 usos de `Box<dyn Error>`)
 - [ ] Soporte completo de `VK_LAYER_KHRONOS_validation` en debug.
 
 ### 1.2 Allocator GPU
-- [x] Migrar a `gpu-allocator` 0.28+ con `MemoryLocation` explícito.
+- [x] Migrar a `gpu-allocator` 0.28+ con `MemoryLocation` explÃ­cito.
   *(Ya en `core::allocator::MemoryAllocator`, wrapper `Arc<Mutex<Allocator>>`)*
-- [x] ✅ Pools de allocación por uso (vertex/index/uniform/storage).
-- [x] ✅ Estadísticas de uso (VRAM live + peak) expuestas en `RenderStats`.
+- [x] âœ… Pools de allocaciÃ³n por uso (vertex/index/uniform/storage).
+- [x] âœ… EstadÃ­sticas de uso (VRAM live + peak) expuestas en `RenderStats`.
 
 ### 1.3 Command management
-- [x] ✅ `CommandPool` por thread, reusables.
-- [x] ✅ Submission via colas paralelas (graphics + compute + transfer).
-- [ ] Frames-in-flight configurables (1, 2, 3) con semáforos timeline.
+- [x] âœ… `CommandPool` por thread, reusables.
+- [x] âœ… Submission via colas paralelas (graphics + compute + transfer).
+- [ ] Frames-in-flight configurables (1, 2, 3) con semÃ¡foros timeline.
 
-### 1.4 Subsystems UE5-style (NUEVO — v1.2.0)  ✅
-- [x] `core::profiler` — `profile_scope!` macro, `CpuTimer`, `PerfCounter`, Tracy-ready.
-- [x] `core::logging` — `tracing-subscriber` + `REACTOR_LOG` env var + `r_info!`/`r_warn!`/`r_error!` macros.
-- [x] `core::jobs` — JobSystem con rayon: `parallel_for`, `join`, `scope`, `par_iter_mut`, `parallel_reduce`.
-- [x] `core::linear_allocator` — `LinearAllocator` (bump allocator) + `BumpArena` tipado para datos por-frame.
+### 1.4 Subsystems UE5-style (NUEVO â€” v1.2.0)  âœ…
+- [x] `core::profiler` â€” `profile_scope!` macro, `CpuTimer`, `PerfCounter`, Tracy-ready.
+- [x] `core::logging` â€” `tracing-subscriber` + `REACTOR_LOG` env var + `r_info!`/`r_warn!`/`r_error!` macros.
+- [x] `core::jobs` â€” JobSystem con rayon: `parallel_for`, `join`, `scope`, `par_iter_mut`, `parallel_reduce`.
+- [x] `core::linear_allocator` â€” `LinearAllocator` (bump allocator) + `BumpArena` tipado para datos por-frame.
 
-### 1.5 Tests del núcleo
-- [ ] Tests headless de creación / destrucción de `VulkanContext` (lavapipe / SwiftShader).
+### 1.5 Tests del nÃºcleo
+- [ ] Tests headless de creaciÃ³n / destrucciÃ³n de `VulkanContext` (lavapipe / SwiftShader).
 - [ ] Smoke test: crear ventana, abrir swapchain, renderizar 10 frames, cerrar.
 
-**Entregable F1:** núcleo sin leaks, validation 0 errores, tests en CI.
+**Entregable F1:** nÃºcleo sin leaks, validation 0 errores, tests en CI.
 
 ---
 
-## 🎨 FASE 2 — Pipeline gráfico moderno
+## ðŸŽ¨ FASE 2 â€” Pipeline grÃ¡fico moderno
 
 > **Meta:** rendering moderno con bindless, dynamic rendering y PSO cache.
 
 ### 2.1 Dynamic Rendering (Vulkan 1.3)
-- [x] ✅ Reemplazar `VkRenderPass` + `VkFramebuffer` por `VK_KHR_dynamic_rendering`.
-- [x] ✅ Eliminar todo el código de `subpasses` heredado.
+- [x] âœ… Reemplazar `VkRenderPass` + `VkFramebuffer` por `VK_KHR_dynamic_rendering`.
+- [x] âœ… Eliminar todo el cÃ³digo de `subpasses` heredado.
 
 ### 2.2 Descriptor Indexing / Bindless
-- [ ] Habilitar `VK_EXT_descriptor_indexing`.
-- [ ] Global texture array bindless (8192 slots).
-- [ ] Global buffer array bindless (mesh + material data).
-- [ ] `MeshHandle` / `MaterialHandle` / `TextureHandle` como índices u32.
+- [x] ✅ Habilitar `VK_EXT_descriptor_indexing` con feature chain completo.
+- [x] ✅ Global texture array bindless (8192 slots UE5-style).
+- [x] ✅ Global buffer array bindless (mesh + material data, 4096 slots).
+- [ ] `MeshHandle` / `MaterialHandle` / `TextureHandle` como Ã­ndices u32.
 
 ### 2.3 Pipeline State Object (PSO) cache
 - [ ] Cache en disco (`.reactor/pipeline_cache.bin`).
-- [ ] Hash de (shader SPIR-V + render state) → PSO.
-- [ ] Hot-reload de shaders con recompilación incremental.
+- [ ] Hash de (shader SPIR-V + render state) â†’ PSO.
+- [ ] Hot-reload de shaders con recompilaciÃ³n incremental.
 
 ### 2.4 Shader system
-- [ ] Soporte de **WGSL** + **GLSL** + **HLSL** vía `shaderc` y/o `naga`.
-- [ ] Reflection automática (descriptor layouts derivados del SPIR-V).
-- [ ] Includes y `#define` desde Rust (`shader!` macro).
+- [ ] Soporte de **WGSL** + **GLSL** + **HLSL** vÃ­a `shaderc` y/o `naga`.
+- [ ] Reflection automÃ¡tica (descriptor layouts derivados del SPIR-V).
+- [x] ✅ `ShaderCompiler` con macro `shader!` declarativa.
 
 ### 2.5 GPU-driven rendering
-- [ ] Indirect draw (`vkCmdDrawIndexedIndirect`).
-- [ ] Culling en compute (frustum + occlusion HZB).
+- [x] ✅ Indirect draw (`vkCmdDrawIndexedIndirect`) con `IndirectDrawBuffer`.
+- [x] ✅ Culling en compute (frustum AABB, 64 threads por workgroup).
 - [ ] Mesh shaders opcionales (`VK_EXT_mesh_shader`) cuando disponibles.
 
 **Entregable F2:** renderer que sostiene 1 M+ objetos a 60 FPS con culling GPU.
 
 ---
 
-## 📦 FASE 3 — Asset Pipeline
+## ðŸ“¦ FASE 3 â€” Asset Pipeline
 
 > **Meta:** importar, optimizar, cachear y hot-reload de todos los assets de un juego.
 
 ### 3.1 Formatos soportados
-- [ ] **Modelos:** glTF 2.0 (vía `gltf`), OBJ, FBX (vía `russimp` o exporter externo).
-- [ ] **Texturas:** PNG, JPG, HDR, EXR, **KTX2 + BCn / ASTC** (vía `ktx2` + `basis-universal`).
+- [ ] **Modelos:** glTF 2.0 (vÃ­a `gltf`), OBJ, FBX (vÃ­a `russimp` o exporter externo).
+- [ ] **Texturas:** PNG, JPG, HDR, EXR, **KTX2 + BCn / ASTC** (vÃ­a `ktx2` + `basis-universal`).
 - [ ] **Audio:** OGG, WAV, FLAC, MP3.
-- [ ] **Fuentes:** TTF / OTF (vía `fontdue` o `cosmic-text`).
+- [ ] **Fuentes:** TTF / OTF (vÃ­a `fontdue` o `cosmic-text`).
 
 ### 3.2 Asset Database
 - [ ] `AssetId(u64)` estable (hash del path + contenido).
 - [ ] Metadata en `.reactor/assets.db` (sqlite o sled).
 - [ ] Carga lazy + reference counting (`Handle<T>`).
-- [ ] Streaming asíncrono con `tokio` o `async-std`.
+- [ ] Streaming asÃ­ncrono con `tokio` o `async-std`.
 
 ### 3.3 Asset cooker
-- [ ] Pre-procesa assets RAW → formato runtime optimizado:
-  - Texturas → BC7 / ASTC + mipmaps.
-  - Meshes → meshlets (vía `meshopt`).
-  - Audio → OGG comprimido + bus tags.
+- [ ] Pre-procesa assets RAW â†’ formato runtime optimizado:
+  - Texturas â†’ BC7 / ASTC + mipmaps.
+  - Meshes â†’ meshlets (vÃ­a `meshopt`).
+  - Audio â†’ OGG comprimido + bus tags.
 - [ ] CLI: `reactor cook --input assets/ --output cooked/`.
 
 ### 3.4 Hot-reload
 - [ ] Watcher con `notify` que recook + reupload en vivo.
-- [ ] Notificación al editor / juego vía `EventBus`.
+- [ ] NotificaciÃ³n al editor / juego vÃ­a `EventBus`.
 
 **Entregable F3:** carga de una escena glTF con 200 materiales / 1 GB de texturas en <2 s.
 
 ---
 
-## 🌟 FASE 4 — Renderer de producción
+## ðŸŒŸ FASE 4 â€” Renderer de producciÃ³n
 
 > **Meta:** calidad visual comparable a Unity HDRP o Unreal en escenas medianas.
 
 ### 4.1 PBR completo
 - [ ] Cook-Torrance (GGX + Schlick + Smith).
 - [ ] Clear-coat, sheen, anisotropy, subsurface scattering (KHR_materials_*).
-- [ ] Soporte `KHR_materials_transmission` (vidrio físico).
+- [ ] Soporte `KHR_materials_transmission` (vidrio fÃ­sico).
 
 ### 4.2 Image-Based Lighting (IBL)
-- [ ] Equirectangular → cubemap → prefiltered + irradiance.
+- [ ] Equirectangular â†’ cubemap â†’ prefiltered + irradiance.
 - [ ] BRDF LUT precomputada.
 - [ ] Tone mapping ACES / AGX.
 
@@ -263,13 +263,13 @@ producir videojuegos comerciales**, manteniendo:
 - [ ] Point light shadows (cube maps).
 - [ ] Spot light shadows (2D).
 - [ ] **VSM / PCSS** para sombras suaves.
-- [ ] Sombras de ray tracing cuando RT esté disponible.
+- [ ] Sombras de ray tracing cuando RT estÃ© disponible.
 
-### 4.4 Iluminación global
-- [ ] **Light probes** (esféricos armónicos L2).
+### 4.4 IluminaciÃ³n global
+- [ ] **Light probes** (esfÃ©ricos armÃ³nicos L2).
 - [ ] **Reflection probes** (cubemaps locales).
 - [ ] **Screen-Space GI (SSGI)** como fallback.
-- [ ] **Voxel-cone GI** opcional para escenas dinámicas.
+- [ ] **Voxel-cone GI** opcional para escenas dinÃ¡micas.
 
 ### 4.5 Post-processing AAA
 - [ ] Bloom (mipmap chain con upsample dual).
@@ -281,20 +281,20 @@ producir videojuegos comerciales**, manteniendo:
 
 ### 4.6 Decals y particles GPU
 - [ ] Decal system (deferred).
-- [ ] GPU particles vía compute (millones de partículas).
-- [ ] VFX graph básico (nodos).
+- [ ] GPU particles vÃ­a compute (millones de partÃ­culas).
+- [ ] VFX graph bÃ¡sico (nodos).
 
 **Entregable F4:** demo "Sponza PBR" a 4K / 60 FPS en RTX 3060 con GI + sombras + TAA.
 
 ---
 
-## 🎮 FASE 5 — Sistemas de gameplay
+## ðŸŽ® FASE 5 â€” Sistemas de gameplay
 
-> **Meta:** todo lo que necesita el código de gameplay sin reinventar la rueda.
+> **Meta:** todo lo que necesita el cÃ³digo de gameplay sin reinventar la rueda.
 
-### 5.1 ECS jerárquico
+### 5.1 ECS jerÃ¡rquico
 - [ ] Migrar a o integrar `hecs` / `bevy_ecs` (o reforzar el ECS propio).
-- [ ] `Parent` / `Children` con propagación de transform.
+- [ ] `Parent` / `Children` con propagaciÃ³n de transform.
 - [ ] World queries con `With<T>` / `Without<T>` / `Changed<T>`.
 - [ ] Systems schedule con dependencias.
 
@@ -307,8 +307,8 @@ producir videojuegos comerciales**, manteniendo:
 - [ ] `EventBus<T>` global + locales por escena.
 - [ ] `Observer<T>` para reaccionar (UI, audio, animaciones).
 
-### 5.4 AI y navegación
-- [ ] **NavMesh** vía `recast-rs` o port propio.
+### 5.4 AI y navegaciÃ³n
+- [ ] **NavMesh** vÃ­a `recast-rs` o port propio.
 - [ ] Pathfinding A* + jump links.
 - [ ] Behaviour trees (`bonsai-bt`).
 - [ ] State machines.
@@ -322,25 +322,25 @@ producir videojuegos comerciales**, manteniendo:
 
 ---
 
-## 🧱 FASE 6 — Físicas y colisiones
+## ðŸ§± FASE 6 â€” FÃ­sicas y colisiones
 
-> **Meta:** física rígida y de personaje a nivel comercial.
+> **Meta:** fÃ­sica rÃ­gida y de personaje a nivel comercial.
 
-### 6.1 Integración Rapier
+### 6.1 IntegraciÃ³n Rapier
 - [ ] `rapier3d` (CPU) como backend por defecto.
-- [ ] Wrapper `PhysicsWorld` idiomático (escondiendo `RigidBodySet`, `ColliderSet`, etc).
-- [ ] Sincronización ECS ↔ Rapier vía `Transform` y `RigidBody` component.
+- [ ] Wrapper `PhysicsWorld` idiomÃ¡tico (escondiendo `RigidBodySet`, `ColliderSet`, etc).
+- [ ] SincronizaciÃ³n ECS â†” Rapier vÃ­a `Transform` y `RigidBody` component.
 
 ### 6.2 Character Controller
 - [ ] Kinematic capsule + step offset.
 - [ ] Slope handling, jump, crouch.
 - [ ] Networking-friendly (deterministic).
 
-### 6.3 Queries físicas
+### 6.3 Queries fÃ­sicas
 - [ ] Raycast, shape-cast, overlap, sweep.
-- [ ] Capa de colisión (groups + filters).
+- [ ] Capa de colisiÃ³n (groups + filters).
 
-### 6.4 Vehículos y joints
+### 6.4 VehÃ­culos y joints
 - [ ] Wheel collider (raycast vehicle).
 - [ ] Hinge, ball, prismatic, fixed joints.
 
@@ -352,61 +352,61 @@ producir videojuegos comerciales**, manteniendo:
 
 ---
 
-## 🔊 FASE 7 — Audio espacial 3D
+## ðŸ”Š FASE 7 â€” Audio espacial 3D
 
-> **Meta:** audio AAA con mezclador, espacialización y oclusión.
+> **Meta:** audio AAA con mezclador, espacializaciÃ³n y oclusiÃ³n.
 
 ### 7.1 Backend
 - [ ] Integrar `kira` o `cpal` + `oddio` para 3D.
 - [ ] Buses (master, music, sfx, voice, ambience).
-- [ ] Volúmenes y EQ por bus.
+- [ ] VolÃºmenes y EQ por bus.
 
-### 7.2 Espacialización
-- [ ] HRTF estéreo + binaural.
-- [ ] Atenuación distancia (lineal / log / custom).
+### 7.2 EspacializaciÃ³n
+- [ ] HRTF estÃ©reo + binaural.
+- [ ] AtenuaciÃ³n distancia (lineal / log / custom).
 - [ ] Doppler.
 - [ ] Reverb por zona (zones triggers).
 
-### 7.3 Oclusión y obstrucción
-- [ ] Raycast físico + filtros low-pass.
+### 7.3 OclusiÃ³n y obstrucciÃ³n
+- [ ] Raycast fÃ­sico + filtros low-pass.
 - [ ] Portal-based propagation.
 
-### 7.4 Música dinámica
+### 7.4 MÃºsica dinÃ¡mica
 - [ ] Stems con transiciones por estado.
-- [ ] Sincronización a tempo (BPM events).
+- [ ] SincronizaciÃ³n a tempo (BPM events).
 
-**Entregable F7:** demo "audio walk" con HRTF + reverb por zona + música dinámica.
+**Entregable F7:** demo "audio walk" con HRTF + reverb por zona + mÃºsica dinÃ¡mica.
 
 ---
 
-## 🌐 FASE 8 — Networking
+## ðŸŒ FASE 8 â€” Networking
 
 > **Meta:** soporte cliente/servidor para shooters y juegos cooperativos.
 
 ### 8.1 Transporte
-- [ ] **QUIC** vía `quinn` (TCP/UDP-friendly).
+- [ ] **QUIC** vÃ­a `quinn` (TCP/UDP-friendly).
 - [ ] WebSocket + WebTransport para web (futuro Fase 11).
 - [ ] Mensajes confiables y no-confiables.
 
-### 8.2 Replicación
+### 8.2 ReplicaciÃ³n
 - [ ] Snapshot de entidades + delta compression.
 - [ ] Interest management (relevancia por distancia).
 - [ ] Replicated components con `#[reactor::replicate]`.
 
-### 8.3 Predicción y reconciliación
+### 8.3 PredicciÃ³n y reconciliaciÃ³n
 - [ ] Client-side prediction.
 - [ ] Server reconciliation.
 - [ ] Lag compensation (rewind & replay).
 
 ### 8.4 Lobby & matchmaking
-- [ ] Server browser básico.
-- [ ] Integración Steam (Steamworks vía `steamworks-rs`).
+- [ ] Server browser bÃ¡sico.
+- [ ] IntegraciÃ³n Steam (Steamworks vÃ­a `steamworks-rs`).
 
-**Entregable F8:** demo "deathmatch 4 jugadores" con predicción y rollback.
+**Entregable F8:** demo "deathmatch 4 jugadores" con predicciÃ³n y rollback.
 
 ---
 
-## 🛠️ FASE 9 — Editor REACTOR completo
+## ðŸ› ï¸ FASE 9 â€” Editor REACTOR completo
 
 > **Meta:** un editor visual estilo Unity / Godot / Unreal.
 
@@ -416,9 +416,9 @@ producir videojuegos comerciales**, manteniendo:
 - [ ] Layouts guardables.
 
 ### 9.2 Paneles obligatorios
-- [ ] **Viewport 3D** con cámara editor (FPS + orbit).
-- [ ] **Hierarchy** (árbol de entidades, drag & drop, parent / unparent).
-- [ ] **Inspector** (auto-generado vía reflection).
+- [ ] **Viewport 3D** con cÃ¡mara editor (FPS + orbit).
+- [ ] **Hierarchy** (Ã¡rbol de entidades, drag & drop, parent / unparent).
+- [ ] **Inspector** (auto-generado vÃ­a reflection).
 - [ ] **Console** (logs + filtros + cargo errors).
 - [ ] **Asset Browser** (thumbnails, drag & drop al viewport).
 - [ ] **Scene panel** (lista de escenas, build settings).
@@ -426,8 +426,8 @@ producir videojuegos comerciales**, manteniendo:
 
 ### 9.3 Gizmos
 - [ ] Translate / Rotate / Scale (clicables).
-- [ ] Snap a grid / vértices / ángulos.
-- [ ] Multi-selección.
+- [ ] Snap a grid / vÃ©rtices / Ã¡ngulos.
+- [ ] Multi-selecciÃ³n.
 
 ### 9.4 Play mode in-place
 - [ ] Play / Pause / Stop con snapshot reversible.
@@ -438,24 +438,24 @@ producir videojuegos comerciales**, manteniendo:
 - [ ] Sistema de **nodos** estilo Blueprints (mediano plazo).
 - [ ] Eventos, branches, variables, llamadas a funciones Rust.
 
-### 9.6 Reflection / Serialización
+### 9.6 Reflection / SerializaciÃ³n
 - [ ] `#[derive(Reflect)]` proc-macro para auto-inspector.
-- [ ] Serialización a JSON + RON + binary (`bincode`).
+- [ ] SerializaciÃ³n a JSON + RON + binary (`bincode`).
 
-**Entregable F9:** editor capaz de construir un nivel completo sin tocar código Rust.
+**Entregable F9:** editor capaz de construir un nivel completo sin tocar cÃ³digo Rust.
 
 ---
 
-## 📦 FASE 10 — Tooling y build pipeline
+## ðŸ“¦ FASE 10 â€” Tooling y build pipeline
 
 > **Meta:** la experiencia "Unity Hub" / `cargo new` para juegos REACTOR.
 
 ### 10.1 CLI `reactor`
-- [ ] `reactor new <nombre>` — plantillas (FPS, 2D-platformer, racing, sandbox).
-- [ ] `reactor run` — compila + lanza el juego.
-- [ ] `reactor cook` — cook assets a formato runtime.
-- [ ] `reactor pack` — empaqueta build (PAK virtual o `.reactor` archive).
-- [ ] `reactor ship --platform windows|linux|macos|android` — build final.
+- [ ] `reactor new <nombre>` â€” plantillas (FPS, 2D-platformer, racing, sandbox).
+- [ ] `reactor run` â€” compila + lanza el juego.
+- [ ] `reactor cook` â€” cook assets a formato runtime.
+- [ ] `reactor pack` â€” empaqueta build (PAK virtual o `.reactor` archive).
+- [ ] `reactor ship --platform windows|linux|macos|android` â€” build final.
 
 ### 10.2 Plantillas (`reactor-templates/`)
 - [ ] `template-fps/`
@@ -465,7 +465,7 @@ producir videojuegos comerciales**, manteniendo:
 
 ### 10.3 Packer y archive format
 - [ ] `.reactor` archive (chunked + zstd + mmap-friendly).
-- [ ] Encriptación opcional (AES-GCM).
+- [ ] EncriptaciÃ³n opcional (AES-GCM).
 - [ ] Resource patching (DLC).
 
 ### 10.4 Installer / Distribution
@@ -478,38 +478,38 @@ producir videojuegos comerciales**, manteniendo:
 
 ---
 
-## 🖥️ FASE 11 — Plataformas y portabilidad
+## ðŸ–¥ï¸ FASE 11 â€” Plataformas y portabilidad
 
 > **Meta:** "build once, ship everywhere".
 
 ### 11.1 Desktop
 - [ ] **Windows 10/11** (x64 + ARM64).
 - [ ] **Linux** (Ubuntu, Arch, Steam Deck / SteamOS).
-- [ ] **macOS** vía **MoltenVK** (Vulkan → Metal).
+- [ ] **macOS** vÃ­a **MoltenVK** (Vulkan â†’ Metal).
 
 ### 11.2 Mobile
 - [ ] **Android** (Vulkan 1.3 nativo, NDK).
-- [ ] **iOS** vía MoltenVK + bindings (largo plazo).
+- [ ] **iOS** vÃ­a MoltenVK + bindings (largo plazo).
 
 ### 11.3 Web
-- [ ] **WebGPU backend** alternativo (vía `wgpu`).
+- [ ] **WebGPU backend** alternativo (vÃ­a `wgpu`).
 - [ ] Build con `wasm-pack`.
 - [ ] Streaming de assets via fetch.
 
 ### 11.4 Consolas (largo plazo, requiere licencias)
 - [ ] **Nintendo Switch** (NVN).
-- [ ] **PS5 / Xbox** (vía SDK propietario).
+- [ ] **PS5 / Xbox** (vÃ­a SDK propietario).
 
 ### 11.5 VR / XR
 - [ ] **OpenXR** (`openxr-rs`).
-- [ ] Foveated rendering vía ADead-ISR.
+- [ ] Foveated rendering vÃ­a ADead-ISR.
 - [ ] Soporte Quest, Index, Vive, PSVR2.
 
 **Entregable F11:** demo corriendo en Windows + Linux + macOS + Steam Deck con un solo `cargo build`.
 
 ---
 
-## ✅ FASE 12 — QA, performance y release v2.0
+## âœ… FASE 12 â€” QA, performance y release v2.0
 
 > **Meta:** REACTOR v2.0 como SDK comercial estable.
 
@@ -523,8 +523,8 @@ producir videojuegos comerciales**, manteniendo:
 - [ ] Profiling integrado (Tracy via `tracy-client`).
 - [ ] Memory profiling (`dhat`, `valgrind` en Linux CI).
 
-### 12.3 Documentación
-- [ ] `cargo doc` completo + ejemplos en cada item público.
+### 12.3 DocumentaciÃ³n
+- [ ] `cargo doc` completo + ejemplos en cada item pÃºblico.
 - [ ] **Libro REACTOR** (`mdbook`) con tutoriales paso a paso.
 - [ ] Video-tutoriales oficiales.
 
@@ -535,61 +535,61 @@ producir videojuegos comerciales**, manteniendo:
 ### 12.5 Release v2.0
 - [ ] SemVer estable.
 - [ ] LTS 24 meses.
-- [ ] Anuncio público + landing en reactor.salazar-interactive.dev.
+- [ ] Anuncio pÃºblico + landing en reactor.salazar-interactive.dev.
 
-**Entregable F12:** **REACTOR v2.0.0 — el primer SDK AAA en Rust puro.**
+**Entregable F12:** **REACTOR v2.0.0 â€” el primer SDK AAA en Rust puro.**
 
 ---
 
-## 🧭 Hoja de ruta visual
+## ðŸ§­ Hoja de ruta visual
 
 ```diagram
-                  ╭──────────────────────────────────────╮
-                  │   F0  Limpieza (Rust puro)           │
-                  ╰────────────────┬─────────────────────╯
-                                   ▼
-       ╭───────────────────────────────────────────────────────╮
-       │  F1 Núcleo Vulkan  →  F2 Pipeline moderno  →  F3 Assets│
-       ╰───────────────┬───────────────┬────────────────┬───────╯
-                       ▼               ▼                ▼
-              ╭─────────────╮   ╭─────────────╮  ╭────────────╮
-              │ F4 Renderer │   │ F5 Gameplay │  │ F6 Physics │
-              │   AAA       │   │  + AI       │  │  + char    │
-              ╰──────┬──────╯   ╰──────┬──────╯  ╰──────┬─────╯
-                     ▼                 ▼                ▼
-                  ╭───────────────────────────────────╮
-                  │ F7 Audio · F8 Net · F9 Editor     │
-                  ╰────────────────┬──────────────────╯
-                                   ▼
-            ╭──────────────────────────────────────────────╮
-            │  F10 Tooling/CLI  →  F11 Plataformas         │
-            ╰────────────────────────┬─────────────────────╯
-                                     ▼
-                       ╭──────────────────────────╮
-                       │  F12 QA + Release v2.0   │
-                       ╰──────────────────────────╯
+                  â•­â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•®
+                  â”‚   F0  Limpieza (Rust puro)           â”‚
+                  â•°â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•¯
+                                   â–¼
+       â•­â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•®
+       â”‚  F1 NÃºcleo Vulkan  â†’  F2 Pipeline moderno  â†’  F3 Assetsâ”‚
+       â•°â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â•¯
+                       â–¼               â–¼                â–¼
+              â•­â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•®   â•­â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•®  â•­â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•®
+              â”‚ F4 Renderer â”‚   â”‚ F5 Gameplay â”‚  â”‚ F6 Physics â”‚
+              â”‚   AAA       â”‚   â”‚  + AI       â”‚  â”‚  + char    â”‚
+              â•°â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â•¯   â•°â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â•¯  â•°â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â•¯
+                     â–¼                 â–¼                â–¼
+                  â•­â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•®
+                  â”‚ F7 Audio Â· F8 Net Â· F9 Editor     â”‚
+                  â•°â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•¯
+                                   â–¼
+            â•­â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•®
+            â”‚  F10 Tooling/CLI  â†’  F11 Plataformas         â”‚
+            â•°â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•¯
+                                     â–¼
+                       â•­â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•®
+                       â”‚  F12 QA + Release v2.0   â”‚
+                       â•°â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•¯
 ```
 
 ---
 
-## 📊 Métricas de éxito (KPIs)
+## ðŸ“Š MÃ©tricas de Ã©xito (KPIs)
 
 | KPI                                            | Objetivo v2.0          |
 |------------------------------------------------|------------------------|
-| Líneas de código C / C++                       | **0**                  |
-| Cobertura de tests                             | **≥ 80 %**             |
+| LÃ­neas de cÃ³digo C / C++                       | **0**                  |
+| Cobertura de tests                             | **â‰¥ 80 %**             |
 | Errores de validation layer en demo AAA        | **0**                  |
-| FPS demo "Sponza PBR" en RTX 3060 @ 4K         | **≥ 60 FPS**           |
-| Tiempo de compilación full (workspace, release)| **≤ 90 s**             |
-| Crash-free sessions del demo Steam             | **≥ 99,5 %**           |
-| Plataformas soportadas con CI                  | **≥ 5**                |
-| Tamaño del runtime base (sin assets)           | **≤ 25 MB**            |
+| FPS demo "Sponza PBR" en RTX 3060 @ 4K         | **â‰¥ 60 FPS**           |
+| Tiempo de compilaciÃ³n full (workspace, release)| **â‰¤ 90 s**             |
+| Crash-free sessions del demo Steam             | **â‰¥ 99,5 %**           |
+| Plataformas soportadas con CI                  | **â‰¥ 5**                |
+| TamaÃ±o del runtime base (sin assets)           | **â‰¤ 25 MB**            |
 
 ---
 
-## 🤝 Cómo contribuir a cada fase
+## ðŸ¤ CÃ³mo contribuir a cada fase
 
-1. Elegir un ítem `[ ]` no marcado de la fase activa.
+1. Elegir un Ã­tem `[ ]` no marcado de la fase activa.
 2. Abrir un issue con prefijo `[Fxx]` (ej. `[F2] PSO cache en disco`).
 3. Crear rama `fXX/<slug>` (ej. `f2/pso-cache`).
 4. PR con tests + `cargo clippy --all -- -D warnings` limpio.
@@ -597,17 +597,18 @@ producir videojuegos comerciales**, manteniendo:
 
 ---
 
-## 📌 Notas finales
+## ðŸ“Œ Notas finales
 
 - **Sin C / C++:** cualquier dependencia que requiera C-bindings debe estar justificada
   (ej. Vulkan / Rapier). Preferir crates 100 % Rust siempre que sea viable.
 - **Sin GC:** cero garbage collector, cero `Rc<RefCell<_>>` salvo en el editor.
-- **Sin macros mágicas innecesarias:** preferir `Builder` patterns explícitos.
+- **Sin macros mÃ¡gicas innecesarias:** preferir `Builder` patterns explÃ­citos.
 - **API estable desde v2.0:** romper compatibilidad solo en mayores (SemVer estricto).
 
 ---
 
 <p align="center">
-  <strong>REACTOR — Rust + Vulkan, sin compromisos.</strong><br/>
+  <strong>REACTOR â€” Rust + Vulkan, sin compromisos.</strong><br/>
   <em>Powered by Salazar-interactive</em>
 </p>
+

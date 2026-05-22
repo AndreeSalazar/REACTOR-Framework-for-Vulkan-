@@ -1,0 +1,38 @@
+﻿#version 450
+#extension GL_EXT_buffer_reference : enable
+
+layout(local_size_x = 64) in;
+
+struct AABB { vec4 min; vec4 max; };
+
+layout(std430, set = 0, binding = 0) readonly buffer AABBs { AABB aabbs[]; };
+layout(std430, set = 0, binding = 1) buffer VisibleIndices { uint visible[]; uint visible_count; };
+
+layout(push_constant) uniform Push { mat4 view_proj; } pc;
+
+bool frustum_cull(AABB box) {
+    vec4 corners[8] = vec4[](
+        vec4(box.min.xyz, 1), vec4(box.max.xyz, 1),
+        vec4(box.min.x, box.max.yz, 1), vec4(box.max.x, box.min.yz, 1),
+        vec4(box.min.xy, box.max.z, 1), vec4(box.max.xy, box.min.z, 1),
+        vec4(box.min.x, box.max.y, box.min.z, 1), vec4(box.max.x, box.min.y, box.max.z, 1)
+    );
+    for (int p = 0; p < 6; p++) {
+        bool all_outside = true;
+        for (int i = 0; i < 8; i++) {
+            vec4 clip = pc.view_proj * corners[i];
+            if (clip.w > 0.0) all_outside = false;
+        }
+        if (all_outside) return true;
+    }
+    return false;
+}
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= aabbs.length()) return;
+    if (!frustum_cull(aabbs[idx])) {
+        uint out_idx = atomicAdd(visible_count, 1);
+        visible[out_idx] = idx;
+    }
+}

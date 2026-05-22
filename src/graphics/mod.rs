@@ -1,4 +1,4 @@
-//! Vulkan graphics rendering
+﻿//! Vulkan graphics rendering
 //! 
 //! Low-level rendering primitives and pipeline management.
 
@@ -37,3 +37,16 @@ pub use swapchain::Swapchain;
 pub use uniform_buffer::{
     GlobalUniformData, LightData, LightUniformData, MaterialUniformData, UniformBuffer,
 };
+
+// ═══ FASE 2 — Pipeline gráfico moderno ═══
+pub mod bindless;
+pub mod pso_hash;
+pub mod pso_cache;
+pub mod shader_compiler;
+pub mod indirect;
+
+pub use bindless::{BindlessRegistry, BindlessConfig, TextureHandle, BufferHandle, SamplerHandle};
+pub use pso_hash::{PsoHash, PsoHashBuilder};
+pub use pso_cache::{PsoCache, CachedPipeline, PsoCacheManager};
+pub use shader_compiler::{ShaderCompiler, ShaderLanguage, ShaderStage, CompiledShader};
+pub use indirect::{IndirectDrawBuffer, DrawIndexedIndirectCommand, IndirectCommandWithMaterial};
