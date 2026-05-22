@@ -207,7 +207,7 @@ producir videojuegos comerciales**, manteniendo:
 ### 2.5 GPU-driven rendering
 - [x] ✅ Indirect draw (`vkCmdDrawIndexedIndirect`) con `IndirectDrawBuffer`.
 - [x] ✅ Culling en compute (frustum AABB, 64 threads por workgroup).
-- [ ] Mesh shaders opcionales (`VK_EXT_mesh_shader`) cuando disponibles.
+- [x] Mesh shaders opcionales (`VK_EXT_mesh_shader`) cuando disponibles.
 
 **Entregable F2:** renderer que sostiene 1 M+ objetos a 60 FPS con culling GPU.
 

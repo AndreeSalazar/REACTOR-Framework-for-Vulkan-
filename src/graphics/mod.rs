@@ -45,6 +45,7 @@ pub mod pso_cache;
 pub mod shader_compiler;
 pub mod shader_hot_reload;
 pub mod indirect;
+pub mod mesh_shader;
 
 pub use bindless::{
     BindlessRegistry, BindlessConfig, BindlessStats,
@@ -59,3 +60,7 @@ pub use shader_compiler::{
 };
 pub use shader_hot_reload::{ShaderHotReloader, ShaderReloadEvent};
 pub use indirect::{IndirectDrawBuffer, DrawIndexedIndirectCommand, IndirectCommandWithMaterial};
+pub use mesh_shader::{
+    MeshShaderPipeline, MeshShaderProperties, Meshlet, MeshletBuilder,
+    check_mesh_shader_support, mesh_shader_feature_chain, query_mesh_shader_properties,
+};
