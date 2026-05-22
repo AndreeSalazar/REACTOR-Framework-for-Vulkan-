@@ -482,24 +482,32 @@ impl Xenofall {
         // Apply hit
         if let Some(idx) = hit_enemy_idx {
             self.shots_hit += 1;
-            let enemy = &mut self.enemies[idx];
-            let damage = if is_headshot { enemy.max_health } else { 1 };
-            enemy.health -= damage;
+            
+            // Extraer datos del enemigo antes de cualquier llamada a &mut self
+            let (damage, died, was_headshot) = {
+                let enemy = &mut self.enemies[idx];
+                let damage = if is_headshot { enemy.max_health } else { 1 };
+                enemy.health -= damage;
+                let died = enemy.health <= 0;
+                if died {
+                    enemy.state = EnemyState::Dying;
+                    enemy.death_timer = 0.0;
+                }
+                (damage, died, is_headshot)
+            };
 
-            // Spawn impact effect
+            // Spawn impact effect (ahora podemos usar &mut self sin conflictos)
             self.spawn_impact(ctx, hit_point);
 
-            if enemy.health <= 0 {
-                enemy.state = EnemyState::Dying;
-                enemy.death_timer = 0.0;
+            if died {
                 self.kills += 1;
                 self.total_enemies_alive = self.total_enemies_alive.saturating_sub(1);
 
                 // Score calculation
                 let combo_mult = 1 + self.combo;
-                let headshot_bonus = if is_headshot { HEADSHOT_MULTIPLIER } else { 1 };
+                let headshot_bonus = if was_headshot { HEADSHOT_MULTIPLIER } else { 1 };
                 self.score += SCORE_PER_KILL * combo_mult * headshot_bonus;
-                if is_headshot {
+                if was_headshot {
                     self.headshots += 1;
                 }
                 self.combo += 1;
@@ -832,7 +840,7 @@ impl Xenofall {
         if self.state != GameState::Playing { return; }
         if self.wave_index >= self.waves.len() { return; }
 
-        let wave = &self.waves[self.wave_index];
+        let wave = self.waves[self.wave_index];  // Copy, no referencia
 
         // Check if we've reached the trigger point
         if self.rail_progress >= wave.trigger_z {
@@ -891,7 +899,8 @@ impl Xenofall {
         let flash = if self.damage_flash > 0.0 { "⚠️ " } else { "" };
 
         ctx.set_title(&format!(
-            "{} XENOFALL · {} HP · {} balas · {} pts{} · {} kills · {}% · Ola {}/{} · {:.0} FPS",
+            "{}{} XENOFALL · {} HP · {} balas · {} pts{} · {} kills · {}% · Ola {}/{} · {:.0} FPS",
+            flash,
             state_icon,
             self.hp,
             ammo_str,
