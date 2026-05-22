@@ -16,8 +16,6 @@ use winit::event::WindowEvent;
 pub struct Reactor {
     pub swapchain: Swapchain,
     pub allocator: Arc<Mutex<Allocator>>,
-    pub render_pass: vk::RenderPass,
-    pub framebuffers: Vec<vk::Framebuffer>,
     pub command_pool: vk::CommandPool,
     pub command_buffers: Vec<vk::CommandBuffer>,
     pub image_available_semaphores: Vec<vk::Semaphore>,
@@ -96,22 +94,7 @@ impl Reactor {
             depth_format,
             msaa_samples,
         )?;
-        println!("ðŸ”· Depth buffer created: {:?}", depth_format);
-
-        let render_pass = Self::create_render_pass_with_depth(
-            &context,
-            swapchain.format,
-            depth_format,
-            msaa_samples,
-        )?;
-        let framebuffers = Self::create_framebuffers_with_depth(
-            &context,
-            &swapchain,
-            render_pass,
-            msaa_image_view,
-            depth_image_view,
-            msaa_samples,
-        )?;
+        println!("🔹 Depth buffer created: {:?}", depth_format);
 
         // Command Pool
         let pool_create_info = vk::CommandPoolCreateInfo::default()
@@ -165,8 +148,6 @@ impl Reactor {
             context,
             swapchain,
             allocator,
-            render_pass,
-            framebuffers,
             command_pool,
             command_buffers,
             image_available_semaphores,
@@ -234,13 +215,6 @@ impl Reactor {
 
         if capabilities.current_extent.width == 0 || capabilities.current_extent.height == 0 {
             return Ok(());
-        }
-
-        // Destroy old framebuffers
-        unsafe {
-            for &framebuffer in &self.framebuffers {
-                self.context.device.destroy_framebuffer(framebuffer, None);
-            }
         }
 
         // Destroy old depth resources
@@ -311,16 +285,6 @@ impl Reactor {
         self.depth_image_view = Some(depth_view);
         self.depth_memory = Some(depth_mem);
 
-        // Recreate framebuffers with depth support
-        self.framebuffers = Self::create_framebuffers_with_depth(
-            &self.context,
-            &self.swapchain,
-            self.render_pass,
-            self.msaa_image_view,
-            depth_view,
-            self.msaa_samples,
-        )?;
-
         Ok(())
     }
 
@@ -383,12 +347,14 @@ impl Reactor {
     ) -> ReactorResult<Material> {
         Material::new_with_msaa(
             &self.context,
-            self.render_pass,
+            None, // Dynamic Rendering
             vert_code,
             frag_code,
             self.swapchain.extent.width,
             self.swapchain.extent.height,
             self.msaa_samples,
+            self.swapchain.format,
+            Some(self.depth_format),
         )
     }
 
@@ -401,13 +367,15 @@ impl Reactor {
     ) -> ReactorResult<Material> {
         Material::with_texture(
             &self.context,
-            self.render_pass,
+            None, // Dynamic Rendering
             vert_code,
             frag_code,
             self.swapchain.extent.width,
             self.swapchain.extent.height,
             texture,
             self.msaa_samples,
+            self.swapchain.format,
+            Some(self.depth_format),
         )
     }
 
@@ -828,39 +796,41 @@ impl Reactor {
 
         let begin_info = vk::CommandBufferBeginInfo::default();
 
-        // Clear values: [MSAA color, resolve color, depth]
-        let clear_values = [
-            vk::ClearValue {
-                color: vk::ClearColorValue { float32: [0.1, 0.1, 0.1, 1.0] },
-            },
-            vk::ClearValue {
-                color: vk::ClearColorValue { float32: [0.1, 0.1, 0.1, 1.0] },
-            },
-            vk::ClearValue {
-                depth_stencil: vk::ClearDepthStencilValue { depth: 1.0, stencil: 0 },
-            },
-        ];
-
-        let render_pass_begin_info = vk::RenderPassBeginInfo::default()
-            .render_pass(self.render_pass)
-            .framebuffer(self.framebuffers[image_index as usize])
-            .render_area(vk::Rect2D {
-                offset: vk::Offset2D { x: 0, y: 0 },
-                extent: self.swapchain.extent,
-            })
-            .clear_values(&clear_values);
-
         unsafe {
             self.context
                 .device
                 .begin_command_buffer(command_buffer, &begin_info)
                 .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "begin_command_buffer failed", e))?;
 
-            self.context.device.cmd_begin_render_pass(
-                command_buffer,
-                &render_pass_begin_info,
-                vk::SubpassContents::INLINE,
-            );
+            // Dynamic Rendering: Setup color and depth attachments
+            let color_attachment = vk::RenderingAttachmentInfo::default()
+                .image_view(self.swapchain.image_views[image_index as usize])
+                .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .load_op(vk::AttachmentLoadOp::CLEAR)
+                .store_op(vk::AttachmentStoreOp::STORE)
+                .clear_value(vk::ClearValue {
+                    color: vk::ClearColorValue { float32: [0.1, 0.1, 0.1, 1.0] },
+                });
+
+            let mut depth_attachment = vk::RenderingAttachmentInfo::default()
+                .image_view(self.depth_image_view.unwrap())
+                .image_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+                .load_op(vk::AttachmentLoadOp::CLEAR)
+                .store_op(vk::AttachmentStoreOp::DONT_CARE)
+                .clear_value(vk::ClearValue {
+                    depth_stencil: vk::ClearDepthStencilValue { depth: 1.0, stencil: 0 },
+                });
+
+            let mut rendering_info = vk::RenderingInfo::default()
+                .render_area(vk::Rect2D {
+                    offset: vk::Offset2D { x: 0, y: 0 },
+                    extent: self.swapchain.extent,
+                })
+                .layer_count(1)
+                .color_attachments(std::slice::from_ref(&color_attachment))
+                .depth_attachment(&mut depth_attachment);
+
+            self.context.device.cmd_begin_rendering(command_buffer, &rendering_info);
 
             // Dynamic State (Viewport/Scissor) - Set once per frame as it covers the whole screen
             let viewport = vk::Viewport {
@@ -950,7 +920,7 @@ impl Reactor {
                 );
             }
 
-            self.context.device.cmd_end_render_pass(command_buffer);
+            self.context.device.cmd_end_rendering(command_buffer);
 
             self.context.device.end_command_buffer(command_buffer)
                 .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "end_command_buffer failed", e))?;
@@ -1054,30 +1024,41 @@ impl Reactor {
 
         let begin_info = vk::CommandBufferBeginInfo::default();
 
-        let clear_values = [vk::ClearValue {
-            color: vk::ClearColorValue { float32: [0.1, 0.1, 0.1, 1.0] },
-        }];
-
-        let render_pass_begin_info = vk::RenderPassBeginInfo::default()
-            .render_pass(self.render_pass)
-            .framebuffer(self.framebuffers[image_index as usize])
-            .render_area(vk::Rect2D {
-                offset: vk::Offset2D { x: 0, y: 0 },
-                extent: self.swapchain.extent,
-            })
-            .clear_values(&clear_values);
-
         unsafe {
             self.context
                 .device
                 .begin_command_buffer(command_buffer, &begin_info)
                 .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "begin_command_buffer failed", e))?;
 
-            self.context.device.cmd_begin_render_pass(
-                command_buffer,
-                &render_pass_begin_info,
-                vk::SubpassContents::INLINE,
-            );
+            // Dynamic Rendering: Setup color and depth attachments
+            let color_attachment = vk::RenderingAttachmentInfo::default()
+                .image_view(self.swapchain.image_views[image_index as usize])
+                .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .load_op(vk::AttachmentLoadOp::CLEAR)
+                .store_op(vk::AttachmentStoreOp::STORE)
+                .clear_value(vk::ClearValue {
+                    color: vk::ClearColorValue { float32: [0.1, 0.1, 0.1, 1.0] },
+                });
+
+            let mut depth_attachment = vk::RenderingAttachmentInfo::default()
+                .image_view(self.depth_image_view.unwrap())
+                .image_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+                .load_op(vk::AttachmentLoadOp::CLEAR)
+                .store_op(vk::AttachmentStoreOp::DONT_CARE)
+                .clear_value(vk::ClearValue {
+                    depth_stencil: vk::ClearDepthStencilValue { depth: 1.0, stencil: 0 },
+                });
+
+            let mut rendering_info = vk::RenderingInfo::default()
+                .render_area(vk::Rect2D {
+                    offset: vk::Offset2D { x: 0, y: 0 },
+                    extent: self.swapchain.extent,
+                })
+                .layer_count(1)
+                .color_attachments(std::slice::from_ref(&color_attachment))
+                .depth_attachment(&mut depth_attachment);
+
+            self.context.device.cmd_begin_rendering(command_buffer, &rendering_info);
 
             self.context.device.cmd_bind_pipeline(
                 command_buffer,
@@ -1138,7 +1119,7 @@ impl Reactor {
                 .device
                 .cmd_draw_indexed(command_buffer, mesh.index_count, 1, 0, 0, 0);
 
-            self.context.device.cmd_end_render_pass(command_buffer);
+            self.context.device.cmd_end_rendering(command_buffer);
 
             self.context.device.end_command_buffer(command_buffer)
                 .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "end_command_buffer failed", e))?;
@@ -1515,16 +1496,6 @@ impl Drop for Reactor {
             if let Some(msaa_memory) = self.msaa_memory.take() {
                 self.context.device.free_memory(msaa_memory, None);
             }
-
-            // Destroy framebuffers
-            for &framebuffer in &self.framebuffers {
-                self.context.device.destroy_framebuffer(framebuffer, None);
-            }
-
-            // Destroy render pass
-            self.context
-                .device
-                .destroy_render_pass(self.render_pass, None);
 
             // Destroy sync objects
             for i in 0..MAX_FRAMES_IN_FLIGHT {

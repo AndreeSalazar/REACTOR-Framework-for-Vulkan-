@@ -350,6 +350,7 @@ impl VulkanContext {
         // Device extensions
         let device_extension_names = [
             ash::khr::swapchain::NAME.as_ptr(),
+            ash::khr::dynamic_rendering::NAME.as_ptr(),
             ash::khr::ray_tracing_pipeline::NAME.as_ptr(),
             ash::khr::acceleration_structure::NAME.as_ptr(),
             ash::khr::deferred_host_operations::NAME.as_ptr(),
@@ -378,13 +379,16 @@ impl VulkanContext {
         let mut acceleration_structure_features =
             vk::PhysicalDeviceAccelerationStructureFeaturesKHR::default()
                 .acceleration_structure(true);
+        let mut dynamic_rendering_features =
+            vk::PhysicalDeviceDynamicRenderingFeatures::default().dynamic_rendering(true);
 
         let device_create_info = vk::DeviceCreateInfo::default()
             .queue_create_infos(std::slice::from_ref(&queue_info))
             .enabled_extension_names(&device_extension_names)
             .push_next(&mut buffer_device_address_features)
             .push_next(&mut ray_tracing_pipeline_features)
-            .push_next(&mut acceleration_structure_features);
+            .push_next(&mut acceleration_structure_features)
+            .push_next(&mut dynamic_rendering_features);
 
         let device = unsafe {
             instance

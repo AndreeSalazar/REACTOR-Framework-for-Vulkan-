@@ -37,11 +37,13 @@ impl Default for PipelineConfig {
 impl Pipeline {
     pub fn new(
         device: &ArcDevice,
-        render_pass: vk::RenderPass,
+        render_pass: Option<vk::RenderPass>,
         vert_spv: &[u32],
         frag_spv: &[u32],
         width: u32,
         height: u32,
+        color_format: vk::Format,
+        depth_format: Option<vk::Format>,
     ) -> ReactorResult<Self> {
         Self::with_config(
             device,
@@ -52,18 +54,22 @@ impl Pipeline {
             height,
             &PipelineConfig::default(),
             &[],
+            color_format,
+            depth_format,
         )
     }
 
     pub fn with_config(
         device: &ArcDevice,
-        render_pass: vk::RenderPass,
+        render_pass: Option<vk::RenderPass>,
         vert_spv: &[u32],
         frag_spv: &[u32],
         width: u32,
         height: u32,
         config: &PipelineConfig,
         descriptor_layouts: &[vk::DescriptorSetLayout],
+        color_format: vk::Format,
+        depth_format: Option<vk::Format>,
     ) -> ReactorResult<Self> {
         let vert_shader_module = unsafe {
             let create_info = vk::ShaderModuleCreateInfo::default().code(vert_spv);
@@ -174,7 +180,12 @@ impl Pipeline {
                 .map_err(|e| ReactorError::with_source(ErrorCode::VulkanPipelineCreation, "create_pipeline_layout failed", e))?
         };
 
-        let create_info = vk::GraphicsPipelineCreateInfo::default()
+        // Dynamic Rendering support
+        let mut rendering_info = vk::PipelineRenderingCreateInfo::default()
+            .color_attachment_formats(std::slice::from_ref(&color_format))
+            .depth_attachment_format(depth_format.unwrap_or(vk::Format::UNDEFINED));
+
+        let mut create_info_builder = vk::GraphicsPipelineCreateInfo::default()
             .stages(&shader_stages)
             .vertex_input_state(&vertex_input_state)
             .input_assembly_state(&input_assembly_state)
@@ -184,9 +195,15 @@ impl Pipeline {
             .depth_stencil_state(&depth_stencil_state)
             .color_blend_state(&color_blend_state)
             .dynamic_state(&dynamic_state_info)
-            .layout(layout)
-            .render_pass(render_pass)
-            .subpass(0);
+            .layout(layout);
+
+        if let Some(rp) = render_pass {
+            create_info_builder = create_info_builder.render_pass(rp).subpass(0);
+        } else {
+            create_info_builder = create_info_builder.push_next(&mut rendering_info);
+        }
+
+        let create_info = create_info_builder;
 
         let pipelines = unsafe {
             device

@@ -20,12 +20,14 @@ impl Material {
     /// Crea un material con soporte para MSAA (Multi-Sample Anti-Aliasing)
     pub fn new_with_msaa(
         ctx: &VulkanContext,
-        render_pass: vk::RenderPass,
+        render_pass: Option<vk::RenderPass>,
         vert_code: &[u32],
         frag_code: &[u32],
         width: u32,
         height: u32,
         msaa_samples: vk::SampleCountFlags,
+        color_format: vk::Format,
+        depth_format: Option<vk::Format>,
     ) -> ReactorResult<Self> {
         let config = PipelineConfig {
             samples: msaa_samples,
@@ -40,16 +42,20 @@ impl Material {
             height,
             &config,
             &[],
+            color_format,
+            depth_format,
         )
     }
 
     pub fn new(
         ctx: &VulkanContext,
-        render_pass: vk::RenderPass,
+        render_pass: Option<vk::RenderPass>,
         vert_code: &[u32],
         frag_code: &[u32],
         width: u32,
         height: u32,
+        color_format: vk::Format,
+        depth_format: Option<vk::Format>,
     ) -> ReactorResult<Self> {
         let pipeline = Pipeline::new(
             &ctx.device,
@@ -58,6 +64,8 @@ impl Material {
             frag_code,
             width,
             height,
+            color_format,
+            depth_format,
         )?;
 
         Ok(Self {
@@ -71,13 +79,15 @@ impl Material {
 
     pub fn with_config(
         ctx: &VulkanContext,
-        render_pass: vk::RenderPass,
+        render_pass: Option<vk::RenderPass>,
         vert_code: &[u32],
         frag_code: &[u32],
         width: u32,
         height: u32,
         config: &PipelineConfig,
         descriptor_layouts: &[vk::DescriptorSetLayout],
+        color_format: vk::Format,
+        depth_format: Option<vk::Format>,
     ) -> ReactorResult<Self> {
         let pipeline = Pipeline::with_config(
             &ctx.device,
@@ -88,6 +98,8 @@ impl Material {
             height,
             config,
             descriptor_layouts,
+            color_format,
+            depth_format,
         )?;
 
         Ok(Self {
@@ -102,13 +114,15 @@ impl Material {
     /// Create a textured material with a diffuse texture
     pub fn with_texture(
         ctx: &VulkanContext,
-        render_pass: vk::RenderPass,
+        render_pass: Option<vk::RenderPass>,
         vert_code: &[u32],
         frag_code: &[u32],
         width: u32,
         height: u32,
         texture: &Texture,
         msaa_samples: vk::SampleCountFlags,
+        color_format: vk::Format,
+        depth_format: Option<vk::Format>,
     ) -> ReactorResult<Self> {
         // Create descriptor set layout for texture sampler
         let sampler_binding = vk::DescriptorSetLayoutBinding::default()
@@ -179,6 +193,8 @@ impl Material {
             height,
             &config,
             &[descriptor_layout],
+            color_format,
+            depth_format,
         )?;
 
         Ok(Self {
@@ -289,9 +305,11 @@ impl MaterialBuilder {
     pub fn build(
         self,
         ctx: &VulkanContext,
-        render_pass: vk::RenderPass,
+        render_pass: Option<vk::RenderPass>,
         width: u32,
         height: u32,
+        color_format: vk::Format,
+        depth_format: Option<vk::Format>,
     ) -> ReactorResult<Material> {
         Material::with_config(
             ctx,
@@ -302,6 +320,8 @@ impl MaterialBuilder {
             height,
             &self.config,
             &self.descriptor_layouts,
+            color_format,
+            depth_format,
         )
     }
 }
