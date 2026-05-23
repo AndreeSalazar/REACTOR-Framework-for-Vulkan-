@@ -66,10 +66,11 @@ impl Reactor {
 
         // Convert user-requested MSAA to Vulkan SampleCountFlags
         let msaa_samples = Self::msaa_from_u32(requested_msaa, &context);
-        println!(
-            "ðŸ”· MSAA: {:?} samples enabled for anti-aliasing",
-            msaa_samples
-        );
+        if msaa_samples == vk::SampleCountFlags::TYPE_1 {
+            println!("🔷 MSAA: disabled (1 sample)");
+        } else {
+            println!("🔷 MSAA: {:?} enabled for anti-aliasing", msaa_samples);
+        }
 
         // Create MSAA resources if supported
         let (msaa_image, msaa_image_view, msaa_memory) =
@@ -850,15 +851,34 @@ impl Reactor {
                 .begin_command_buffer(command_buffer, &begin_info)
                 .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "begin_command_buffer failed", e))?;
 
-            // Dynamic Rendering: Setup color and depth attachments
-            let color_attachment = vk::RenderingAttachmentInfo::default()
-                .image_view(self.swapchain.image_views[image_index as usize])
-                .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                .load_op(vk::AttachmentLoadOp::CLEAR)
-                .store_op(vk::AttachmentStoreOp::STORE)
-                .clear_value(vk::ClearValue {
-                    color: vk::ClearColorValue { float32: [0.1, 0.1, 0.1, 1.0] },
-                });
+            // ── Dynamic Rendering: color + depth attachments (con soporte MSAA) ──
+            let swapchain_view = self.swapchain.image_views[image_index as usize];
+            let msaa_enabled = self.msaa_samples != vk::SampleCountFlags::TYPE_1
+                && self.msaa_image_view.is_some();
+
+            let color_attachment = if msaa_enabled {
+                // MSAA: renderizamos al buffer multi-sample y resolvemos al swapchain
+                vk::RenderingAttachmentInfo::default()
+                    .image_view(self.msaa_image_view.unwrap())
+                    .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                    .resolve_mode(vk::ResolveModeFlags::AVERAGE)
+                    .resolve_image_view(swapchain_view)
+                    .resolve_image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                    .load_op(vk::AttachmentLoadOp::CLEAR)
+                    .store_op(vk::AttachmentStoreOp::DONT_CARE) // se descarta tras el resolve
+                    .clear_value(vk::ClearValue {
+                        color: vk::ClearColorValue { float32: [0.1, 0.1, 0.1, 1.0] },
+                    })
+            } else {
+                vk::RenderingAttachmentInfo::default()
+                    .image_view(swapchain_view)
+                    .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                    .load_op(vk::AttachmentLoadOp::CLEAR)
+                    .store_op(vk::AttachmentStoreOp::STORE)
+                    .clear_value(vk::ClearValue {
+                        color: vk::ClearColorValue { float32: [0.1, 0.1, 0.1, 1.0] },
+                    })
+            };
 
             let mut depth_attachment = vk::RenderingAttachmentInfo::default()
                 .image_view(self.depth_image_view.unwrap())
@@ -878,7 +898,7 @@ impl Reactor {
                 .color_attachments(std::slice::from_ref(&color_attachment))
                 .depth_attachment(&mut depth_attachment);
 
-            // ── BARRERAS DE INICIO: Transición de Swapchain y Depth a Attachments ──
+            // ── BARRERAS DE INICIO: Swapchain (+ MSAA si aplica) + Depth ──
             let swapchain_image = self.swapchain.images[image_index as usize];
             let depth_img = self.depth_image.unwrap();
 
@@ -910,7 +930,26 @@ impl Reactor {
                     layer_count: 1,
                 });
 
-            let start_barriers = [color_barrier, depth_barrier];
+            let mut start_barriers: Vec<vk::ImageMemoryBarrier> =
+                vec![color_barrier, depth_barrier];
+
+            if msaa_enabled {
+                start_barriers.push(
+                    vk::ImageMemoryBarrier::default()
+                        .old_layout(vk::ImageLayout::UNDEFINED)
+                        .new_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                        .src_access_mask(vk::AccessFlags::empty())
+                        .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                        .image(self.msaa_image.unwrap())
+                        .subresource_range(vk::ImageSubresourceRange {
+                            aspect_mask: vk::ImageAspectFlags::COLOR,
+                            base_mip_level: 0,
+                            level_count: 1,
+                            base_array_layer: 0,
+                            layer_count: 1,
+                        }),
+                );
+            }
 
             self.context.device.cmd_pipeline_barrier(
                 command_buffer,
@@ -1159,15 +1198,33 @@ impl Reactor {
                 .begin_command_buffer(command_buffer, &begin_info)
                 .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "begin_command_buffer failed", e))?;
 
-            // Dynamic Rendering: Setup color and depth attachments
-            let color_attachment = vk::RenderingAttachmentInfo::default()
-                .image_view(self.swapchain.image_views[image_index as usize])
-                .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                .load_op(vk::AttachmentLoadOp::CLEAR)
-                .store_op(vk::AttachmentStoreOp::STORE)
-                .clear_value(vk::ClearValue {
-                    color: vk::ClearColorValue { float32: [0.1, 0.1, 0.1, 1.0] },
-                });
+            // ── Dynamic Rendering: color + depth attachments (con soporte MSAA) ──
+            let swapchain_view = self.swapchain.image_views[image_index as usize];
+            let msaa_enabled = self.msaa_samples != vk::SampleCountFlags::TYPE_1
+                && self.msaa_image_view.is_some();
+
+            let color_attachment = if msaa_enabled {
+                vk::RenderingAttachmentInfo::default()
+                    .image_view(self.msaa_image_view.unwrap())
+                    .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                    .resolve_mode(vk::ResolveModeFlags::AVERAGE)
+                    .resolve_image_view(swapchain_view)
+                    .resolve_image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                    .load_op(vk::AttachmentLoadOp::CLEAR)
+                    .store_op(vk::AttachmentStoreOp::DONT_CARE)
+                    .clear_value(vk::ClearValue {
+                        color: vk::ClearColorValue { float32: [0.1, 0.1, 0.1, 1.0] },
+                    })
+            } else {
+                vk::RenderingAttachmentInfo::default()
+                    .image_view(swapchain_view)
+                    .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                    .load_op(vk::AttachmentLoadOp::CLEAR)
+                    .store_op(vk::AttachmentStoreOp::STORE)
+                    .clear_value(vk::ClearValue {
+                        color: vk::ClearColorValue { float32: [0.1, 0.1, 0.1, 1.0] },
+                    })
+            };
 
             let mut depth_attachment = vk::RenderingAttachmentInfo::default()
                 .image_view(self.depth_image_view.unwrap())
@@ -1187,7 +1244,7 @@ impl Reactor {
                 .color_attachments(std::slice::from_ref(&color_attachment))
                 .depth_attachment(&mut depth_attachment);
 
-            // ── BARRERAS DE INICIO: Transición de Swapchain y Depth a Attachments ──
+            // ── BARRERAS DE INICIO: Swapchain (+ MSAA si aplica) + Depth ──
             let swapchain_image = self.swapchain.images[image_index as usize];
             let depth_img = self.depth_image.unwrap();
 
@@ -1219,7 +1276,26 @@ impl Reactor {
                     layer_count: 1,
                 });
 
-            let start_barriers = [color_barrier, depth_barrier];
+            let mut start_barriers: Vec<vk::ImageMemoryBarrier> =
+                vec![color_barrier, depth_barrier];
+
+            if msaa_enabled {
+                start_barriers.push(
+                    vk::ImageMemoryBarrier::default()
+                        .old_layout(vk::ImageLayout::UNDEFINED)
+                        .new_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                        .src_access_mask(vk::AccessFlags::empty())
+                        .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                        .image(self.msaa_image.unwrap())
+                        .subresource_range(vk::ImageSubresourceRange {
+                            aspect_mask: vk::ImageAspectFlags::COLOR,
+                            base_mip_level: 0,
+                            level_count: 1,
+                            base_array_layer: 0,
+                            layer_count: 1,
+                        }),
+                );
+            }
 
             self.context.device.cmd_pipeline_barrier(
                 command_buffer,

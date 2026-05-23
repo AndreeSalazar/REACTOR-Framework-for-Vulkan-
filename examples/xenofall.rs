@@ -1035,7 +1035,7 @@ impl ReactorApp for Xenofall {
         ReactorConfig::new("⚡ XENOFALL — Rail Shooter")
             .with_size(1920, 1080)
             .with_vsync(true)
-            .with_msaa(1)  // ✅ 1 sample = MSAA desactivado (el core aún no soporta Resolve Attachments)
+            .with_msaa(4)  // ✅ 4x MSAA — el core ya hace resolve vía dynamic rendering
             .with_renderer(RendererMode::Forward)
             .with_physics_hz(60)
     }
@@ -1075,15 +1075,8 @@ impl ReactorApp for Xenofall {
         self.build_corridor(ctx);
         self.build_pools(ctx);
 
-        println!(
-            "[XENOFALL] Corredor construido · {} segmentos de suelo",
-            self.floor_indices.len()
-        );
-        println!(
-            "[XENOFALL] Pools: {} trazadores, {} impactos",
-            self.tracer_pool.len(),
-            self.impact_pool.len()
-        );
+        println!("[XENOFALL] Corredor construido · {} segmentos de suelo", self.floor_indices.len());
+        println!("[XENOFALL] Pools: {} trazadores, {} impactos", self.tracer_pool.len(), self.impact_pool.len());
         println!("[XENOFALL] {} oleadas cargadas", self.waves.len());
         println!("[XENOFALL] ¡Sobrevive al corredor, comandante!");
     }
@@ -1111,28 +1104,17 @@ impl ReactorApp for Xenofall {
         println!("╔═══════════════════════════════════════════════════╗");
         println!("║         ⚡ XENOFALL — After Action Report ⚡     ║");
         println!("╠═══════════════════════════════════════════════════╣");
-        println!(
-            "║  Resultado:  {}",
-            match self.state {
-                GameState::Victory => "🏆 ¡VICTORIA!",
-                GameState::GameOver => "💀 GAME OVER",
-                _ => "🏁 Abandonado",
-            }
-        );
-        println!("║  Puntuación: {:>37} ║", self.score);
-        println!("║  Kills:      {:>37} ║", self.kills);
-        println!("║  Headshots:  {:>37} ║", self.headshots);
-        println!("║  Disparos:   {:>37} ║", self.shots_fired);
-        let acc = if self.shots_fired > 0 {
-            (self.shots_hit as f32 / self.shots_fired as f32 * 100.0) as u32
-        } else {
-            0
-        };
+        println!("║  Resultado:  {}", match self.state {
+                  GameState::Victory => "🏆 ¡VICTORIA!",
+                  GameState::GameOver => "💀 GAME OVER",
+                  _ => "🏁 Abandonado",});
+        println!("║  Puntuación: {:>37}  ║", self.score);
+        println!("║  Kills:      {:>37}  ║", self.kills);
+        println!("║  Headshots:  {:>37}  ║", self.headshots);
+        println!("║  Disparos:   {:>37}  ║", self.shots_fired);
+        let acc = if self.shots_fired > 0 {(self.shots_hit as f32 / self.shots_fired as f32 * 100.0) as u32} else {0};
         println!("║  Precisión:  {:>36}% ║", acc);
-        println!(
-            "║  Oleadas:    {:>37} ║",
-            format!("{}/{}", self.current_wave, self.waves.len())
-        );
+        println!("║  Oleadas:    {:>37}  ║", format!("{}/{}", self.current_wave, self.waves.len()));
         println!("╚═══════════════════════════════════════════════════╝");
     }
 }
@@ -1162,11 +1144,11 @@ fn print_banner() {
     println!("║          R A I L   S H O O T E R  ·  REACTOR 1.1.0               ║");
     println!("╠══════════════════════════════════════════════════════════════════╣");
     println!("║  Controles:                                                      ║");
-    println!("║    🖱️  Mouse          → Apuntar (el cursor es la mira)           ║");
-    println!("║    🔫 Click Izquierdo → Disparar                                 ║");
-    println!("║    🔄 R              → Recargar                                  ║");
-    println!("║    ⏸️  P              → Pausar                                   ║");
-    println!("║    🚪 Esc            → Salir                                     ║");
+    println!("║      Mouse          → Apuntar (el cursor es la mira)             ║");
+    println!("║     Click Izquierdo → Disparar                                   ║");
+    println!("║     R               → Recargar                                   ║");
+    println!("║     P               → Pausar                                     ║");
+    println!("║     Esc             → Salir                                      ║");
     println!("║                                                                  ║");
     println!("║  Objetivo: Sobrevive 8 oleadas a través del corredor.            ║");
     println!("║  ¡Apunta a la cabeza para daño triple!                           ║");

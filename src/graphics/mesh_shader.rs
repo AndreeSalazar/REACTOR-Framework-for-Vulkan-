@@ -270,10 +270,10 @@ impl MeshShaderPipeline {
         };
 
         // Color blend
-        let color_blend_attachment = vk::PipelineColorBlendAttachmentState::default()
-            .color_write_mask(vk::ColorComponentFlags::RGBA);
+        let color_blend_attachments = [vk::PipelineColorBlendAttachmentState::default()
+            .color_write_mask(vk::ColorComponentFlags::RGBA)];
         let color_blend = vk::PipelineColorBlendStateCreateInfo::default()
-            .attachments(&[color_blend_attachment]);
+            .attachments(&color_blend_attachments);
 
         // Dynamic state
         let dynamic_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
@@ -316,32 +316,33 @@ impl MeshShaderPipeline {
     /// Graba un draw call de mesh shader en el command buffer.
     ///
     /// # Arguments
+    /// * `mesh_ext` - Loader de la extensión `VK_EXT_mesh_shader`
     /// * `cmd` - Command buffer
     /// * `group_count_x` - Número de workgroups en X
     /// * `group_count_y` - Número de workgroups en Y (1 si no se usa)
     /// * `group_count_z` - Número de workgroups en Z (1 si no se usa)
     pub fn draw_mesh_tasks(
         &self,
-        device: &ash::Device,
+        mesh_ext: &ash::ext::mesh_shader::Device,
         cmd: vk::CommandBuffer,
         group_count_x: u32,
         group_count_y: u32,
         group_count_z: u32,
     ) {
         unsafe {
-            device.cmd_bind_pipeline(
+            self.device.cmd_bind_pipeline(
                 cmd,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline,
             );
-            device.cmd_draw_mesh_tasks_ext(cmd, group_count_x, group_count_y, group_count_z);
+            mesh_ext.cmd_draw_mesh_tasks(cmd, group_count_x, group_count_y, group_count_z);
         }
     }
 
     /// Draw mesh tasks indirect (GPU-driven).
     pub fn draw_mesh_tasks_indirect(
         &self,
-        device: &ash::Device,
+        mesh_ext: &ash::ext::mesh_shader::Device,
         cmd: vk::CommandBuffer,
         buffer: vk::Buffer,
         offset: vk::DeviceSize,
@@ -349,19 +350,19 @@ impl MeshShaderPipeline {
         stride: u32,
     ) {
         unsafe {
-            device.cmd_bind_pipeline(
+            self.device.cmd_bind_pipeline(
                 cmd,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline,
             );
-            device.cmd_draw_mesh_tasks_indirect_ext(cmd, buffer, offset, draw_count, stride);
+            mesh_ext.cmd_draw_mesh_tasks_indirect(cmd, buffer, offset, draw_count, stride);
         }
     }
 
     /// Draw mesh tasks indirect count (con count buffer).
     pub fn draw_mesh_tasks_indirect_count(
         &self,
-        device: &ash::Device,
+        mesh_ext: &ash::ext::mesh_shader::Device,
         cmd: vk::CommandBuffer,
         buffer: vk::Buffer,
         offset: vk::DeviceSize,
@@ -371,12 +372,12 @@ impl MeshShaderPipeline {
         stride: u32,
     ) {
         unsafe {
-            device.cmd_bind_pipeline(
+            self.device.cmd_bind_pipeline(
                 cmd,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline,
             );
-            device.cmd_draw_mesh_tasks_indirect_count_ext(
+            mesh_ext.cmd_draw_mesh_tasks_indirect_count(
                 cmd,
                 buffer,
                 offset,

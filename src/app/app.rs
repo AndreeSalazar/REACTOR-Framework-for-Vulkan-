@@ -769,7 +769,10 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
 
         match event {
             WindowEvent::CloseRequested => {
-                self.app.on_exit(ctx);
+                // No llamamos a `on_exit` aquí — winit invocará `exiting()` cuando
+                // el event loop termine, y ese es el único punto donde corremos el
+                // shutdown del usuario. Evita duplicar el "After Action Report" y
+                // las llamadas Vulkan tras `device_wait_idle`.
                 event_loop.exit();
             }
 
@@ -818,16 +821,29 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
 
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
         if let Some(ctx) = &mut self.context {
+            // 1. Esperar a que toda la GPU termine ANTES del cleanup del usuario
+            //    y del Drop de los recursos. Esto evita los típicos errores de
+            //    validation layer del estilo "X is in use" al cerrar la ventana.
+            //    SAFETY: el dispositivo es válido mientras `ctx` siga vivo;
+            //    ignoramos `DEVICE_LOST` para permitir cleanup grácil.
+            unsafe {
+                let _ = ctx.reactor.context.device.device_wait_idle();
+            }
+
+            // 2. Callback de usuario para volcar estadísticas / liberar handles.
             self.app.on_exit(ctx);
-            // SAFETY: device_wait_idle() is safe to call at any time.
-            // Ensures all pending GPU work completes before the process exits,
-            // preventing validation layer errors from premature resource destruction.
-            // The device is guaranteed valid here as ReactorContext is still alive.
-            // We ignore errors (like DEVICE_LOST) to allow graceful cleanup.
+
+            // 3. Re-sincronizar por si `on_exit` lanzó trabajo a la GPU
+            //    (poco común pero gratis, evita race condition en el Drop).
             unsafe {
                 let _ = ctx.reactor.context.device.device_wait_idle();
             }
         }
+
+        // 4. Soltar el contexto explícitamente para que los Drops corran AHORA
+        //    (orden inverso de creación), en vez de cuando winit decida tirar
+        //    el `AppRunner`. Esto fuerza un cleanup determinista de Vulkan.
+        self.context.take();
     }
 }
 
