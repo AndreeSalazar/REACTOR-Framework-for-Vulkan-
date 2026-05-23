@@ -42,7 +42,20 @@ use winit::keyboard::KeyCode;
 // CONSTANTES DE GAMEPLAY
 // =============================================================================
 
-const RAIL_SPEED: f32 = 3.5;
+// =============================================================================
+// UE5-STANDARD PROPORTIONS (1 unit ≈ 1 meter)
+// =============================================================================
+// Model data (measured): zombie_basic.glb
+//   Native vertex height: 178 cm (centimeter-scale model)
+//   Root node scale in glTF: 0.017 (auto-converts cm → m)
+//   Effective height at scale 1.0: 178 × 0.017 = 3.03m
+//   For 1.8m zombie: scale = 1.8 / 3.03 ≈ 0.59 → use 0.6
+//
+// Corridor: 7m wide × 3.5m tall (realistic lab hallway)
+// Human:    ~1.8m tall at eye level 1.7m
+// =============================================================================
+
+const RAIL_SPEED: f32 = 3.0;
 const RAIL_LENGTH: f32 = 90.0;
 
 const AIM_FOV_SCALE: f32 = 0.55;
@@ -51,10 +64,10 @@ const RELOAD_TIME: f32 = 1.2;
 const FIRE_COOLDOWN: f32 = 0.18;
 
 // TAP / HOLD thresholds
-const TAP_WINDOW: f32 = 0.25;       // Tiempo entre clicks para considerar TAP rápido
-const HOLD_THRESHOLD: f32 = 0.35;   // Mantener click > 350ms = HOLD
-const TAP_DAMAGE_MULT: f32 = 2.0;   // TAP rápido: daño x2
-const HOLD_DAMAGE_MULT: f32 = 0.5;  // HOLD: daño x0.5 (pero precision perfecta)
+const TAP_WINDOW: f32 = 0.25;
+const HOLD_THRESHOLD: f32 = 0.35;
+const TAP_DAMAGE_MULT: f32 = 2.0;
+const HOLD_DAMAGE_MULT: f32 = 0.5;
 
 const TRACER_SPEED: f32 = 150.0;
 const TRACER_LIFETIME: f32 = 0.4;
@@ -62,19 +75,40 @@ const TRACER_POOL_SIZE: usize = 12;
 const IMPACT_POOL_SIZE: usize = 20;
 const IMPACT_LIFETIME: f32 = 0.35;
 
-const ENEMY_BASE_SPEED: f32 = 2.0;
-const ENEMY_HIT_RADIUS: f32 = 0.9;
+// Corridor geometry constants
+const CORRIDOR_HALF_WIDTH: f32 = 3.5;  // Total 7m wide
+const CORRIDOR_HEIGHT: f32 = 3.5;      // 3.5m ceiling
+const PILLAR_X: f32 = 2.8;             // Pillar distance from center
+const CAMERA_Y: f32 = 1.7;             // Human eye level (1.7m)
+
+// Enemy constants — tuned for UE5-scale humans
+const ENEMY_BASE_SPEED: f32 = 2.5;
+const ENEMY_HIT_RADIUS: f32 = 0.5;     // Hitbox radius for ~1.8m tall zombie
 const ENEMY_ATTACK_DIST: f32 = 2.5;
 const ENEMY_ATTACK_COOLDOWN: f32 = 1.2;
 const ENEMY_DEATH_DURATION: f32 = 0.6;
+
+// Zombie model scale — measured: 178cm native × 0.017 root = 3.03m at 1.0
+// For a 1.8m tall zombie: 0.6x. Using 0.6 for proper human height.
+const ZOMBIE_GLTF_SCALE: f32 = 0.6;
+// Cube fallback dimensions (human proportions: 0.5m wide × 1.8m tall × 0.35m deep)
+const ZOMBIE_CUBE_SCALE: Vec3 = Vec3::new(0.5, 1.8, 0.35);
+// Y offset: zombie feet at floor (Y=0). Hitbox center at ~0.9m.
+const ZOMBIE_GROUND_Y: f32 = 0.9;
+
+/// How far ahead of the camera enemies spawn (close enough to see immediately)
+const ENEMY_SPAWN_DIST_MIN: f32 = 5.0;
+const ENEMY_SPAWN_DIST_MAX: f32 = 12.0;
+/// Brief delay after clearing a wave before camera resumes
+const WAVE_CLEAR_DELAY: f32 = 1.0;
 
 const PLAYER_MAX_HP: i32 = 100;
 const DAMAGE_PER_HIT: i32 = 12;
 const SCORE_PER_KILL: u32 = 100;
 const COMBO_TIMEOUT: f32 = 2.5;
-const MAX_COMBO: u32 = 10;          // Combo cap x10
+const MAX_COMBO: u32 = 10;
 const HEADSHOT_MULTIPLIER: u32 = 3;
-const SCORE_CAP: u32 = 9_999_999;   // Score cap
+const SCORE_CAP: u32 = 9_999_999;
 
 const MUZZLE_FLASH_DURATION: f32 = 0.06;
 
@@ -98,6 +132,7 @@ struct Enemy {
     death_timer: f32,
     attack_timer: f32,
     speed: f32,
+    is_gltf: bool,
     _id: u32,
 }
 
@@ -122,7 +157,7 @@ struct WaveDef {
     count: u32,
     spread: f32,
     depth: f32,
-    height_range: (f32, f32),
+    _height_range: (f32, f32),
     speed_mult: f32,
     enemy_hp: i32,
 }
@@ -449,6 +484,9 @@ struct Xenofall {
     wave_index: usize,
     total_enemies_alive: u32,
 
+    /// Timer after wave is cleared before camera resumes
+    wave_clear_timer: f32,
+
     next_enemy_id: u32,
 
     // Timing
@@ -500,6 +538,7 @@ impl Xenofall {
             waves: Self::build_waves(),
             wave_index: 0,
             total_enemies_alive: 0,
+            wave_clear_timer: 0.0,
             next_enemy_id: 0,
             t: 0.0,
             damage_pending: 0,
@@ -514,8 +553,8 @@ impl Xenofall {
                 trigger_z: 8.0,
                 count: 3,
                 spread: 3.0,
-                depth: 5.0,
-                height_range: (0.8, 0.8),
+                depth: 4.0,
+                _height_range: (0.8, 0.8),
                 speed_mult: 0.7,
                 enemy_hp: 1,
             },
@@ -524,18 +563,18 @@ impl Xenofall {
                 trigger_z: 18.0,
                 count: 5,
                 spread: 4.0,
-                depth: 6.0,
-                height_range: (0.8, 1.0),
+                depth: 5.0,
+                _height_range: (0.8, 0.8),
                 speed_mult: 0.8,
                 enemy_hp: 1,
             },
-            // Oleada 3: Mezcla de alturas — se arrastran y saltan
+            // Oleada 3: Mezcla — más enemigos, mayor spread
             WaveDef {
                 trigger_z: 28.0,
-                count: 4,
-                spread: 5.0,
+                count: 5,
+                spread: 4.5,
                 depth: 4.0,
-                height_range: (0.8, 2.0),
+                _height_range: (0.8, 0.8),
                 speed_mult: 0.9,
                 enemy_hp: 2,
             },
@@ -543,9 +582,9 @@ impl Xenofall {
             WaveDef {
                 trigger_z: 38.0,
                 count: 7,
-                spread: 5.5,
-                depth: 8.0,
-                height_range: (0.8, 0.8),
+                spread: 5.0,
+                depth: 6.0,
+                _height_range: (0.8, 0.8),
                 speed_mult: 1.0,
                 enemy_hp: 2,
             },
@@ -553,9 +592,9 @@ impl Xenofall {
             WaveDef {
                 trigger_z: 48.0,
                 count: 6,
-                spread: 6.0,
+                spread: 5.0,
                 depth: 5.0,
-                height_range: (0.8, 1.5),
+                _height_range: (0.8, 0.8),
                 speed_mult: 1.1,
                 enemy_hp: 2,
             },
@@ -564,18 +603,18 @@ impl Xenofall {
                 trigger_z: 58.0,
                 count: 8,
                 spread: 5.0,
-                depth: 10.0,
-                height_range: (0.8, 2.0),
+                depth: 6.0,
+                _height_range: (0.8, 0.8),
                 speed_mult: 1.2,
                 enemy_hp: 3,
             },
             // Oleada 7: Caos total — pasillos de contención rotos
             WaveDef {
                 trigger_z: 68.0,
-                count: 7,
-                spread: 6.0,
-                depth: 8.0,
-                height_range: (0.8, 2.5),
+                count: 8,
+                spread: 5.5,
+                depth: 6.0,
+                _height_range: (0.8, 0.8),
                 speed_mult: 1.3,
                 enemy_hp: 3,
             },
@@ -583,9 +622,9 @@ impl Xenofall {
             WaveDef {
                 trigger_z: 78.0,
                 count: 12,
-                spread: 7.0,
-                depth: 12.0,
-                height_range: (0.8, 1.5),
+                spread: 5.5,
+                depth: 8.0,
+                _height_range: (0.8, 0.8),
                 speed_mult: 1.0,
                 enemy_hp: 4,
             },
@@ -597,24 +636,28 @@ impl Xenofall {
     // =========================================================================
 
     fn build_corridor(&mut self, ctx: &mut ReactorContext) {
-        // ── Suelo del corredor ──
-        for i in 0..10 {
-            let z = -(i as f32 * 10.0 + 5.0);
-            if let Ok(idx) = ctx.spawn_plane(Vec3::new(0.0, 0.0, z), 12.0) {
+        let w = CORRIDOR_HALF_WIDTH;   // 3.5m from center
+        let h = CORRIDOR_HEIGHT;       // 3.5m
+        let pw = PILLAR_X;             // 2.8m from center
+
+        // ── Suelo del corredor (7m wide) ──
+        for i in 0..12 {
+            let z = -(i as f32 * 8.0 + 4.0);
+            if let Ok(idx) = ctx.spawn_plane(Vec3::new(0.0, 0.0, z), w * 2.0) {
                 self.floor_indices.push(idx);
             }
         }
 
-        // ── Paredes laterales ──
-        for i in 0..18 {
+        // ── Paredes laterales (3.5m tall, matching corridor height) ──
+        for i in 0..20 {
             let z = -(i as f32 * 5.0 + 2.5);
             if let Ok(left) = ctx.spawn_cube(Vec3::ZERO) {
                 ctx.set_transform(
                     left,
                     Mat4::from_scale_rotation_translation(
-                        Vec3::new(0.3, 5.0, 5.0),
+                        Vec3::new(0.25, h, 5.0),
                         Quat::IDENTITY,
-                        Vec3::new(-6.5, 2.5, z),
+                        Vec3::new(-w, h * 0.5, z),
                     ),
                 );
                 self.wall_indices.push(left);
@@ -623,25 +666,25 @@ impl Xenofall {
                 ctx.set_transform(
                     right,
                     Mat4::from_scale_rotation_translation(
-                        Vec3::new(0.3, 5.0, 5.0),
+                        Vec3::new(0.25, h, 5.0),
                         Quat::IDENTITY,
-                        Vec3::new(6.5, 2.5, z),
+                        Vec3::new(w, h * 0.5, z),
                     ),
                 );
                 self.wall_indices.push(right);
             }
         }
 
-        // ── Pilares decorativos ──
-        for i in 0..9 {
+        // ── Pilares decorativos (human-scale, ~0.4m × 3.2m × 0.4m) ──
+        for i in 0..10 {
             let z = -(i as f32 * 10.0 + 7.0);
             if let Ok(idx) = ctx.spawn_cube(Vec3::ZERO) {
                 ctx.set_transform(
                     idx,
                     Mat4::from_scale_rotation_translation(
-                        Vec3::new(0.6, 4.5, 0.6),
+                        Vec3::new(0.4, h - 0.3, 0.4),
                         Quat::IDENTITY,
-                        Vec3::new(-5.0, 2.25, z),
+                        Vec3::new(-pw, (h - 0.3) * 0.5, z),
                     ),
                 );
                 self.pillar_indices.push(idx);
@@ -650,25 +693,25 @@ impl Xenofall {
                 ctx.set_transform(
                     idx,
                     Mat4::from_scale_rotation_translation(
-                        Vec3::new(0.6, 4.5, 0.6),
+                        Vec3::new(0.4, h - 0.3, 0.4),
                         Quat::IDENTITY,
-                        Vec3::new(5.0, 2.25, z),
+                        Vec3::new(pw, (h - 0.3) * 0.5, z),
                     ),
                 );
                 self.pillar_indices.push(idx);
             }
         }
 
-        // ── Techo (barras transversales) ──
-        for i in 0..9 {
+        // ── Techo (barras transversales spanning corridor width) ──
+        for i in 0..10 {
             let z = -(i as f32 * 10.0 + 5.0);
             if let Ok(idx) = ctx.spawn_cube(Vec3::ZERO) {
                 ctx.set_transform(
                     idx,
                     Mat4::from_scale_rotation_translation(
-                        Vec3::new(13.0, 0.2, 0.5),
+                        Vec3::new(w * 2.0, 0.15, 0.4),
                         Quat::IDENTITY,
-                        Vec3::new(0.0, 5.0, z),
+                        Vec3::new(0.0, h, z),
                     ),
                 );
                 self.wall_indices.push(idx);
@@ -698,38 +741,55 @@ impl Xenofall {
         let id = self.next_enemy_id;
         self.next_enemy_id += 1;
 
-        // Spawn glTF zombie model
+        // Place at ground level — center of model at ZOMBIE_GROUND_Y (~0.9m)
+        let ground_pos = Vec3::new(pos.x, ZOMBIE_GROUND_Y, pos.z);
+
+        // Spawn glTF zombie model at UE5-standard human scale
+        // Model feet should be at Y=0 (floor). We place the transform origin at ground.
         let initial_xf = Mat4::from_scale_rotation_translation(
-            Vec3::splat(1.5),
-            Quat::IDENTITY,
-            pos - Vec3::new(0.0, 0.8, 0.0),
+            Vec3::splat(ZOMBIE_GLTF_SCALE),  // 3.0x scale → ~1.8m tall zombie
+            Quat::from_rotation_y(std::f32::consts::PI), // Face toward player
+            Vec3::new(ground_pos.x, 0.0, ground_pos.z),  // Feet on floor
         );
 
         if let Ok(indices) = ctx.spawn_gltf("assets/models/zombie_basic.glb", initial_xf) {
+            println!("    🧟 Zombie #{} spawned (glTF, scale {:.1}) at ({:.1}, {:.1}, {:.1})",
+                id, ZOMBIE_GLTF_SCALE, ground_pos.x, ground_pos.y, ground_pos.z);
             self.enemies.push(Enemy {
                 scene_indices: indices,
-                position: pos,
+                position: ground_pos,
                 health: hp,
                 max_health: hp,
                 state: EnemyState::Alive,
                 death_timer: 0.0,
                 attack_timer: 0.0,
                 speed,
+                is_gltf: true,
                 _id: id,
             });
             self.total_enemies_alive += 1;
         } else {
-            // Fallback to cube if glTF fails
-            if let Ok(idx) = ctx.spawn_cube(pos) {
+            // Fallback to cube — human-proportioned silhouette (0.5m × 1.8m × 0.35m)
+            if let Ok(idx) = ctx.spawn_cube(Vec3::ZERO) {
+                let cube_xf = Mat4::from_scale_rotation_translation(
+                    ZOMBIE_CUBE_SCALE,
+                    Quat::IDENTITY,
+                    ground_pos,
+                );
+                ctx.set_transform(idx, cube_xf);
+                println!("    🟥 Zombie #{} spawned (cube, {:.1}×{:.1}×{:.1}m) at ({:.1}, {:.1}, {:.1})",
+                    id, ZOMBIE_CUBE_SCALE.x, ZOMBIE_CUBE_SCALE.y, ZOMBIE_CUBE_SCALE.z,
+                    ground_pos.x, ground_pos.y, ground_pos.z);
                 self.enemies.push(Enemy {
                     scene_indices: vec![idx],
-                    position: pos,
+                    position: ground_pos,
                     health: hp,
                     max_health: hp,
                     state: EnemyState::Alive,
                     death_timer: 0.0,
                     attack_timer: 0.0,
                     speed,
+                    is_gltf: false,
                     _id: id,
                 });
                 self.total_enemies_alive += 1;
@@ -1031,16 +1091,31 @@ impl Xenofall {
         if self.state != GameState::Playing {
             return;
         }
+        
+        // Stop camera movement while there are active enemies in the wave!
+        if self.total_enemies_alive > 0 {
+            self.wave_clear_timer = WAVE_CLEAR_DELAY;
+            return;
+        }
+
+        // Brief pause after clearing a wave before camera resumes
+        if self.wave_clear_timer > 0.0 {
+            self.wave_clear_timer -= dt;
+            return;
+        }
+
         if self.rail_progress < RAIL_LENGTH {
             self.rail_progress += RAIL_SPEED * dt;
         }
     }
 
     fn update_camera(&mut self, ctx: &mut ReactorContext) {
-        let cam_pos = Vec3::new(0.0, 2.0, -self.rail_progress);
+        // Camera at human eye level (1.7m) — UE5 standard
+        let cam_pos = Vec3::new(0.0, CAMERA_Y, -self.rail_progress);
         ctx.camera.position = cam_pos;
 
-        let bob = (self.t * 3.0).sin() * 0.03;
+        // Subtle walking bob
+        let bob = (self.t * 3.0).sin() * 0.02;
         ctx.camera.position.y += bob;
         ctx.camera.set_rotation(0.0, 0.0);
 
@@ -1239,30 +1314,61 @@ impl Xenofall {
             }
         }
 
+        // Track how many died this frame so we can decrement total_enemies_alive
+        let mut deaths_this_frame: u32 = 0;
+
         for enemy in &mut self.enemies {
             match enemy.state {
                 EnemyState::Alive => {
-                    let to_player = cam_pos - enemy.position;
+                    // Move toward the player along the XZ plane only (keep Y at ground level)
+                    let target = Vec3::new(cam_pos.x, enemy.position.y, cam_pos.z);
+                    let to_player = target - enemy.position;
                     let dist = to_player.length();
 
                     if dist > ENEMY_ATTACK_DIST {
                         let move_dir = to_player.normalize();
                         enemy.position += move_dir * enemy.speed * dt;
 
+                        // Face toward the player
                         let facing = Quat::from_rotation_y((-move_dir.x).atan2(-move_dir.z));
+                        let (scale, pos_offset) = if enemy.is_gltf {
+                            (Vec3::splat(ZOMBIE_GLTF_SCALE), Vec3::new(0.0, -ZOMBIE_GROUND_Y, 0.0))
+                        } else {
+                            (ZOMBIE_CUBE_SCALE, Vec3::ZERO)
+                        };
                         let xf = Mat4::from_scale_rotation_translation(
-                            if enemy.scene_indices.len() > 1 { Vec3::splat(1.5) } else { Vec3::new(0.6, 1.6, 0.4) },
+                            scale,
                             facing,
-                            if enemy.scene_indices.len() > 1 { enemy.position - Vec3::new(0.0, 0.8, 0.0) } else { enemy.position },
+                            enemy.position + pos_offset,
                         );
                         for &idx in &enemy.scene_indices {
                             ctx.set_transform(idx, xf);
                         }
                     } else {
+                        // Within attack range — deal damage periodically
                         enemy.attack_timer -= dt;
                         if enemy.attack_timer <= 0.0 {
                             enemy.attack_timer = ENEMY_ATTACK_COOLDOWN;
                             self.damage_pending += DAMAGE_PER_HIT;
+                        }
+
+                        // Still face the player while attacking
+                        if dist > 0.1 {
+                            let face_dir = to_player.normalize();
+                            let facing = Quat::from_rotation_y((-face_dir.x).atan2(-face_dir.z));
+                            let (scale, pos_offset) = if enemy.is_gltf {
+                                (Vec3::splat(ZOMBIE_GLTF_SCALE), Vec3::new(0.0, -ZOMBIE_GROUND_Y, 0.0))
+                            } else {
+                                (ZOMBIE_CUBE_SCALE, Vec3::ZERO)
+                            };
+                            let xf = Mat4::from_scale_rotation_translation(
+                                scale,
+                                facing,
+                                enemy.position + pos_offset,
+                            );
+                            for &idx in &enemy.scene_indices {
+                                ctx.set_transform(idx, xf);
+                            }
                         }
                     }
                 }
@@ -1273,12 +1379,15 @@ impl Xenofall {
 
                     let fall_angle = t * std::f32::consts::FRAC_PI_2;
                     let sink = t * 0.8;
-                    let xf = Mat4::from_translation(
-                            if enemy.scene_indices.len() > 1 { enemy.position - Vec3::new(0.0, 0.8, 0.0) } else { enemy.position }
-                            + Vec3::new(0.0, -sink, 0.0)
-                        )
+                    let base_pos = if enemy.is_gltf {
+                        enemy.position + Vec3::new(0.0, -ZOMBIE_GROUND_Y, 0.0)
+                    } else {
+                        enemy.position
+                    };
+                    let scale = if enemy.is_gltf { Vec3::splat(ZOMBIE_GLTF_SCALE) } else { ZOMBIE_CUBE_SCALE };
+                    let xf = Mat4::from_translation(base_pos + Vec3::new(0.0, -sink, 0.0))
                         * Mat4::from_rotation_x(fall_angle)
-                        * Mat4::from_scale(if enemy.scene_indices.len() > 1 { Vec3::splat(1.5) } else { Vec3::new(0.6, 1.6, 0.4) });
+                        * Mat4::from_scale(scale);
 
                     for &idx in &enemy.scene_indices {
                         ctx.set_transform(idx, xf);
@@ -1286,6 +1395,7 @@ impl Xenofall {
 
                     if enemy.death_timer >= ENEMY_DEATH_DURATION {
                         enemy.state = EnemyState::Dead;
+                        deaths_this_frame += 1;
                         for &idx in &enemy.scene_indices {
                             ctx.set_transform(
                                 idx,
@@ -1298,6 +1408,9 @@ impl Xenofall {
                 EnemyState::Dead => {}
             }
         }
+
+        // Properly decrement alive counter when Dying → Dead transition completes
+        self.total_enemies_alive = self.total_enemies_alive.saturating_sub(deaths_this_frame);
 
         self.enemies.retain(|e| e.state != EnemyState::Dead);
     }
@@ -1371,14 +1484,18 @@ impl Xenofall {
 
             println!("  ⚠️ OLEADA {} — {} infectados!", self.current_wave, wave.count);
 
+            // Spawn enemies in a visible range ahead of the camera
+            // They appear INSIDE the corridor, spread laterally and in depth
             for i in 0..wave.count {
                 let seed = self.next_enemy_id + i;
-                let x_offset = hash_rand_signed(seed * 7 + 1) * wave.spread * 0.5;
-                let z_offset = hash_rand(seed * 13 + 3) * wave.depth;
-                let y = wave.height_range.0
-                    + hash_rand(seed * 19 + 5) * (wave.height_range.1 - wave.height_range.0);
+                // Lateral spread within corridor walls (±CORRIDOR_HALF_WIDTH with padding)
+                let max_lateral = (CORRIDOR_HALF_WIDTH - 0.8).min(wave.spread * 0.5);
+                let x_offset = hash_rand_signed(seed * 7 + 1) * max_lateral;
+                // Depth spread: spawn between SPAWN_DIST_MIN and SPAWN_DIST_MAX ahead
+                let z_offset = ENEMY_SPAWN_DIST_MIN + hash_rand(seed * 13 + 3) * (ENEMY_SPAWN_DIST_MAX - ENEMY_SPAWN_DIST_MIN + wave.depth * 0.3);
 
-                let pos = Vec3::new(x_offset, y, -(self.rail_progress + 12.0 + z_offset));
+                // Position in world: camera looks toward -Z, so spawn further in -Z
+                let pos = Vec3::new(x_offset, 0.8, -(self.rail_progress + z_offset));
                 let speed =
                     ENEMY_BASE_SPEED * wave.speed_mult * (0.8 + hash_rand(seed * 23 + 7) * 0.4);
 
@@ -1484,28 +1601,28 @@ impl ReactorApp for Xenofall {
         println!("\n  🔊 Cargando audio...");
         self.audio.load_all(&mut ctx.audio);
 
-        // ── Cámara ──
-        ctx.camera.position = Vec3::new(0.0, 2.0, 0.0);
+        // ── Cámara (human eye level 1.7m) ──
+        ctx.camera.position = Vec3::new(0.0, CAMERA_Y, 0.0);
         ctx.camera.set_rotation(0.0, 0.0);
 
         // ── Iluminación atmosférica (Casa abandonada, Rumania) ──
         ctx.add_sun();
         ctx.add_directional_light(Vec3::new(-0.3, -1.0, -0.5), Vec3::new(0.6, 0.5, 0.4), 0.8);
 
-        // Luces a lo largo del corredor — ambiente de laboratorio
-        for i in 0..10 {
-            let z = -(i as f32 * 9.0 + 4.5);
+        // Luces a lo largo del corredor — just below the ceiling
+        for i in 0..12 {
+            let z = -(i as f32 * 8.0 + 4.0);
             ctx.add_point_light(
-                Vec3::new(0.0, 4.5, z),
+                Vec3::new(0.0, CORRIDOR_HEIGHT - 0.3, z),
                 Vec3::new(1.0, 0.7, 0.4),
-                2.5,
-                12.0,
+                3.0,
+                10.0,
             );
         }
 
         // Luz roja de emergencia al fondo
         ctx.add_point_light(
-            Vec3::new(0.0, 3.0, -85.0),
+            Vec3::new(0.0, CORRIDOR_HEIGHT * 0.8, -85.0),
             Vec3::new(1.0, 0.2, 0.1),
             5.0,
             25.0,
