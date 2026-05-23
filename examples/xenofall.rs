@@ -497,6 +497,11 @@ struct Xenofall {
 
     // Audio
     audio: GameAudio,
+
+    // Visuals extra
+    crosshair_index: Option<usize>,
+    game_over_index: Option<usize>,
+    victory_index: Option<usize>,
 }
 
 impl Xenofall {
@@ -543,6 +548,9 @@ impl Xenofall {
             t: 0.0,
             damage_pending: 0,
             audio: GameAudio::new(),
+            crosshair_index: None,
+            game_over_index: None,
+            victory_index: None,
         }
     }
 
@@ -1579,6 +1587,67 @@ impl Xenofall {
             ctx.fps(),
         ));
     }
+
+    fn update_interface(&mut self, ctx: &mut ReactorContext) {
+        // ── Crosshair ──
+        if self.state == GameState::Playing {
+            if let Some(crosshair_idx) = self.crosshair_index {
+                let (ray_origin, ray_dir) = self.get_aim_ray(ctx);
+                let crosshair_pos = ray_origin + ray_dir * 1.5; // 1.5m in front of camera
+                let crosshair_xf = Mat4::from_scale_rotation_translation(
+                    Vec3::splat(0.012), // small red dot
+                    Quat::IDENTITY,
+                    crosshair_pos,
+                );
+                ctx.set_transform(crosshair_idx, crosshair_xf);
+            }
+        } else {
+            // Hide crosshair when not playing (paused, game over, card select)
+            if let Some(crosshair_idx) = self.crosshair_index {
+                ctx.set_transform(crosshair_idx, Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)));
+            }
+        }
+
+        // ── Game Over Screen Overlay ──
+        if self.state == GameState::GameOver {
+            if let Some(go_idx) = self.game_over_index {
+                let cam_pos = ctx.camera.position;
+                let aspect = ctx.aspect_ratio();
+                let overlay_pos = cam_pos + Vec3::new(0.0, 0.0, -0.4); // 40cm in front of camera
+                let overlay_xf = Mat4::from_scale_rotation_translation(
+                    Vec3::new(0.45 * aspect, 0.45, 1.0), // scaled to aspect ratio
+                    Quat::IDENTITY,
+                    overlay_pos,
+                );
+                ctx.set_transform(go_idx, overlay_xf);
+            }
+        } else {
+            // Hide Game Over Screen when not active
+            if let Some(go_idx) = self.game_over_index {
+                ctx.set_transform(go_idx, Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)));
+            }
+        }
+
+        // ── Victory Screen Overlay ──
+        if self.state == GameState::Victory {
+            if let Some(vic_idx) = self.victory_index {
+                let cam_pos = ctx.camera.position;
+                let aspect = ctx.aspect_ratio();
+                let overlay_pos = cam_pos + Vec3::new(0.0, 0.0, -0.4); // 40cm in front of camera
+                let overlay_xf = Mat4::from_scale_rotation_translation(
+                    Vec3::new(0.45 * aspect, 0.45, 1.0), // scaled to aspect ratio
+                    Quat::IDENTITY,
+                    overlay_pos,
+                );
+                ctx.set_transform(vic_idx, overlay_xf);
+            }
+        } else {
+            // Hide Victory Screen when not active
+            if let Some(vic_idx) = self.victory_index {
+                ctx.set_transform(vic_idx, Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)));
+            }
+        }
+    }
 }
 
 // =============================================================================
@@ -1632,6 +1701,62 @@ impl ReactorApp for Xenofall {
         self.build_corridor(ctx);
         self.build_pools(ctx);
 
+        // ── Visuales de Interfaz (Crosshair y Overlays) ──
+        let (sphere_v, sphere_i) = reactor_vulkan::resources::primitives::Primitives::sphere(16, 8);
+        if let Ok(sphere_mesh) = ctx.create_mesh(&sphere_v, &sphere_i) {
+            let sphere_mesh_arc = std::sync::Arc::new(sphere_mesh);
+            if let Ok(red_tex) = ctx.create_solid_texture(255, 0, 0, 255) {
+                if let Ok(red_mat) = ctx.create_textured_material(
+                    &reactor_vulkan::builtin_shaders::vert_textured(),
+                    &reactor_vulkan::builtin_shaders::frag_textured(),
+                    &red_tex,
+                ) {
+                    let red_mat_arc = std::sync::Arc::new(red_mat);
+                    let idx = ctx.spawn(sphere_mesh_arc.clone(), red_mat_arc, Mat4::IDENTITY);
+                    self.crosshair_index = Some(idx);
+                }
+            }
+        }
+
+        let (quad_v, quad_i) = reactor_vulkan::resources::primitives::Primitives::quad();
+        if let Ok(quad_mesh) = ctx.create_mesh(&quad_v, &quad_i) {
+            let quad_mesh_arc = std::sync::Arc::new(quad_mesh);
+
+            // Game Over Screen Overlay
+            if let Ok(go_tex) = ctx.load_texture("assets/textures/game_over.png") {
+                if let Ok(go_mat) = ctx.create_textured_material(
+                    &reactor_vulkan::builtin_shaders::vert_textured(),
+                    &reactor_vulkan::builtin_shaders::frag_textured(),
+                    &go_tex,
+                ) {
+                    let go_mat_arc = std::sync::Arc::new(go_mat);
+                    let idx = ctx.spawn(
+                        quad_mesh_arc.clone(),
+                        go_mat_arc,
+                        Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)),
+                    );
+                    self.game_over_index = Some(idx);
+                }
+            }
+
+            // Victory Screen Overlay
+            if let Ok(vic_tex) = ctx.load_texture("assets/textures/victory.png") {
+                if let Ok(vic_mat) = ctx.create_textured_material(
+                    &reactor_vulkan::builtin_shaders::vert_textured(),
+                    &reactor_vulkan::builtin_shaders::frag_textured(),
+                    &vic_tex,
+                ) {
+                    let vic_mat_arc = std::sync::Arc::new(vic_mat);
+                    let idx = ctx.spawn(
+                        quad_mesh_arc.clone(),
+                        vic_mat_arc,
+                        Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)),
+                    );
+                    self.victory_index = Some(idx);
+                }
+            }
+        }
+
         println!();
         println!("  📐 Corredor: {} segmentos", self.floor_indices.len());
         println!("  🎱 Pools: {} trazadores, {} impactos", self.tracer_pool.len(), self.impact_pool.len());
@@ -1656,6 +1781,7 @@ impl ReactorApp for Xenofall {
         self.update_player(ctx);
         self.update_audio(ctx);
         self.update_hud(ctx);
+        self.update_interface(ctx);
     }
 
     fn on_exit(&mut self, _ctx: &mut ReactorContext) {

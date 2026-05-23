@@ -70,9 +70,25 @@ fn main() {
 
                 compile_shader(&src, &dst);
                 compiled += 1;
+
+                // Also generate aliases for specific files used by built-in loaders:
+                let filename = path.file_name().unwrap().to_string_lossy();
+                if filename == "shader.vert" {
+                    compile_shader(&src, "shaders/vert.spv");
+                    compiled += 1;
+                } else if filename == "shader.frag" {
+                    compile_shader(&src, "shaders/frag.spv");
+                    compiled += 1;
+                } else if filename == "texture.vert" {
+                    compile_shader(&src, "shaders/texture_vert.spv");
+                    compiled += 1;
+                } else if filename == "texture.frag" {
+                    compile_shader(&src, "shaders/texture_frag.spv");
+                    compiled += 1;
+                }
             }
         }
     }
 
-    println!("cargo:warning=Compiled {} shaders", compiled);
+    println!("cargo:warning=Compiled {} shaders (including aliases)", compiled);
 }
