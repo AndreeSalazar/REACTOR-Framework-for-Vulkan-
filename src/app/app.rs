@@ -1075,6 +1075,14 @@ pub fn run<A: ReactorApp + 'static>(app: A) {
     // env_logger::init() panics if called twice (eg in tests).
     let _ = env_logger::try_init();
 
+    // Crear un runtime de Tokio multi-threaded y entrar a su contexto
+    // para que la cola de carga de assets y hot-reload puedan usar tokio::spawn y temporizadores.
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("Failed to create Tokio runtime");
+    let _guard = rt.enter();
+
     let event_loop = EventLoop::new().expect("Failed to create event loop");
     event_loop.set_control_flow(ControlFlow::Poll);
 
