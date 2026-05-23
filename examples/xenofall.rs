@@ -471,38 +471,11 @@ impl Xenofall {
     }
 
     fn spawn_enemy(&mut self, ctx: &mut ReactorContext, pos: Vec3, hp: i32, speed: f32) {
-    let id = self.next_enemy_id;
-    self.next_enemy_id += 1;
+        let id = self.next_enemy_id;
+        self.next_enemy_id += 1;
 
-    // 🎨 FASE 3: Usar modelo glTF en lugar de cubo primitivo
-    // Si el modelo zombie está disponible, usarlo; de lo contrario, fallback a cubo
-    let zombie_model_path = "assets/models/zombie_basic.glb";
-    
-    if let Ok(indices) = ctx.spawn_gltf(zombie_model_path, 
-    Mat4::from_scale_rotation_translation(
-        Vec3::new(0.8, 0.8, 0.8), // Escala del modelo zombie
-        Quat::IDENTITY,
-            pos,
-    )
-    ) {
-    // Modelo glTF cargado exitosamente - puede tener múltiples meshes
-    for scene_idx in indices {
-    self.enemies.push(Enemy {
-        scene_index: scene_idx,
-        position: pos,
-        health: hp,
-        max_health: hp,
-        state: EnemyState::Alive,
-            death_timer: 0.0,
-            attack_timer: 0.0,
-                speed,
-                id,
-            });
-            self.total_enemies_alive += 1;
-        }
-    } else {
-        // 🔄 Fallback: usar cubo primitivo si el modelo no está disponible
-        // Esto permite que el juego funcione incluso sin assets externos
+        // TODO Fase 3: cuando el GLTF loader del engine esté listo, sustituir
+        // este cubo por `ctx.spawn_gltf("assets/models/zombie_basic.glb", …)`.
         if let Ok(idx) = ctx.spawn_cube(Vec3::ZERO) {
             let xf = Mat4::from_scale_rotation_translation(
                 Vec3::new(0.6, 1.6, 0.4),
@@ -525,7 +498,6 @@ impl Xenofall {
             self.total_enemies_alive += 1;
         }
     }
-}
 
     // =========================================================================
     // COMBAT
@@ -1104,25 +1076,9 @@ impl ReactorApp for Xenofall {
         self.build_corridor(ctx);
         self.build_pools(ctx);
 
-        // 🎨 FASE 3: Precargar assets con Asset Pipeline
-        // Queue de carga para modelos de enemigos (no bloquea el frame inicial)
-        let zombie_path = "assets/models/zombie_basic.glb";
-        let zombie_id = reactor_vulkan::resources::AssetId::from_path(zombie_path);
-        
-        // Trackear para hot-reload (recarga automática si editas el modelo)
-        let _ = ctx.track_asset_for_reload(zombie_path, AssetType::Model);
-        
-        // Cargar en background con prioridad alta
-        let _load_rx = ctx.asset_loader_queue.enqueue_gltf(
-            zombie_id,
-            zombie_path.into(),
-            LoadPriority::High,
-        );
-
         println!("[XENOFALL] Corredor construido · {} segmentos de suelo", self.floor_indices.len());
         println!("[XENOFALL] Pools: {} trazadores, {} impactos", self.tracer_pool.len(), self.impact_pool.len());
         println!("[XENOFALL] {} oleadas cargadas", self.waves.len());
-        println!("[XENOFALL] 🎨 Asset Pipeline: cargando modelos glTF en background...");
         println!("[XENOFALL] ¡Sobrevive al corredor, comandante!");
     }
 
