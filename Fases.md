@@ -1,4 +1,4 @@
-﻿<p align="center">
+<p align="center">
   <img src="image.svg" alt="REACTOR Logo" width="220"/>
 </p>
 
@@ -18,28 +18,28 @@ producir videojuegos comerciales**, manteniendo:
 
 - ðŸ¦€ **100 % Rust** â€” sin C, sin C++, sin CMake, sin vcpkg.
 - âš¡ **Zero-overhead** â€” abstracciones que se compilan a Vulkan puro.
-- ðŸ›¡ï¸ **Memory-safe** por construcciÃ³n gracias al sistema de ownership.
+- ðŸ›¡ï¸  **Memory-safe** por construcciÃ³n gracias al sistema de ownership.
 - ðŸŽ® **Game-ready** â€” todo lo que necesita un equipo para enviar un juego.
 
 ---
 
-## ðŸ—‚ï¸ Resumen de Fases
+## ðŸ—‚ï¸  Resumen de Fases
 
 | Fase | Nombre                         | Objetivo principal                                          | Estado        |
 |:----:|--------------------------------|-------------------------------------------------------------|:-------------:|
-| **0**| Limpieza y consolidaciÃ³n       | Eliminar C / C++ / CMake. Unificar `src/`.                  | âœ… **Hecho**  |
-| **1**| NÃºcleo Rust + Vulkan estable   | Reescribir core con `Arc<Device>`, `Drop` correcto.         | âœ… **Hecho**  |
-| **2**| Pipeline grÃ¡fico moderno       | Bindless, dynamic rendering, PSO cache.                     | ðŸš§ En curso   |
-| **3**| Asset Pipeline                 | glTF 2.0, KTX2, hot-reload, asset DB.                       | â³ Pendiente  |
-| **4**| Renderer de producciÃ³n         | PBR completo, IBL, sombras, GI dinÃ¡mica.                    | â³ Pendiente  |
-| **5**| Sistemas de gameplay           | ECS jerÃ¡rquico, scripting, eventos, navmesh.                | â³ Pendiente  |
-| **6**| FÃ­sicas y colisiones           | Integrar `rapier3d`, character controller, raycast fÃ­sico.  | â³ Pendiente  |
-| **7**| Audio espacial 3D              | Integrar `kira` o backend custom, HRTF, buses.              | â³ Pendiente  |
-| **8**| Networking                     | Cliente/servidor, replicaciÃ³n, predicciÃ³n, rollback.        | â³ Pendiente  |
-| **9**| Editor REACTOR completo        | Viewport, gizmos, scripting visual, play mode in-place.     | â³ Pendiente  |
-| **10**| Tooling y build pipeline      | CLI `reactor`, plantillas, cooker, packager, shipping.      | â³ Pendiente  |
-| **11**| Plataformas y portabilidad    | Windows, Linux, macOS (MoltenVK), Android, Steam Deck.      | â³ Pendiente  |
-| **12**| QA, perf y release v2.0       | Tests, fuzzing, benchmarks, demo AAA y release pÃºblico.     | â³ Pendiente  |
+| **0**| Limpieza y consolidación       | Eliminar C / C++ / CMake. Unificar `src/`.                  | ✅ **Hecho**  |
+| **1**| Núcleo Rust + Vulkan estable   | Reescribir core con `Arc<Device>`, `Drop` correcto.         | ✅ **Hecho**  |
+| **2**| Pipeline gráfico moderno       | Bindless, dynamic rendering, PSO cache, Mesh Shaders.       | ✅ **Hecho**  |
+| **3**| Asset Pipeline                 | glTF 2.0, KTX2, hot-reload, asset DB, loaders.              | 🚧 En curso   |
+| **4**| Renderer de producción         | PBR completo, IBL, sombras, GI dinámica.                    | ⌛ Pendiente  |
+| **5**| Sistemas de gameplay           | ECS jerárquico, scripting, eventos, navmesh.                | ⌛ Pendiente  |
+| **6**| Físicas y colisiones           | Integrar `rapier3d`, character controller, raycast físico.  | 🚧 En curso   |
+| **7**| Audio espacial 3D              | Integrar `kira` o backend custom, HRTF, buses.              | ⌛ Pendiente  |
+| **8**| Networking                     | Cliente/servidor, replicación, predicción, rollback.        | ⌛ Pendiente  |
+| **9**| Editor REACTOR completo        | Viewport, gizmos, scripting visual, play mode in-place.     | ⌛ Pendiente  |
+| **10**| Tooling y build pipeline      | CLI `reactor`, plantillas, cooker, packager, shipping.      | ⌛ Pendiente  |
+| **11**| Plataformas y portabilidad    | Windows, Linux, macOS (MoltenVK), Android, Steam Deck.      | ⌛ Pendiente  |
+| **12**| QA, perf y release v2.0       | Tests, fuzzing, benchmarks, demo AAA y release público.     | ⌛ Pendiente  |
 
 ---
 
@@ -213,32 +213,32 @@ producir videojuegos comerciales**, manteniendo:
 
 ---
 
-## ðŸ“¦ FASE 3 â€” Asset Pipeline
+## 📦 FASE 3 — Asset Pipeline (🚧 En curso / Integración Pendiente)
 
 > **Meta:** importar, optimizar, cachear y hot-reload de todos los assets de un juego.
 
 ### 3.1 Formatos soportados
-- [ ] **Modelos:** glTF 2.0 (vÃ­a `gltf`), OBJ, FBX (vÃ­a `russimp` o exporter externo).
-- [ ] **Texturas:** PNG, JPG, HDR, EXR, **KTX2 + BCn / ASTC** (vÃ­a `ktx2` + `basis-universal`).
+- [x] **Modelos:** glTF 2.0 (vía `gltf` e importador custom en `gltf_loader.rs`), OBJ (cargador custom en `model.rs`).
+- [ ] **Texturas:** PNG, JPG, HDR, EXR (mediante `image` crate), **KTX2 + BCn / ASTC** (vía `ktx2` + `basis-universal`).
 - [ ] **Audio:** OGG, WAV, FLAC, MP3.
-- [ ] **Fuentes:** TTF / OTF (vÃ­a `fontdue` o `cosmic-text`).
+- [ ] **Fuentes:** TTF / OTF (vía `fontdue` o `cosmic-text`).
 
 ### 3.2 Asset Database
-- [ ] `AssetId(u64)` estable (hash del path + contenido).
-- [ ] Metadata en `.reactor/assets.db` (sqlite o sled).
-- [ ] Carga lazy + reference counting (`Handle<T>`).
-- [ ] Streaming asÃ­ncrono con `tokio` o `async-std`.
+- [x] `AssetId(u64)` estable (hash del path + contenido).
+- [x] Metadata en `.reactor/assets.db` vía `sled` (implementado en `asset_database.rs`).
+- [x] Carga lazy + reference counting (`Handle<T>` en `handle.rs`).
+- [x] Streaming asíncrono con cola de tareas (`asset_loader_queue.rs`).
 
 ### 3.3 Asset cooker
-- [ ] Pre-procesa assets RAW â†’ formato runtime optimizado:
-  - Texturas â†’ BC7 / ASTC + mipmaps.
-  - Meshes â†’ meshlets (vÃ­a `meshopt`).
-  - Audio â†’ OGG comprimido + bus tags.
+- [ ] Pre-procesa assets RAW → formato runtime optimizado:
+  - Texturas → BC7 / ASTC + mipmaps.
+  - Meshes → meshlets (vía `meshopt`).
+  - Audio → OGG comprimido + bus tags.
 - [ ] CLI: `reactor cook --input assets/ --output cooked/`.
 
 ### 3.4 Hot-reload
-- [ ] Watcher con `notify` que recook + reupload en vivo.
-- [ ] NotificaciÃ³n al editor / juego vÃ­a `EventBus`.
+- [x] Watcher con `notify` que recook + reupload en vivo (`asset_hot_reload.rs`).
+- [ ] Notificación al editor / juego vía `EventBus`.
 
 **Entregable F3:** carga de una escena glTF con 200 materiales / 1 GB de texturas en <2 s.
 
@@ -322,25 +322,26 @@ producir videojuegos comerciales**, manteniendo:
 
 ---
 
-## ðŸ§± FASE 6 â€” FÃ­sicas y colisiones
+## 🧱 FASE 6 — Físicas y colisiones (🚧 En curso)
 
-> **Meta:** fÃ­sica rÃ­gida y de personaje a nivel comercial.
+> **Meta:** física rígida y de personaje a nivel comercial.
 
-### 6.1 IntegraciÃ³n Rapier
-- [ ] `rapier3d` (CPU) como backend por defecto.
-- [ ] Wrapper `PhysicsWorld` idiomÃ¡tico (escondiendo `RigidBodySet`, `ColliderSet`, etc).
-- [ ] SincronizaciÃ³n ECS â†” Rapier vÃ­a `Transform` y `RigidBody` component.
+### 6.1 Integración Rapier
+- [ ] `rapier3d` (CPU) como backend por defecto (Pendiente).
+- [x] Wrapper `PhysicsWorld` básico propio en `physics.rs` (Euler integration, gravedad, fricción).
+- [ ] Sincronización ECS ↔ Rapier vía `Transform` y `RigidBody` component.
 
 ### 6.2 Character Controller
-- [ ] Kinematic capsule + step offset.
-- [ ] Slope handling, jump, crouch.
+- [x] Character Controller custom básico en `physics.rs` (Kinematic capsule, salto, fricción de suelo/aire).
+- [ ] Slope handling, crouch.
 - [ ] Networking-friendly (deterministic).
 
-### 6.3 Queries fÃ­sicas
-- [ ] Raycast, shape-cast, overlap, sweep.
-- [ ] Capa de colisiÃ³n (groups + filters).
+### 6.3 Queries físicas
+- [x] Raycast, AABB intersections, Sphere intersections en `physics.rs`.
+- [x] Colisión y empuje en AABB (`collide_aabb`).
+- [ ] Capa de colisión avanzada (groups + filters).
 
-### 6.4 VehÃ­culos y joints
+### 6.4 Vehículos y joints
 - [ ] Wheel collider (raycast vehicle).
 - [ ] Hinge, ball, prismatic, fixed joints.
 

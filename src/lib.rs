@@ -56,12 +56,21 @@ pub use app::run;
 pub use core::error::{ReactorError, ReactorResult, ErrorCode};
 pub use core::context::VulkanContext;
 pub use app::config::{ReactorConfig, RendererMode};
-pub use app::app::ReactorApp;
+pub use app::app::{ReactorApp, quick, quick_with};
 pub use scene::camera::Camera;
 pub use scene::transform::Transform;
 pub use resources::mesh::Mesh;
 pub use resources::material::Material;
 pub use resources::vertex::Vertex;
+pub use reactor::Reactor;
+
+// Re-export system types
+pub use systems::lighting::{Light, LightType, LightingSystem};
+pub use systems::physics::{PhysicsWorld, RigidBody, Ray, Sphere, AABB};
+pub use systems::scene::Scene;
+
+// Re-export utility types
+pub use utils::{CPUDetector, ResolutionDetector};
 
 // Re-export glam types for convenience
 pub use glam::{Vec2, Vec3, Vec4, Mat3, Mat4, Quat};
@@ -70,13 +79,19 @@ pub use glam::{Vec2, Vec3, Vec4, Mat3, Mat4, Quat};
 pub mod prelude {
     pub use crate::{
         // App
-        ReactorConfig, ReactorApp, RendererMode, run,
+        ReactorConfig, ReactorApp, RendererMode, run, quick, quick_with,
         
         // Core
         ReactorError, ReactorResult, ErrorCode, VulkanContext,
+        Reactor,
         
-        // Scene
-        Camera, Transform,
+        // Scene / Systems
+        Camera, Transform, Scene,
+        Light, LightType, LightingSystem,
+        PhysicsWorld, RigidBody, Ray, Sphere, AABB,
+        
+        // Utilities
+        CPUDetector, ResolutionDetector,
         
         // Resources
         Mesh, Material,
@@ -87,43 +102,6 @@ pub mod prelude {
     
     // Re-export the ReactorContext type alias if it exists
     pub use crate::app::ReactorContext;
-}
-
-/// Quick start function - create a game in one line
-pub fn quick<F>(title: &str, width: u32, height: u32, update_fn: F)
-where
-    F: FnMut(&mut app::ReactorContext) + 'static,
-{
-    struct QuickGame<F> {
-        title: String,
-        width: u32,
-        height: u32,
-        update_fn: F,
-    }
-    
-    impl<F> ReactorApp for QuickGame<F>
-    where
-        F: FnMut(&mut app::ReactorContext),
-    {
-        fn config(&self) -> ReactorConfig {
-            ReactorConfig::new(&self.title)
-                .with_size(self.width, self.height)
-                .with_vsync(true)
-        }
-        
-        fn init(&mut self, _ctx: &mut app::ReactorContext) {}
-        
-        fn update(&mut self, ctx: &mut app::ReactorContext) {
-            (self.update_fn)(ctx);
-        }
-    }
-    
-    run(QuickGame {
-        title: title.to_string(),
-        width,
-        height,
-        update_fn,
-    });
 }
 
 /// Macro for declarative game definition
@@ -148,11 +126,11 @@ macro_rules! game {
             }
             
             fn init(&mut self, ctx: &mut $crate::app::ReactorContext) {
-                $init(ctx);
+                $crate::app::call_init($init, ctx);
             }
             
             fn update(&mut self, ctx: &mut $crate::app::ReactorContext) {
-                $update(ctx);
+                $crate::app::call_update($update, ctx);
             }
         }
         

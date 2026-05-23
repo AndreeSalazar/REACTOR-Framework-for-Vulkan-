@@ -213,7 +213,7 @@ impl ReactorApp for PhysicsCameraDemo {
             d_down = input.is_key_down(KeyCode::KeyD);
             space_down = input.is_key_down(KeyCode::Space);
             mouse_delta = input.mouse_delta();
-            left_click = input.is_mouse_down(MouseButton::Left);
+            left_click = input.is_mouse_button_down(MouseButton::Left);
         }
 
         // Click to capture mouse

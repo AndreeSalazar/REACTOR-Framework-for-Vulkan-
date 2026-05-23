@@ -973,3 +973,22 @@ where
 {
     run(QuickApp { config, init: Some(init), update });
 }
+
+/// Helper to call closure inside macro with type inference.
+#[inline(always)]
+pub fn call_init<F>(mut f: F, ctx: &mut ReactorContext)
+where
+    F: FnMut(&mut ReactorContext),
+{
+    f(ctx);
+}
+
+/// Helper to call closure inside macro with type inference.
+#[inline(always)]
+pub fn call_update<F>(mut f: F, ctx: &mut ReactorContext)
+where
+    F: FnMut(&mut ReactorContext),
+{
+    f(ctx);
+}
+
