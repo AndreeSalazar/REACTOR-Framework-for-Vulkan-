@@ -61,6 +61,8 @@ pub use scene::camera::Camera;
 pub use scene::transform::Transform;
 pub use resources::mesh::Mesh;
 pub use resources::material::Material;
+pub use resources::font::FontAsset;
+pub use systems::audio::AudioClip;
 pub use resources::vertex::Vertex;
 pub use reactor::Reactor;
 
@@ -94,8 +96,11 @@ pub mod prelude {
         CPUDetector, ResolutionDetector,
         
         // Resources
-        Mesh, Material,
+        Mesh, Material, FontAsset,
         
+        // Systems
+        AudioClip,
+
         // Math
         Vec2, Vec3, Vec4, Mat3, Mat4, Quat,
     };

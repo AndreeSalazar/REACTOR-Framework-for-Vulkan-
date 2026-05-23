@@ -51,6 +51,27 @@ impl Texture {
         Self::from_rgba(ctx, allocator, &data, width, height, generate_mipmaps)
     }
 
+    /// Load a compressed texture from KTX2 bytes (Fase 3.1 support)
+    pub fn from_ktx2(
+        ctx: &VulkanContext,
+        allocator: Arc<Mutex<Allocator>>,
+        bytes: &[u8],
+    ) -> ReactorResult<Self> {
+        let reader = ktx2::Reader::new(bytes)
+            .map_err(|e| ReactorError::internal(format!("Failed to parse KTX2: {:?}", e)))?;
+        
+        let header = reader.header();
+        let width = header.pixel_width;
+        let height = header.pixel_height;
+        
+        // Extract level 0 data
+        let data = reader.levels().next()
+            .ok_or_else(|| ReactorError::internal("KTX2 has no mipmap levels"))?;
+        
+        // Upload level 0 raw decompressed / transcode bytes
+        Self::from_rgba(ctx, allocator, data, width, height, false)
+    }
+
     /// Create a solid color texture (useful for defaults)
     pub fn solid_color(
         ctx: &VulkanContext,

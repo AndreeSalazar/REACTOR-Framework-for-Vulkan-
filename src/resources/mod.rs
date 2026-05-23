@@ -23,6 +23,7 @@ pub mod material;
 pub mod mesh;
 pub mod model;
 pub mod pbr_material;
+pub mod font;
 pub mod primitives;
 pub mod texture;
 pub mod vertex;
@@ -36,6 +37,7 @@ pub use gltf_loader::{GltfLoader, GltfModel, GltfMeshData, GltfMaterialData, Glt
 pub use asset_database::{AssetDatabase, AssetMetadata, AssetType, AssetDbStats};
 pub use asset_hot_reload::{AssetHotReloadManager, HotReloadStats, HotReloadConfig};
 pub use asset_loader_queue::{AssetLoaderQueue, LoadPriority, LoaderStats, LoaderQueueConfig};
+pub use font::FontAsset;
 
 // Legacy / actualmente funcional
 pub use asset_manager::{AssetHandle, AssetManager, AssetState, AssetStats};

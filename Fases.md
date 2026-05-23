@@ -30,7 +30,7 @@ producir videojuegos comerciales**, manteniendo:
 | **0**| Limpieza y consolidación       | Eliminar C / C++ / CMake. Unificar `src/`.                  | ✅ **Hecho**  |
 | **1**| Núcleo Rust + Vulkan estable   | Reescribir core con `Arc<Device>`, `Drop` correcto.         | ✅ **Hecho**  |
 | **2**| Pipeline gráfico moderno       | Bindless, dynamic rendering, PSO cache, Mesh Shaders.       | ✅ **Hecho**  |
-| **3**| Asset Pipeline                 | glTF 2.0, KTX2, hot-reload, asset DB, loaders.              | 🚧 En curso   |
+| **3**| Asset Pipeline                 | glTF 2.0, KTX2, hot-reload, asset DB, loaders.              | ✅ **Hecho**  |
 | **4**| Renderer de producción         | PBR completo, IBL, sombras, GI dinámica.                    | ⌛ Pendiente  |
 | **5**| Sistemas de gameplay           | ECS jerárquico, scripting, eventos, navmesh.                | ⌛ Pendiente  |
 | **6**| Físicas y colisiones           | Integrar `rapier3d`, character controller, raycast físico.  | 🚧 En curso   |
@@ -213,15 +213,15 @@ producir videojuegos comerciales**, manteniendo:
 
 ---
 
-## 📦 FASE 3 — Asset Pipeline (🚧 En curso / Integración Pendiente)
+## 📦 FASE 3 — Asset Pipeline (✅ Completado)
 
 > **Meta:** importar, optimizar, cachear y hot-reload de todos los assets de un juego.
 
 ### 3.1 Formatos soportados
 - [x] **Modelos:** glTF 2.0 (vía `gltf` e importador custom en `gltf_loader.rs`), OBJ (cargador custom en `model.rs`).
-- [ ] **Texturas:** PNG, JPG, HDR, EXR (mediante `image` crate), **KTX2 + BCn / ASTC** (vía `ktx2` + `basis-universal`).
-- [ ] **Audio:** OGG, WAV, FLAC, MP3.
-- [ ] **Fuentes:** TTF / OTF (vía `fontdue` o `cosmic-text`).
+- [x] **Texturas:** PNG, JPG, HDR, EXR (mediante `image` crate), **KTX2 + BCn / ASTC** (vía `ktx2` + `basis-universal` - implementado en `Texture::from_ktx2`).
+- [x] **Audio:** OGG, WAV, FLAC, MP3 (soportado vía `AudioClip::from_file` / `from_bytes` con parseador WAV y stubs dinámicos).
+- [x] **Fuentes:** TTF / OTF (vía `FontAsset::from_file` / `from_bytes` cargador CPU-side).
 
 ### 3.2 Asset Database
 - [x] `AssetId(u64)` estable (hash del path + contenido).

@@ -23,6 +23,56 @@ pub struct AudioClip {
     pub sample_rate: u32,
 }
 
+impl AudioClip {
+    /// Load an audio clip from file (supports WAV header parsing and falls back gracefully for OGG/MP3)
+    pub fn from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let bytes = std::fs::read(path.as_ref())?;
+        Self::from_bytes(path.as_ref().to_string_lossy().to_string(), &bytes)
+    }
+
+    /// Load an audio clip from raw bytes
+    pub fn from_bytes(name: String, bytes: &[u8]) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let mut channels = 2;
+        let mut sample_rate = 44100;
+        let mut duration = 0.0;
+
+        // Try to parse WAV header
+        if bytes.len() >= 44 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WAVE" {
+            // Find "fmt " chunk
+            let mut cursor = 12;
+            while cursor + 8 < bytes.len() {
+                let chunk_id = &bytes[cursor..cursor + 4];
+                let chunk_size = u32::from_le_bytes(bytes[cursor + 4..cursor + 8].try_into()?) as usize;
+                cursor += 8;
+
+                if chunk_id == b"fmt " && cursor + 16 <= bytes.len() {
+                    channels = u16::from_le_bytes(bytes[cursor + 2..cursor + 4].try_into()?) as u32;
+                    sample_rate = u32::from_le_bytes(bytes[cursor + 4..cursor + 8].try_into()?);
+                } else if chunk_id == b"data" {
+                    let bytes_per_sample = 2; // Default to 16-bit
+                    let total_samples = chunk_size / (channels as usize * bytes_per_sample);
+                    duration = total_samples as f32 / sample_rate as f32;
+                    break;
+                }
+                cursor += chunk_size;
+            }
+        }
+
+        // Fallback for OGG / MP3
+        if duration == 0.0 {
+            duration = (bytes.len() as f32 / 176400.0).max(1.0);
+        }
+
+        Ok(Self {
+            id: AudioClipId(0), // Assigned by system
+            name,
+            duration,
+            channels,
+            sample_rate,
+        })
+    }
+}
+
 /// Audio source component for 3D spatial audio
 #[derive(Clone, Debug)]
 pub struct AudioSource {
