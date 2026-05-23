@@ -27,6 +27,7 @@ pub mod font;
 pub mod primitives;
 pub mod texture;
 pub mod vertex;
+pub mod asset_cooker;
 
 // Re-exports foundacionales
 pub use asset_id::{AssetId, AssetPath};
@@ -38,6 +39,7 @@ pub use asset_database::{AssetDatabase, AssetMetadata, AssetType, AssetDbStats};
 pub use asset_hot_reload::{AssetHotReloadManager, HotReloadStats, HotReloadConfig};
 pub use asset_loader_queue::{AssetLoaderQueue, LoadPriority, LoaderStats, LoaderQueueConfig};
 pub use font::FontAsset;
+pub use asset_cooker::AssetCooker;
 
 // Legacy / actualmente funcional
 pub use asset_manager::{AssetHandle, AssetManager, AssetState, AssetStats};

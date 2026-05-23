@@ -258,6 +258,8 @@ pub struct ReactorContext {
     pub asset_hot_reload: Option<AssetHotReloadManager>,
     pub asset_loader_queue: AssetLoaderQueue,
     pub audio: crate::systems::audio::AudioSystem,
+    pub event_bus: crate::systems::event_bus::EventBus,
+    pub(crate) hot_reload_rx: Option<tokio::sync::mpsc::UnboundedReceiver<crate::resources::asset_hot_reload::AssetReloadEvent>>,
 
     // Internal
     fixed_accumulator: f32,
@@ -922,13 +924,12 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
             ).unwrap());
         
         // Hot-reload setup (optional, can fail if notify not supported)
-        let asset_hot_reload = {
-            let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-            AssetHotReloadManager::new(
-                crate::resources::HotReloadConfig::default(),
-                tx
-            ).ok()
-        };
+        let (hot_reload_tx, hot_reload_rx) = tokio::sync::mpsc::unbounded_channel();
+        let asset_hot_reload = AssetHotReloadManager::new(
+            crate::resources::HotReloadConfig::default(),
+            hot_reload_tx
+        ).ok();
+        let hot_reload_rx = if asset_hot_reload.is_some() { Some(hot_reload_rx) } else { None };
 
         let mut ctx = ReactorContext {
             reactor,
@@ -947,6 +948,8 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
             asset_hot_reload,
             asset_loader_queue,
             audio: crate::systems::audio::AudioSystem::new(),
+            event_bus: crate::systems::event_bus::EventBus::new(),
+            hot_reload_rx,
             fixed_accumulator: 0.0,
         };
 
@@ -988,6 +991,13 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
             }
 
             WindowEvent::RedrawRequested => {
+                // Drain hot-reload events and emit to EventBus
+                if let Some(ref mut rx) = ctx.hot_reload_rx {
+                    while let Ok(event) = rx.try_recv() {
+                        ctx.event_bus.emit(event);
+                    }
+                }
+
                 // Update time
                 ctx.time.update();
                 ctx.reactor.input.begin_frame();

@@ -105,6 +105,7 @@ pub mod prelude {
         Vec2, Vec3, Vec4, Mat3, Mat4, Quat,
     };
     pub use crate::systems::audio::{AudioSystem, AudioClipId, AudioSourceId, AudioListener, AudioSource};
+    pub use crate::systems::event_bus::{EventBus, Observer};
     
     // Re-export the ReactorContext type alias if it exists
     pub use crate::app::ReactorContext;

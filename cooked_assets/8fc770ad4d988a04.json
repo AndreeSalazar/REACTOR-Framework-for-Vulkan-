@@ -1,0 +1,37 @@
+{
+  "asset_version": "1.0",
+  "description": "Placeholder configuration for XENOFALL assets",
+  "models": {
+    "zombie_basic": {
+      "path": "models/zombie_basic.glb",
+      "scale": [0.8, 0.8, 0.8],
+      "material_overrides": {
+        "base_color_factor": [0.6, 0.7, 0.5, 1.0],
+        "metallic": 0.1,
+        "roughness": 0.9
+      }
+    },
+    "zombie_fast": {
+      "path": "models/zombie_fast.glb",
+      "scale": [0.7, 0.7, 0.7],
+      "speed_multiplier": 1.5
+    },
+    "zombie_tank": {
+      "path": "models/zombie_tank.glb",
+      "scale": [1.2, 1.2, 1.2],
+      "health_multiplier": 3.0
+    }
+  },
+  "textures": {
+    "default_zombie": {
+      "diffuse": "textures/zombie/diffuse.ktx2",
+      "normal": "textures/zombie/normal.ktx2",
+      "roughness": "textures/zombie/roughness.ktx2"
+    }
+  },
+  "hot_reload": {
+    "enabled": true,
+    "debounce_ms": 250,
+    "watch_extensions": ["glb", "gltf", "ktx2", "png", "jpg"]
+  }
+}

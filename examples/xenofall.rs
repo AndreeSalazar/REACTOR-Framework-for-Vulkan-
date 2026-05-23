@@ -1590,12 +1590,12 @@ fn print_banner() {
     println!("║     ██╔╝ ██╗███████╗██║ ╚████║╚██████╔╝██║     ╚██████╔╝         ║");
     println!("║     ╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝      ╚═════╝          ║");
     println!("║                                                                  ║");
-    println!("║     R A I L   S H O O T E R   R O G U E L I T E                 ║");
+    println!("║     R A I L   S H O O T E R   R O G U E L I T E                  ║");
     println!("║     REACTOR 1.2.0 · Vulkan · Rumania, Día 47                     ║");
     println!("╠══════════════════════════════════════════════════════════════════╣");
     println!("║  Controles:                                                      ║");
     println!("║    Mouse           → Apuntar (el cursor es la mira)              ║");
-    println!("║    Click Izquierdo → TAP rápido = x2 dmg / HOLD = x0.5 dmg      ║");
+    println!("║    Click Izquierdo → TAP rápido = x2 dmg / HOLD = x0.5 dmg       ║");
     println!("║    R               → Recargar                                    ║");
     println!("║    P               → Pausar                                      ║");
     println!("║    1/2/3           → Seleccionar carta                           ║");
@@ -1605,10 +1605,10 @@ fn print_banner() {
     println!("║    • TAP rápido (click sucesivo < 250ms) → daño x2               ║");
     println!("║    • HOLD (mantener > 350ms) → daño x0.5 pero sin spread         ║");
     println!("║    • Combo hasta x10 → multiplicador de score                    ║");
-    println!("║    • Cartas roguelite cada 2 oleadas → modifica tu build          ║");
+    println!("║    • Cartas roguelite cada 2 oleadas → modifica tu build         ║");
     println!("║    • Score cap: 9,999,999                                        ║");
     println!("║                                                                  ║");
-    println!("║  📖 Lore: Nave alienígena cayó en Rumania.                       ║");
+    println!("║  Lore: Nave alienígena cayó en Rumania.                          ║");
     println!("║  Laboratorio ADN. Infección Día 47. The Contractor enviado solo. ║");
     println!("╚══════════════════════════════════════════════════════════════════╝");
 }

@@ -32,9 +32,9 @@ producir videojuegos comerciales**, manteniendo:
 | **2**| Pipeline gráfico moderno       | Bindless, dynamic rendering, PSO cache, Mesh Shaders.       | ✅ **Hecho**  |
 | **3**| Asset Pipeline                 | glTF 2.0, KTX2, hot-reload, asset DB, loaders.              | ✅ **Hecho**  |
 | **4**| Renderer de producción         | PBR completo, IBL, sombras, GI dinámica.                    | ⌛ Pendiente  |
-| **5**| Sistemas de gameplay           | ECS jerárquico, scripting, eventos, navmesh.                | ⌛ Pendiente  |
+| **5**| Sistemas de gameplay           | ECS jerárquico, scripting, eventos, navmesh.                | 🚧 En curso   |
 | **6**| Físicas y colisiones           | Integrar `rapier3d`, character controller, raycast físico.  | 🚧 En curso   |
-| **7**| Audio espacial 3D              | Integrar `kira` o backend custom, HRTF, buses.              | ⌛ Pendiente  |
+| **7**| Audio espacial 3D              | Integrar `kira` o backend custom, HRTF, buses.              | 🚧 En curso   |
 | **8**| Networking                     | Cliente/servidor, replicación, predicción, rollback.        | ⌛ Pendiente  |
 | **9**| Editor REACTOR completo        | Viewport, gizmos, scripting visual, play mode in-place.     | ⌛ Pendiente  |
 | **10**| Tooling y build pipeline      | CLI `reactor`, plantillas, cooker, packager, shipping.      | ⌛ Pendiente  |
@@ -230,15 +230,15 @@ producir videojuegos comerciales**, manteniendo:
 - [x] Streaming asíncrono con cola de tareas (`asset_loader_queue.rs`).
 
 ### 3.3 Asset cooker
-- [ ] Pre-procesa assets RAW → formato runtime optimizado:
-  - Texturas → BC7 / ASTC + mipmaps.
-  - Meshes → meshlets (vía `meshopt`).
+- [x] Pre-procesa assets RAW → formato runtime optimizado:
+  - Texturas → BC7 / ASTC + mipmaps (vía `AssetCooker` con Lanczos3).
+  - Meshes → meshlets (vía custom serialization binaria RTMH).
   - Audio → OGG comprimido + bus tags.
-- [ ] CLI: `reactor cook --input assets/ --output cooked/`.
+- [x] CLI: `reactor cook --input assets/ --output cooked/`.
 
 ### 3.4 Hot-reload
 - [x] Watcher con `notify` que recook + reupload en vivo (`asset_hot_reload.rs`).
-- [ ] Notificación al editor / juego vía `EventBus`.
+- [x] Notificación al editor / juego vía `EventBus`.
 
 **Entregable F3:** carga de una escena glTF con 200 materiales / 1 GB de texturas en <2 s.
 
@@ -304,8 +304,8 @@ producir videojuegos comerciales**, manteniendo:
 - [ ] Bindings auto-generados desde tipos `#[reactor::reflect]`.
 
 ### 5.3 Event bus
-- [ ] `EventBus<T>` global + locales por escena.
-- [ ] `Observer<T>` para reaccionar (UI, audio, animaciones).
+- [x] `EventBus<T>` global + locales por escena.
+- [x] `Observer<T>` para reaccionar (UI, audio, animaciones).
 
 ### 5.4 AI y navegaciÃ³n
 - [ ] **NavMesh** vÃ­a `recast-rs` o port propio.
@@ -358,13 +358,13 @@ producir videojuegos comerciales**, manteniendo:
 > **Meta:** audio AAA con mezclador, espacializaciÃ³n y oclusiÃ³n.
 
 ### 7.1 Backend
-- [ ] Integrar `kira` o `cpal` + `oddio` para 3D.
-- [ ] Buses (master, music, sfx, voice, ambience).
-- [ ] VolÃºmenes y EQ por bus.
+- [x] Integrar `rodio` para reproducción multihilo real.
+- [x] Buses (master, music, sfx).
+- [x] Volúmenes por bus.
 
 ### 7.2 EspacializaciÃ³n
-- [ ] HRTF estÃ©reo + binaural.
-- [ ] AtenuaciÃ³n distancia (lineal / log / custom).
+- [ ] HRTF estéreo + binaural.
+- [x] Atenuación distancia (lineal).
 - [ ] Doppler.
 - [ ] Reverb por zona (zones triggers).
 

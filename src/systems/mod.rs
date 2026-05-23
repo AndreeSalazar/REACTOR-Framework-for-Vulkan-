@@ -10,6 +10,7 @@ pub mod lighting;
 pub mod particles;
 pub mod physics;
 pub mod scene;
+pub mod event_bus;
 
 // Re-exports for backward compatibility
 pub use animation::{
@@ -21,3 +22,4 @@ pub use lighting::{Light, LightType, LightingSystem};
 pub use particles::{EmitterShape, Particle, ParticleSystem, ParticleSystemConfig};
 pub use physics::{PhysicsWorld, Ray, RigidBody, Sphere, AABB};
 pub use scene::{Scene, SceneObject};
+pub use event_bus::{EventBus, Observer};
