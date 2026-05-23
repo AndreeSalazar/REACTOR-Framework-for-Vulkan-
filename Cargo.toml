@@ -88,6 +88,9 @@ serde_json = { workspace = true }
 # File watching (shader hot-reload)
 notify = "6.1"
 
+# Audio playback
+rodio = "0.20"
+
 # Build utilities
 walkdir = { workspace = true }
 

@@ -257,6 +257,7 @@ pub struct ReactorContext {
     pub asset_db: AssetDatabase,
     pub asset_hot_reload: Option<AssetHotReloadManager>,
     pub asset_loader_queue: AssetLoaderQueue,
+    pub audio: crate::systems::audio::AudioSystem,
 
     // Internal
     fixed_accumulator: f32,
@@ -776,8 +777,8 @@ impl ReactorContext {
                                     true,
                                 )?;
                                 // Crear material con textura
-                                let vert = crate::builtin_shaders::vert_default();
-                                let frag = crate::builtin_shaders::frag_default();
+                                let vert = crate::builtin_shaders::vert_textured();
+                                let frag = crate::builtin_shaders::frag_textured();
                                 let mat = self.reactor.create_textured_material(&vert, &frag, &texture)
                                     .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))?;
                                 std::sync::Arc::new(mat)
@@ -945,6 +946,7 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
             asset_db,
             asset_hot_reload,
             asset_loader_queue,
+            audio: crate::systems::audio::AudioSystem::new(),
             fixed_accumulator: 0.0,
         };
 
