@@ -98,12 +98,13 @@ pub mod prelude {
         // Resources
         Mesh, Material, FontAsset,
         
-        // Systems
+        // Audio
         AudioClip,
 
         // Math
         Vec2, Vec3, Vec4, Mat3, Mat4, Quat,
     };
+    pub use crate::systems::audio::{AudioSystem, AudioClipId, AudioSourceId, AudioListener, AudioSource};
     
     // Re-export the ReactorContext type alias if it exists
     pub use crate::app::ReactorContext;

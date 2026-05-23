@@ -129,6 +129,10 @@ path = "examples/quick.rs"
 name = "xenofall"
 path = "examples/xenofall.rs"
 
+[[example]]
+name = "generate_audio"
+path = "examples/generate_audio.rs"
+
 # =============================================================================
 # Profiles
 # =============================================================================
