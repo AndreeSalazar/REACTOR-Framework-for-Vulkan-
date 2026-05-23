@@ -78,7 +78,7 @@ enum EnemyState {
 }
 
 struct Enemy {
-    scene_index: usize,
+    scene_indices: Vec<usize>,
     position: Vec3,
     health: i32,
     max_health: i32,
@@ -474,18 +474,16 @@ impl Xenofall {
         let id = self.next_enemy_id;
         self.next_enemy_id += 1;
 
-        // TODO Fase 3: cuando el GLTF loader del engine esté listo, sustituir
-        // este cubo por `ctx.spawn_gltf("assets/models/zombie_basic.glb", …)`.
-        if let Ok(idx) = ctx.spawn_cube(Vec3::ZERO) {
-            let xf = Mat4::from_scale_rotation_translation(
-                Vec3::new(0.6, 1.6, 0.4),
-                Quat::IDENTITY,
-                pos,
-            );
-            ctx.set_transform(idx, xf);
-
+        // Spawn glTF zombie model
+        let initial_xf = Mat4::from_scale_rotation_translation(
+            Vec3::splat(1.5),
+            Quat::IDENTITY,
+            pos - Vec3::new(0.0, 0.8, 0.0), // Adjust Y to align feet to floor
+        );
+        
+        if let Ok(indices) = ctx.spawn_gltf("assets/models/zombie_basic.glb", initial_xf) {
             self.enemies.push(Enemy {
-                scene_index: idx,
+                scene_indices: indices,
                 position: pos,
                 health: hp,
                 max_health: hp,
@@ -496,6 +494,22 @@ impl Xenofall {
                 id,
             });
             self.total_enemies_alive += 1;
+        } else {
+            // Fallback to cube if glTF spawn fails
+            if let Ok(idx) = ctx.spawn_cube(pos) {
+                self.enemies.push(Enemy {
+                    scene_indices: vec![idx],
+                    position: pos,
+                    health: hp,
+                    max_health: hp,
+                    state: EnemyState::Alive,
+                    death_timer: 0.0,
+                    attack_timer: 0.0,
+                    speed,
+                    id,
+                });
+                self.total_enemies_alive += 1;
+            }
         }
     }
 
@@ -844,14 +858,14 @@ impl Xenofall {
 
                         // Face the player
                         let facing = Quat::from_rotation_y((-move_dir.x).atan2(-move_dir.z));
-                        ctx.set_transform(
-                            enemy.scene_index,
-                            Mat4::from_scale_rotation_translation(
-                                Vec3::new(0.6, 1.6, 0.4),
-                                facing,
-                                enemy.position,
-                            ),
+                        let xf = Mat4::from_scale_rotation_translation(
+                            if enemy.scene_indices.len() > 1 { Vec3::splat(1.5) } else { Vec3::new(0.6, 1.6, 0.4) },
+                            facing,
+                            if enemy.scene_indices.len() > 1 { enemy.position - Vec3::new(0.0, 0.8, 0.0) } else { enemy.position },
                         );
+                        for &idx in &enemy.scene_indices {
+                            ctx.set_transform(idx, xf);
+                        }
                     } else {
                         // Attack the player
                         enemy.attack_timer -= dt;
@@ -870,17 +884,25 @@ impl Xenofall {
                     // Fall backward animation
                     let fall_angle = t * std::f32::consts::FRAC_PI_2;
                     let sink = t * 0.8;
-                    let xf = Mat4::from_translation(enemy.position + Vec3::new(0.0, -sink, 0.0))
+                    let xf = Mat4::from_translation(
+                            if enemy.scene_indices.len() > 1 { enemy.position - Vec3::new(0.0, 0.8, 0.0) } else { enemy.position }
+                            + Vec3::new(0.0, -sink, 0.0)
+                        )
                         * Mat4::from_rotation_x(fall_angle)
-                        * Mat4::from_scale(Vec3::new(0.6, 1.6, 0.4));
-                    ctx.set_transform(enemy.scene_index, xf);
+                        * Mat4::from_scale(if enemy.scene_indices.len() > 1 { Vec3::splat(1.5) } else { Vec3::new(0.6, 1.6, 0.4) });
+                    
+                    for &idx in &enemy.scene_indices {
+                        ctx.set_transform(idx, xf);
+                    }
 
                     if enemy.death_timer >= ENEMY_DEATH_DURATION {
                         enemy.state = EnemyState::Dead;
-                        ctx.set_transform(
-                            enemy.scene_index,
-                            Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)),
-                        );
+                        for &idx in &enemy.scene_indices {
+                            ctx.set_transform(
+                                idx,
+                                Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)),
+                            );
+                        }
                     }
                 }
 

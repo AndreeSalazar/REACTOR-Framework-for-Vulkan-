@@ -31,8 +31,11 @@ pub mod vertex;
 pub use asset_id::{AssetId, AssetPath};
 pub use handle::{Handle, WeakHandle, AssetRef};
 
-// Fase 3: GltfLoader CPU-side data types
-pub use gltf_loader::{GltfLoader, GltfModel, GltfMeshData, GltfMaterialData, GltfTextureData, GltfNode};
+// Fase 3: GltfLoader, AssetDatabase, HotReload y LoaderQueue
+pub use gltf_loader::{GltfLoader, GltfModel, GltfMeshData, GltfMaterialData, GltfTextureData, GltfNode, GltfCacheStats};
+pub use asset_database::{AssetDatabase, AssetMetadata, AssetType, AssetDbStats};
+pub use asset_hot_reload::{AssetHotReloadManager, HotReloadStats, HotReloadConfig};
+pub use asset_loader_queue::{AssetLoaderQueue, LoadPriority, LoaderStats, LoaderQueueConfig};
 
 // Legacy / actualmente funcional
 pub use asset_manager::{AssetHandle, AssetManager, AssetState, AssetStats};

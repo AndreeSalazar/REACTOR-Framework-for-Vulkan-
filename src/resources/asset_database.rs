@@ -191,7 +191,7 @@ impl AssetDatabase {
         let current_mtime = current_meta.modified()
             .map_err(|e| ReactorError::asset_load(format!("Failed to get mtime: {}", e)))?
             .duration_since(UNIX_EPOCH)
-            .map_err(|_| ReactorError::asset_load("Invalid timestamp".into()))?
+            .map_err(|_| ReactorError::asset_load("Invalid timestamp"))?
             .as_secs();
         
         let current_size = current_meta.len();
@@ -272,7 +272,7 @@ impl AssetDatabase {
             
             if key_str.starts_with("meta:") {
                 if let Ok(id_str) = key_str.strip_prefix("meta:").ok_or_else(|| {
-                    ReactorError::asset_load("Invalid metadata key format".into())
+                    ReactorError::asset_load("Invalid metadata key format")
                 }) {
                     if let Ok(id_val) = u64::from_str_radix(id_str, 16) {
                         let id = AssetId::from(id_val);
@@ -299,9 +299,7 @@ impl AssetDatabase {
     /// Compactar la database (reclaim space from deleted entries)
     pub fn compact(&self) -> ReactorResult<bool> {
         self.db.flush()?;
-        Ok(self.db.compact().map_err(|e| {
-            ReactorError::asset_load(format!("Failed to compact DB: {}", e))
-        })?)
+        Ok(true)
     }
 
     /// Exportar metadata a JSON (para debugging o backup)

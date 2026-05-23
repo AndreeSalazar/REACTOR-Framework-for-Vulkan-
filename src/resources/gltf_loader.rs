@@ -157,6 +157,7 @@ pub enum AnimationInterpolation {
 // =============================================================================
 
 /// Loader principal para assets glTF (extrae datos CPU sin tocar Vulkan)
+#[derive(Clone)]
 pub struct GltfLoader {
     /// Cache de modelos ya cargados (AssetId -> GltfModel)
     loaded_models: HashMap<AssetId, GltfModel>,

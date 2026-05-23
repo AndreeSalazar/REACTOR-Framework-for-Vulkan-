@@ -288,7 +288,6 @@ impl AssetLoaderQueue {
         F: FnOnce() -> ReactorResult<T> + Send + 'static,
         T: Send + Sync + 'static,
     {
-        let (tx, rx) = oneshot::channel();
         
         // Wrapper para type-erase el loader
         let typed_loader = Box::new(move || -> ReactorResult<Box<dyn std::any::Any + Send>> {
