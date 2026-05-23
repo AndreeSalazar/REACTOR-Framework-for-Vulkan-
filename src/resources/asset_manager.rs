@@ -1,6 +1,13 @@
 // =============================================================================
 // Asset Manager — Centralized asset loading with caching and deduplication
 // =============================================================================
+// Fase 3: Asset Pipeline completo con:
+// - AssetId basado en hash (estable y content-aware)
+// - Handle<T> genérico con reference counting
+// - AssetDatabase con persistencia (sled)
+// - Hot-reload con notify
+// - Async loading con tokio
+// =============================================================================
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -10,8 +17,11 @@ use crate::resources::mesh::Mesh;
 use crate::resources::model::{GltfData, ObjData};
 use crate::resources::texture::Texture;
 use crate::resources::vertex::Vertex;
+use crate::resources::asset_id::{AssetId, AssetPath};
+use crate::resources::handle::{Handle, WeakHandle, AssetRef};
+use crate::core::error::{ReactorResult, ReactorError};
 
-/// Asset handle for type-safe asset references
+/// Asset handle for type-safe asset references (legacy alias for Handle)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct AssetHandle(pub u64);
 

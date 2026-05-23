@@ -58,7 +58,17 @@ glam = { workspace = true }
 
 # Assets
 gltf = "1.4"
+gltf-json = "1.4"
 image = "0.25"
+ktx2 = "0.3"
+base64 = "0.22"
+
+# Asset database & caching
+sled = "0.34"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+
+# Async loading
+tokio = { version = "1.38", features = ["fs", "rt-multi-thread", "sync"] }
 
 # Observability (UE5-style profiling + logging)
 tracing = { workspace = true }

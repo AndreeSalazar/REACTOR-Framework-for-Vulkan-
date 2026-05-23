@@ -22,8 +22,10 @@ use winit::{
 use crate::reactor::Reactor;
 use crate::platform::input::Input;
 use crate::platform::time::Time;
+use crate::resources::{AssetManager, GltfLoader, AssetHotReloadManager, AssetLoaderQueue, AssetDatabase, AssetId, Handle};
 
 use std::sync::Arc;
+use std::path::PathBuf;
 
 // =============================================================================
 // ReactorConfig — Application configuration
@@ -232,6 +234,7 @@ pub trait ReactorApp {
 ///
 /// This is the "inheritance" — ReactorContext inherits:
 ///   VulkanContext → Reactor → Camera + Scene + Lighting + Physics + Debug
+///   + Asset Pipeline (Fase 3): Models, Textures, Hot-Reload, Async Loading
 pub struct ReactorContext {
     // Engine core
     pub reactor: Reactor,
@@ -246,6 +249,13 @@ pub struct ReactorContext {
     pub physics: crate::systems::physics::PhysicsWorld,
     pub culling: crate::systems::frustum::CullingSystem,
     pub debug: crate::graphics::debug_renderer::DebugRenderer,
+
+    // 🎨 Asset Pipeline (Fase 3)
+    pub asset_manager: AssetManager,
+    pub gltf_loader: GltfLoader,
+    pub asset_db: AssetDatabase,
+    pub asset_hot_reload: Option<AssetHotReloadManager>,
+    pub asset_loader_queue: AssetLoaderQueue,
 
     // Internal
     fixed_accumulator: f32,
@@ -668,6 +678,138 @@ impl ReactorContext {
         let material = std::sync::Arc::new(self.default_material()?);
         Ok(self.scene.add_object(mesh, material, transform))
     }
+
+    // =========================================================================
+    // 📦 Asset Pipeline (Fase 3) — Carga de modelos glTF y assets
+    // =========================================================================
+
+    /// Carga un modelo glTF/GLB y devuelve el GltfModel completo
+    /// 
+    /// ```rust,no_run
+    /// # fn demo(ctx: &mut reactor::ReactorContext) {
+    /// let model = ctx.load_gltf("assets/models/zombie.glb").unwrap();
+    /// # }
+    /// ```
+    pub fn load_gltf<P: AsRef<std::path::Path>>(
+        &mut self,
+        path: P,
+    ) -> crate::core::error::ReactorResult<crate::resources::GltfModel> {
+        self.gltf_loader.load(path)
+            .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
+    }
+
+    /// Carga un modelo glTF de forma asíncrona (no bloquea el frame)
+    pub async fn load_gltf_async<P: AsRef<std::path::Path>>(
+        &mut self,
+        path: P,
+    ) -> crate::core::error::ReactorResult<crate::resources::GltfModel> {
+        self.gltf_loader.load_async(path).await
+            .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
+    }
+
+    /// Carga un modelo glTF en la cola asíncrona (background)
+    /// Retorna un Receiver para obtener el resultado cuando esté listo
+    pub fn load_gltf_queued<P: AsRef<std::path::Path>>(
+        &mut self,
+        path: P,
+        priority: crate::resources::LoadPriority,
+    ) -> tokio::sync::oneshot::Receiver<crate::core::error::ReactorResult<Handle<crate::resources::GltfModel>>> {
+        let path_buf = path.as_ref().to_path_buf();
+        let id = AssetId::from_path(&path_buf);
+        self.asset_loader_queue.enqueue_gltf(id, path_buf, priority)
+    }
+
+    /// Spawn de un modelo glTF en la escena con transform
+    /// 
+    /// Retorna los índices de los objetos creados en la escena (puede ser >1 si el modelo tiene múltiples meshes)
+    pub fn spawn_gltf<P: AsRef<std::path::Path>>(
+        &mut self,
+        path: P,
+        transform: glam::Mat4,
+    ) -> crate::core::error::ReactorResult<Vec<usize>> {
+        let model = self.load_gltf(path)?;
+        self.spawn_gltf_model(model, transform)
+    }
+
+    /// Spawn de un GltfModel ya cargado en la escena
+    fn spawn_gltf_model(
+        &mut self,
+        model: crate::resources::GltfModel,
+        parent_transform: glam::Mat4,
+    ) -> crate::core::error::ReactorResult<Vec<usize>> {
+        let mut indices = Vec::new();
+        self.spawn_gltf_node_recursive(&model.root_node, &model, parent_transform, &mut indices)?;
+        Ok(indices)
+    }
+
+    /// Recorre recursivamente la jerarquía de nodos glTF y los añade a la escena
+    fn spawn_gltf_node_recursive(
+        &mut self,
+        node: &crate::resources::GltfNode,
+        model: &crate::resources::GltfModel,
+        parent_transform: glam::Mat4,
+        indices: &mut Vec<usize>,
+    ) -> crate::core::error::ReactorResult<()> {
+        let world_transform = parent_transform * node.transform;
+        
+        // Si el nodo tiene mesh, crear entidad en escena
+        if let Some(mesh_idx) = node.mesh_index {
+            if let Some(mesh_handle) = model.meshes.get(mesh_idx) {
+                let material = model.materials.first().cloned()
+                    .unwrap_or_else(|| Handle::new(AssetId::INVALID, crate::resources::Material::new()));
+                
+                // Convertir Handle<Mesh> a Arc<Mesh> para el scene
+                let mesh_arc = std::sync::Arc::new((**mesh_handle).clone());
+                let mat_arc = std::sync::Arc::new((**material).clone());
+                
+                let obj_idx = self.scene.add_object(mesh_arc, mat_arc, world_transform);
+                indices.push(obj_idx);
+            }
+        }
+        
+        // Recursar hijos
+        for child in &node.children {
+            self.spawn_gltf_node_recursive(child, model, world_transform, indices)?;
+        }
+        
+        Ok(())
+    }
+
+    /// Trackear un asset para hot-reload
+    pub fn track_asset_for_reload<P: AsRef<std::path::Path>>(
+        &mut self,
+        path: P,
+        asset_type: crate::resources::AssetType,
+    ) -> crate::core::error::ReactorResult<AssetId> {
+        let path = path.as_ref();
+        let id = AssetId::from_path(path);
+        
+        if let Some(ref mut hot_reload) = self.asset_hot_reload {
+            hot_reload.track_asset(id, path, asset_type)
+                .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))?;
+        }
+        
+        Ok(id)
+    }
+
+    /// Obtener estadísticas del asset pipeline
+    pub fn asset_stats(&self) -> AssetPipelineStats {
+        AssetPipelineStats {
+            loader_queue: self.asset_loader_queue.stats(),
+            hot_reload: self.asset_hot_reload.as_ref().map(|hr| hr.stats()),
+            db: self.asset_db.stats(),
+            gltf_cache: self.gltf_loader.cache_stats(),
+        }
+    }
+}
+
+/// Estadísticas consolidadas del Asset Pipeline
+#[derive(Clone, Debug)]
+pub struct AssetPipelineStats {
+    pub loader_queue: crate::resources::LoaderStats,
+    pub hot_reload: Option<crate::resources::HotReloadStats>,
+    pub db: crate::resources::AssetDbStats,
+    pub gltf_cache: crate::resources::GltfCacheStats,
 }
 
 // =============================================================================
@@ -731,6 +873,30 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
         println!("╚══════════════════════════════════════════════════════════════╝");
 
         let aspect = window.inner_size().width as f32 / window.inner_size().height.max(1) as f32;
+        
+        // Initialize Asset Pipeline (Fase 3)
+        let asset_manager = AssetManager::new();
+        let gltf_loader = GltfLoader::new("assets");
+        let asset_db = AssetDatabase::open(".reactor/assets.db")
+            .unwrap_or_else(|_| AssetDatabase::in_memory().unwrap());
+        let asset_loader_queue = AssetLoaderQueue::new()
+            .unwrap_or_else(|_| AssetLoaderQueue::with_config(
+                crate::resources::asset_loader_queue::LoaderQueueConfig {
+                    num_workers: 2,
+                    ..Default::default()
+                }
+            ).unwrap());
+        
+        // Hot-reload setup (optional, can fail if notify not supported)
+        let asset_hot_reload = {
+            let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+            let hot_config = crate::resources::asset_hot_reload::HotReloadConfig {
+                watch_dirs: vec![PathBuf::from("assets")],
+                ..Default::default()
+            };
+            AssetHotReloadManager::new(hot_config, tx).ok()
+        };
+        
         let mut ctx = ReactorContext {
             reactor,
             window,
@@ -742,6 +908,11 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
             physics: crate::systems::physics::PhysicsWorld::new(),
             culling: crate::systems::frustum::CullingSystem::new(),
             debug: crate::graphics::debug_renderer::DebugRenderer::new(),
+            asset_manager,
+            gltf_loader,
+            asset_db,
+            asset_hot_reload,
+            asset_loader_queue,
             fixed_accumulator: 0.0,
         };
 
