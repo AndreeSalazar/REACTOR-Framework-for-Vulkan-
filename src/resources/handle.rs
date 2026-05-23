@@ -27,10 +27,18 @@ use crate::resources::asset_id::AssetId;
 /// // o explícitamente:
 /// let texture = handle.get();
 /// ```
-#[derive(Clone)]
 pub struct Handle<T> {
     id: AssetId,
     inner: Arc<T>,
+}
+
+impl<T> Clone for Handle<T> {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id,
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 impl<T> Handle<T> {
@@ -40,6 +48,11 @@ impl<T> Handle<T> {
             id,
             inner: Arc::new(asset),
         }
+    }
+
+    /// Obtener el Arc<T> interno
+    pub fn arc(&self) -> Arc<T> {
+        self.inner.clone()
     }
 
     /// Obtener el AssetId de este handle
@@ -177,10 +190,18 @@ impl<T> std::fmt::Debug for WeakHandle<T> {
 /// Útil para sistemas que necesitan flexibilidad:
 /// - Editor: mantener assets cargados (Handle)
 /// - Runtime: referencias débiles que permiten unload (WeakHandle)
-#[derive(Clone)]
 pub enum AssetRef<T> {
     Strong(Handle<T>),
     Weak(WeakHandle<T>),
+}
+
+impl<T> Clone for AssetRef<T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Strong(h) => Self::Strong(h.clone()),
+            Self::Weak(w) => Self::Weak(w.clone()),
+        }
+    }
 }
 
 impl<T> AssetRef<T> {

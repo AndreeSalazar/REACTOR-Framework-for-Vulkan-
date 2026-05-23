@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // REACTOR Error Handling System
 // =============================================================================
 // Unified error types for the entire engine.
@@ -66,6 +66,8 @@ pub enum ErrorCode {
     ShaderLoadFailed = 204,
     /// Asset not found in cache
     AssetNotFound = 205,
+    /// Asset loading failed
+    AssetLoadFailed = 206,
 
     // Window errors (300-399)
     /// Window creation failed
@@ -86,6 +88,10 @@ pub enum ErrorCode {
     NotSupported = 404,
     /// Internal error
     InternalError = 405,
+    /// Timeout error
+    Timeout = 406,
+    /// Cancelled error
+    Cancelled = 407,
 
     // Scene errors (500-599)
     /// Invalid object index
@@ -134,6 +140,7 @@ impl ErrorCode {
             ErrorCode::ModelLoadFailed => "Failed to load model",
             ErrorCode::ShaderLoadFailed => "Failed to load shader",
             ErrorCode::AssetNotFound => "Asset not found in cache",
+            ErrorCode::AssetLoadFailed => "Asset loading failed",
             ErrorCode::WindowCreation => "Failed to create window",
             ErrorCode::EventLoopError => "Event loop error",
             ErrorCode::OutOfMemory => "Out of memory",
@@ -142,6 +149,8 @@ impl ErrorCode {
             ErrorCode::AlreadyInitialized => "Already initialized",
             ErrorCode::NotSupported => "Operation not supported",
             ErrorCode::InternalError => "Internal error",
+            ErrorCode::Timeout => "Operation timed out",
+            ErrorCode::Cancelled => "Operation cancelled",
             ErrorCode::InvalidObjectIndex => "Invalid object index",
             ErrorCode::InvalidMeshHandle => "Invalid mesh handle",
             ErrorCode::InvalidMaterialHandle => "Invalid material handle",
@@ -250,6 +259,18 @@ impl ReactorError {
 
     pub fn internal(msg: impl Into<String>) -> Self {
         Self::new(ErrorCode::InternalError, msg)
+    }
+
+    pub fn asset_load(msg: impl Into<String>) -> Self {
+        Self::new(ErrorCode::AssetLoadFailed, msg)
+    }
+
+    pub fn timeout(msg: impl Into<String>) -> Self {
+        Self::new(ErrorCode::Timeout, msg)
+    }
+
+    pub fn cancelled() -> Self {
+        Self::new(ErrorCode::Cancelled, "Operation cancelled".to_string())
     }
 }
 
@@ -417,11 +438,32 @@ impl From<gpu_allocator::AllocationError> for ReactorError {
     fn from(err: gpu_allocator::AllocationError) -> Self {
         ReactorError::with_source(
             ErrorCode::VulkanMemoryAllocation,
-            format!("Fallo de asignaciÃ³n de memoria Vulkan: {}", err),
+            format!("Fallo de asignación de memoria Vulkan: {}", err),
             err,
         )
     }
 }
+
+/// Convert sled::Error to ReactorError
+impl From<sled::Error> for ReactorError {
+    fn from(err: sled::Error) -> Self {
+        ReactorError::new(
+            ErrorCode::AssetLoadFailed,
+            format!("Database error: {}", err),
+        )
+    }
+}
+
+/// Convert image::ImageError to ReactorError
+impl From<image::ImageError> for ReactorError {
+    fn from(err: image::ImageError) -> Self {
+        ReactorError::new(
+            ErrorCode::TextureLoadFailed,
+            format!("Image processing error: {}", err),
+        )
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

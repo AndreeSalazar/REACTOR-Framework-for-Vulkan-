@@ -9,6 +9,7 @@
 
 use std::collections::VecDeque;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -17,7 +18,7 @@ use tokio::task::JoinHandle;
 
 use crate::core::error::{ReactorResult, ReactorError};
 use crate::resources::asset_id::AssetId;
-use crate::resources::handle::{Handle, WeakHandle};
+use crate::resources::handle::Handle;
 
 /// Prioridad de carga de asset
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -42,7 +43,7 @@ impl Default for LoadPriority {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoadState {
     Queued,
-    Loading { progress: f32 }, // 0.0 - 1.0
+    Loading { progress: u32 }, // 0 - 100
     Completed,
     Failed,
     Cancelled,
@@ -56,10 +57,9 @@ pub struct LoadRequest {
     pub id: AssetId,
     pub path: PathBuf,
     pub priority: LoadPriority,
-    pub loader: Box<dyn FnOnce(Option<ProgressCallback>) -> ReactorResult<Box<dyn std::any::Any + Send>> + Send>,
+    pub loader: Box<dyn FnOnce() -> ReactorResult<Box<dyn std::any::Any + Send>> + Send>,
     pub response_tx: oneshot::Sender<ReactorResult<LoadResult>>,
     pub created_at: Instant,
-    pub progress_cb: Option<ProgressCallback>,
 }
 
 /// Resultado de carga type-erased
@@ -74,11 +74,11 @@ pub struct AssetLoaderQueue {
     /// Cola de requests ordenada por prioridad
     queue: Arc<Mutex<VecDeque<LoadRequest>>>,
     /// Señal para despertar workers cuando hay trabajo
-    work_available: tokio::sync::Notify,
+    work_available: Arc<tokio::sync::Notify>,
     /// Worker handles
     workers: Vec<JoinHandle<()>>,
-    /// Shutdown signal
-    shutdown_tx: mpsc::Sender<()>,
+    /// Shutdown signal (atomic flag)
+    shutdown: Arc<AtomicBool>,
     /// Stats
     stats: Arc<Mutex<LoaderStats>>,
     /// Configuración
@@ -128,7 +128,7 @@ impl AssetLoaderQueue {
 
     /// Crear nueva cola con configuración personalizada
     pub fn with_config(config: LoaderQueueConfig) -> ReactorResult<Self> {
-        let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
+        let shutdown = Arc::new(AtomicBool::new(false));
         let stats = Arc::new(Mutex::new(LoaderStats::default()));
         let queue = Arc::new(Mutex::new(VecDeque::new()));
         let work_available = Arc::new(tokio::sync::Notify::new());
@@ -139,7 +139,7 @@ impl AssetLoaderQueue {
             let stats = Arc::clone(&stats);
             let queue = Arc::clone(&queue);
             let work_available = Arc::clone(&work_available);
-            let shutdown = shutdown_rx.resubscribe();
+            let shutdown = Arc::clone(&shutdown);
             let config = config.clone();
             
             let handle = tokio::spawn(async move {
@@ -159,7 +159,7 @@ impl AssetLoaderQueue {
             queue,
             work_available,
             workers,
-            shutdown_tx,
+            shutdown,
             stats,
             config,
         })
@@ -168,99 +168,110 @@ impl AssetLoaderQueue {
     /// Loop principal del worker thread
     async fn worker_loop(
         worker_id: usize,
-        mut shutdown_rx: mpsc::Receiver<()>,
+        shutdown: Arc<AtomicBool>,
         queue: Arc<Mutex<VecDeque<LoadRequest>>>,
         work_available: Arc<tokio::sync::Notify>,
         stats: Arc<Mutex<LoaderStats>>,
         config: LoaderQueueConfig,
     ) {
         loop {
+            if shutdown.load(Ordering::Relaxed) {
+                if config.log_stats {
+                    println!("[LoaderQueue#{}] Shutting down", worker_id);
+                }
+                break;
+            }
+
+            // Wait for work notification or periodic check
             tokio::select! {
-                _ = shutdown_rx.recv() => {
-                    if config.log_stats {
-                        println!("[LoaderQueue#{}] Shutting down", worker_id);
-                    }
-                    break;
+                _ = work_available.notified() => {}
+                _ = tokio::time::sleep(Duration::from_millis(50)) => {
+                    // Polling fallback
+                    continue;
                 }
-                _ = work_available.notified() => {
-                    // Intentar obtener un request de la cola
-                    let request = {
-                        let mut q = queue.lock().unwrap();
-                        // Prioridad: sacar el de mayor prioridad (menor valor enum)
-                        let mut best_idx = None;
-                        let mut best_priority = LoadPriority::Low;
-                        
-                        for (idx, req) in q.iter().enumerate() {
-                            if req.priority < best_priority {
-                                best_priority = req.priority;
-                                best_idx = Some(idx);
-                            }
-                        }
-                        
-                        best_idx.map(|idx| q.remove(idx).unwrap())
-                    };
-                    
-                    if let Some(mut req) = request {
-                        // Update stats
-                        {
-                            let mut s = stats.lock().unwrap();
-                            s.queued = s.queued.saturating_sub(1);
-                            s.loading += 1;
-                        }
-                        
-                        let start = Instant::now();
-                        
-                        // Ejecutar loader con timeout
-                        let result = tokio::time::timeout(
-                            config.load_timeout,
-                            tokio::task::spawn_blocking(move || {
-                                (req.loader)(req.progress_cb.take())
-                            })
-                        ).await;
-                        
-                        let load_time = start.elapsed().as_secs_f64() * 1000.0;
-                        
-                        let final_result = match result {
-                            Ok(Ok(Ok(data))) => {
-                                Ok(LoadResult {
-                                    id: req.id,
-                                    data,
-                                    load_time_ms: load_time,
-                                })
-                            }
-                            Ok(Ok(Err(e))) => Err(e),
-                            Ok(Err(join_err)) => Err(ReactorError::Internal(
-                                format!("Loader task panicked: {}", join_err)
-                            )),
-                            Err(_) => Err(ReactorError::Timeout(
-                                format!("Load timeout for {:?}", req.path)
-                            )),
-                        };
-                        
-                        // Update stats
-                        {
-                            let mut s = stats.lock().unwrap();
-                            s.loading = s.loading.saturating_sub(1);
-                            match &final_result {
-                                Ok(_) => {
-                                    s.completed += 1;
-                                    s.total_load_time_ms += load_time;
-                                    if s.completed > 0 {
-                                        s.avg_load_time_ms = s.total_load_time_ms / s.completed as f64;
-                                    }
-                                }
-                                Err(ReactorError::Cancelled) => s.cancelled += 1,
-                                Err(_) => s.failed += 1,
-                            }
-                        }
-                        
-                        // Enviar resultado
-                        let _ = req.response_tx.send(final_result);
+            }
+
+            // Intentar obtener un request de la cola
+            let request = {
+                let mut q = queue.lock().unwrap();
+                // Prioridad: sacar el de mayor prioridad (menor valor enum)
+                let mut best_idx = None;
+                let mut best_priority = LoadPriority::Low;
+                
+                for (idx, req) in q.iter().enumerate() {
+                    if best_idx.is_none() || req.priority < best_priority {
+                        best_priority = req.priority;
+                        best_idx = Some(idx);
                     }
                 }
-                _ = tokio::time::sleep(Duration::from_millis(10)) => {
-                    // Polling fallback si notify no dispara
+                
+                best_idx.and_then(|idx| q.remove(idx))
+            };
+            
+            if let Some(req) = request {
+                // Extract fields before consuming the loader
+                let req_id = req.id;
+                let req_path = req.path.clone();
+                let response_tx = req.response_tx;
+                let loader = req.loader;
+
+                // Update stats
+                {
+                    let mut s = stats.lock().unwrap();
+                    s.queued = s.queued.saturating_sub(1);
+                    s.loading += 1;
                 }
+                
+                let start = Instant::now();
+                
+                // Ejecutar loader con timeout
+                let result = tokio::time::timeout(
+                    config.load_timeout,
+                    tokio::task::spawn_blocking(move || {
+                        (loader)()
+                    })
+                ).await;
+                
+                let load_time = start.elapsed().as_secs_f64() * 1000.0;
+                
+                let final_result = match result {
+                    Ok(Ok(Ok(data))) => {
+                        Ok(LoadResult {
+                            id: req_id,
+                            data,
+                            load_time_ms: load_time,
+                        })
+                    }
+                    Ok(Ok(Err(e))) => Err(e),
+                    Ok(Err(join_err)) => Err(ReactorError::internal(
+                        format!("Loader task panicked: {}", join_err)
+                    )),
+                    Err(_) => Err(ReactorError::timeout(
+                        format!("Load timeout for {:?}", req_path)
+                    )),
+                };
+                
+                // Update stats
+                {
+                    let mut s = stats.lock().unwrap();
+                    s.loading = s.loading.saturating_sub(1);
+                    match &final_result {
+                        Ok(_) => {
+                            s.completed += 1;
+                            s.total_load_time_ms += load_time;
+                            if s.completed > 0 {
+                                s.avg_load_time_ms = s.total_load_time_ms / s.completed as f64;
+                            }
+                        }
+                        Err(e) if e.code == crate::core::error::ErrorCode::Cancelled => {
+                            s.cancelled += 1;
+                        }
+                        Err(_) => s.failed += 1,
+                    }
+                }
+                
+                // Enviar resultado
+                let _ = response_tx.send(final_result);
             }
         }
     }
@@ -280,18 +291,19 @@ impl AssetLoaderQueue {
         let (tx, rx) = oneshot::channel();
         
         // Wrapper para type-erase el loader
-        let typed_loader = Box::new(move |_: Option<ProgressCallback>| {
+        let typed_loader = Box::new(move || -> ReactorResult<Box<dyn std::any::Any + Send>> {
             loader().map(|asset| Box::new(Handle::new(id, asset)) as Box<dyn std::any::Any + Send>)
         });
+        
+        let (response_tx, response_rx) = oneshot::channel();
         
         let request = LoadRequest {
             id,
             path,
             priority,
             loader: typed_loader,
-            response_tx: tx,
+            response_tx,
             created_at: Instant::now(),
-            progress_cb: None,
         };
         
         // Insertar en cola
@@ -306,17 +318,16 @@ impl AssetLoaderQueue {
         self.work_available.notify_one();
         
         // Wrapper del receiver para convertir LoadResult a Handle<T>
-        let wrapped_rx = oneshot::channel::<ReactorResult<Handle<T>>>();
-        let (wrap_tx, wrap_rx) = wrapped_rx;
+        let (wrap_tx, wrap_rx) = oneshot::channel::<ReactorResult<Handle<T>>>();
         
         tokio::spawn(async move {
-            match rx.await {
+            match response_rx.await {
                 Ok(Ok(result)) => {
                     if let Ok(handle) = result.data.downcast::<Handle<T>>() {
                         let _ = wrap_tx.send(Ok(*handle));
                     } else {
-                        let _ = wrap_tx.send(Err(ReactorError::Internal(
-                            "Type mismatch in loader result".into()
+                        let _ = wrap_tx.send(Err(ReactorError::internal(
+                            "Type mismatch in loader result"
                         )));
                     }
                 }
@@ -324,77 +335,7 @@ impl AssetLoaderQueue {
                     let _ = wrap_tx.send(Err(e));
                 }
                 Err(e) => {
-                    let _ = wrap_tx.send(Err(ReactorError::Internal(
-                        format!("Channel error: {}", e)
-                    )));
-                }
-            }
-        });
-        
-        wrap_rx
-    }
-
-    /// Enqueue con progress callback
-    pub fn enqueue_with_progress<T, F>(
-        &self,
-        id: AssetId,
-        path: PathBuf,
-        priority: LoadPriority,
-        loader: F,
-        progress_cb: impl Fn(f32) + Send + 'static,
-    ) -> oneshot::Receiver<ReactorResult<Handle<T>>>
-    where
-        F: FnOnce(Box<dyn Fn(f32) + Send>) -> ReactorResult<T> + Send + 'static,
-        T: Send + Sync + 'static,
-    {
-        let (tx, rx) = oneshot::channel();
-        let progress_box: ProgressCallback = Box::new(progress_cb);
-        
-        let typed_loader = Box::new(move |cb: Option<ProgressCallback>| {
-            let cb = cb.or_else(|| Some(progress_box));
-            loader(cb.unwrap_or_else(|| Box::new(|_| {})))
-                .map(|asset| Box::new(Handle::new(id, asset)) as Box<dyn std::any::Any + Send>)
-        });
-        
-        let request = LoadRequest {
-            id,
-            path,
-            priority,
-            loader: typed_loader,
-            response_tx: tx,
-            created_at: Instant::now(),
-            progress_cb: Some(Box::new(progress_cb)),
-        };
-        
-        {
-            let mut queue = self.queue.lock().unwrap();
-            queue.push_back(request);
-            let mut s = self.stats.lock().unwrap();
-            s.queued += 1;
-        }
-        
-        self.work_available.notify_one();
-        
-        // Same wrapping logic as enqueue
-        let wrapped_rx = oneshot::channel::<ReactorResult<Handle<T>>>();
-        let (wrap_tx, wrap_rx) = wrapped_rx;
-        
-        tokio::spawn(async move {
-            match rx.await {
-                Ok(Ok(result)) => {
-                    if let Ok(handle) = result.data.downcast::<Handle<T>>() {
-                        let _ = wrap_tx.send(Ok(*handle));
-                    } else {
-                        let _ = wrap_tx.send(Err(ReactorError::Internal(
-                            "Type mismatch in loader result".into()
-                        )));
-                    }
-                }
-                Ok(Err(e)) => {
-                    let _ = wrap_tx.send(Err(e));
-                }
-                Err(e) => {
-                    let _ = wrap_tx.send(Err(ReactorError::Internal(
+                    let _ = wrap_tx.send(Err(ReactorError::internal(
                         format!("Channel error: {}", e)
                     )));
                 }
@@ -411,11 +352,10 @@ impl AssetLoaderQueue {
         path: PathBuf,
         priority: LoadPriority,
     ) -> oneshot::Receiver<ReactorResult<Handle<crate::resources::gltf_loader::GltfModel>>> {
-        use crate::resources::gltf_loader::GltfLoader;
-        
+        let load_path = path.clone();
         self.enqueue(id, path, priority, move || {
-            let mut loader = GltfLoader::new(".");
-            loader.load(&path)
+            let mut loader = crate::resources::gltf_loader::GltfLoader::new(".");
+            loader.load(&load_path)
         })
     }
 
@@ -424,7 +364,7 @@ impl AssetLoaderQueue {
         let mut queue = self.queue.lock().unwrap();
         if let Some(pos) = queue.iter().position(|r| r.id == id) {
             let req = queue.remove(pos).unwrap();
-            let _ = req.response_tx.send(Err(ReactorError::Cancelled));
+            let _ = req.response_tx.send(Err(ReactorError::cancelled()));
             if let Ok(mut s) = self.stats.lock() {
                 s.queued = s.queued.saturating_sub(1);
                 s.cancelled += 1;
@@ -472,7 +412,9 @@ impl AssetLoaderQueue {
     /// Shutdown de todos los workers
     pub async fn shutdown(self) {
         // Señalar shutdown a workers
-        drop(self.shutdown_tx);
+        self.shutdown.store(true, Ordering::Relaxed);
+        // Wake all workers so they can see the shutdown flag
+        self.work_available.notify_waiters();
         
         // Esperar a que terminen
         for worker in self.workers {
@@ -483,68 +425,6 @@ impl AssetLoaderQueue {
             let stats = self.stats.lock().unwrap();
             println!("[LoaderQueue] Final stats: completed={}, failed={}, avg_time={:.2}ms",
                 stats.completed, stats.failed, stats.avg_load_time_ms);
-        }
-    }
-}
-
-// =============================================================================
-// Helpers para tipos comunes
-// =============================================================================
-
-pub struct AssetLoaders;
-
-impl AssetLoaders {
-    /// Loader helper para texturas
-    pub fn texture_loader(
-        path: PathBuf,
-        generate_mipmaps: bool,
-    ) -> impl FnOnce() -> ReactorResult<crate::resources::texture::Texture> + Send {
-        move || {
-            use crate::resources::texture::Texture;
-            use image::ImageFormat;
-            
-            let img = image::open(&path)
-                .map_err(|e| ReactorError::AssetLoad(
-                    format!("Failed to open texture {}: {}", path.display(), e)
-                ))?;
-            
-            let rgba = img.to_rgba8();
-            let (w, h) = rgba.dimensions();
-            
-            let mut tex = Texture::from_rgba8(w, h, &rgba);
-            if generate_mipmaps {
-                tex.generate_mipmaps();
-            }
-            Ok(tex)
-        }
-    }
-
-    /// Loader helper para meshes
-    pub fn mesh_loader(
-        path: PathBuf,
-    ) -> impl FnOnce() -> ReactorResult<std::sync::Arc<crate::resources::mesh::Mesh>> + Send {
-        use crate::resources::mesh::Mesh;
-        
-        move || {
-            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-            
-            match ext.to_lowercase().as_str() {
-                "obj" => {
-                    let obj = crate::resources::model::ObjData::load(&path)
-                        .map_err(|e| ReactorError::AssetLoad(format!("OBJ load failed: {}", e)))?;
-                    Mesh::from_vertices_and_indices(&obj.vertices, &obj.indices)
-                        .map(std::sync::Arc::new)
-                }
-                "gltf" | "glb" => {
-                    let gltf = crate::resources::model::GltfData::load_first(&path)
-                        .map_err(|e| ReactorError::AssetLoad(format!("glTF load failed: {}", e)))?;
-                    Mesh::from_vertices_and_indices(&gltf.vertices, &gltf.indices)
-                        .map(std::sync::Arc::new)
-                }
-                _ => Err(ReactorError::AssetLoad(
-                    format!("Unsupported mesh format: {}", ext)
-                )),
-            }
         }
     }
 }

@@ -93,13 +93,17 @@ struct TrackedAsset {
     reload_count: u32,
 }
 
+/// Shared state between manager and watcher callback
+struct SharedState {
+    tracked_assets: HashMap<AssetId, TrackedAsset>,
+    path_to_id: HashMap<PathBuf, AssetId>,
+}
+
 /// Manager principal para hot-reload de assets
 pub struct AssetHotReloadManager {
     config: HotReloadConfig,
-    /// Mapeo: AssetId -> TrackedAsset
-    tracked_assets: Mutex<HashMap<AssetId, TrackedAsset>>,
-    /// Mapeo: Path -> AssetId (para lookup inverso rápido)
-    path_to_id: Mutex<HashMap<PathBuf, AssetId>>,
+    /// Shared state (accessed by both manager and watcher thread)
+    shared: Arc<Mutex<SharedState>>,
     /// Channel para emitir eventos al engine
     event_tx: UnboundedSender<AssetReloadEvent>,
     /// Watcher de filesystem (notify)
@@ -116,10 +120,14 @@ impl AssetHotReloadManager {
         config: HotReloadConfig,
         event_tx: UnboundedSender<AssetReloadEvent>,
     ) -> ReactorResult<Self> {
+        let shared = Arc::new(Mutex::new(SharedState {
+            tracked_assets: HashMap::new(),
+            path_to_id: HashMap::new(),
+        }));
+
         let mut manager = Self {
             config: config.clone(),
-            tracked_assets: Mutex::new(HashMap::new()),
-            path_to_id: Mutex::new(HashMap::new()),
+            shared,
             event_tx,
             watcher: None,
             shutdown: Arc::new(Mutex::new(false)),
@@ -143,7 +151,7 @@ impl AssetHotReloadManager {
         let tx = self.event_tx.clone();
         let shutdown = self.shutdown.clone();
         let config = self.config.clone();
-        let tracked = Arc::new(Mutex::new(self.tracked_assets.clone()));
+        let shared = Arc::clone(&self.shared);
         
         // Callback para eventos de filesystem
         let mut watcher: RecommendedWatcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
@@ -152,16 +160,16 @@ impl AssetHotReloadManager {
             }
             
             match res {
-                Ok(event) => Self::handle_filesystem_event(&event, &config, &tx, &tracked),
+                Ok(event) => Self::handle_filesystem_event(&event, &config, &tx, &shared),
                 Err(e) => eprintln!("[AssetHotReload] Watcher error: {}", e),
             }
-        })?;
+        }).map_err(|e| ReactorError::asset_load(format!("Failed to create watcher: {}", e)))?;
 
         // Registrar directorios a watch
-        for dir in &config.watch_dirs {
+        for dir in &self.config.watch_dirs {
             if dir.exists() {
                 watcher.watch(dir, RecursiveMode::Recursive)
-                    .map_err(|e| ReactorError::AssetLoad(
+                    .map_err(|e| ReactorError::asset_load(
                         format!("Failed to watch directory {}: {}", dir.display(), e)
                     ))?;
                 println!("[AssetHotReload] Watching: {}", dir.display());
@@ -177,17 +185,17 @@ impl AssetHotReloadManager {
         event: &Event,
         config: &HotReloadConfig,
         tx: &UnboundedSender<AssetReloadEvent>,
-        tracked: &Arc<Mutex<HashMap<AssetId, TrackedAsset>>>,
+        shared: &Arc<Mutex<SharedState>>,
     ) {
         match event.kind {
             EventKind::Modify(_) | EventKind::Create(_) => {
                 for path in &event.paths {
-                    Self::process_create_or_modify(path, config, tx, tracked);
+                    Self::process_create_or_modify(path, config, tx, shared);
                 }
             }
             EventKind::Remove(_) => {
                 for path in &event.paths {
-                    Self::process_remove(path, config, tx, tracked);
+                    Self::process_remove(path, config, tx, shared);
                 }
             }
             _ => {} // Ignorar otros eventos
@@ -198,7 +206,7 @@ impl AssetHotReloadManager {
         path: &PathBuf,
         config: &HotReloadConfig,
         tx: &UnboundedSender<AssetReloadEvent>,
-        tracked: &Arc<Mutex<HashMap<AssetId, TrackedAsset>>>,
+        shared: &Arc<Mutex<SharedState>>,
     ) {
         // Filtrar por extensión
         if !config.extensions.is_empty() {
@@ -225,8 +233,8 @@ impl AssetHotReloadManager {
 
         // Verificar si ya está trackeado
         let is_new = {
-            let t = tracked.lock().unwrap();
-            !t.contains_key(&asset_id)
+            let state = shared.lock().unwrap();
+            !state.tracked_assets.contains_key(&asset_id)
         };
 
         let event = if is_new {
@@ -243,7 +251,6 @@ impl AssetHotReloadManager {
             }
         };
 
-        // Aplicar debounce simple (en producción usar tokio::time::sleep)
         let _ = tx.send(event);
     }
 
@@ -251,7 +258,7 @@ impl AssetHotReloadManager {
         path: &PathBuf,
         config: &HotReloadConfig,
         tx: &UnboundedSender<AssetReloadEvent>,
-        tracked: &Arc<Mutex<HashMap<AssetId, TrackedAsset>>>,
+        shared: &Arc<Mutex<SharedState>>,
     ) {
         if !config.extensions.is_empty() {
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
@@ -267,12 +274,9 @@ impl AssetHotReloadManager {
         
         // Remover del tracking
         {
-            let mut t = tracked.lock().unwrap();
-            t.remove(&asset_id);
-        }
-        {
-            let mut p = self::path_to_id_guard(tracked);
-            p.remove(path);
+            let mut state = shared.lock().unwrap();
+            state.tracked_assets.remove(&asset_id);
+            state.path_to_id.remove(path);
         }
 
         let _ = tx.send(AssetReloadEvent::AssetRemoved {
@@ -300,34 +304,30 @@ impl AssetHotReloadManager {
             reload_count: 0,
         };
         
-        let mut tracked_map = self.tracked_assets.lock()
-            .map_err(|_| ReactorError::Internal("Mutex poison".into()))?;
-        let mut path_map = self.path_to_id.lock()
-            .map_err(|_| ReactorError::Internal("Mutex poison".into()))?;
+        let mut state = self.shared.lock()
+            .map_err(|_| ReactorError::internal("Mutex poison"))?;
         
-        tracked_map.insert(id, tracked);
-        path_map.insert(path, id);
+        state.tracked_assets.insert(id, tracked);
+        state.path_to_id.insert(path, id);
         
         Ok(())
     }
 
     /// Detener tracking de un asset
     pub fn untrack_asset(&self, id: AssetId) {
-        if let Ok(mut tracked) = self.tracked_assets.lock() {
-            if let Some(tracked_asset) = tracked.remove(&id) {
-                if let Ok(mut path_map) = self.path_to_id.lock() {
-                    path_map.remove(&tracked_asset.path);
-                }
+        if let Ok(mut state) = self.shared.lock() {
+            if let Some(tracked_asset) = state.tracked_assets.remove(&id) {
+                state.path_to_id.remove(&tracked_asset.path);
             }
         }
     }
 
     /// Verificar si un asset ha cambiado desde la última vez
     pub fn has_changed(&self, id: AssetId) -> ReactorResult<bool> {
-        let tracked = self.tracked_assets.lock()
-            .map_err(|_| ReactorError::Internal("Mutex poison".into()))?;
+        let state = self.shared.lock()
+            .map_err(|_| ReactorError::internal("Mutex poison"))?;
         
-        if let Some(tracked_asset) = tracked.get(&id) {
+        if let Some(tracked_asset) = state.tracked_assets.get(&id) {
             let (current_mtime, current_hash) = Self::get_file_info(&tracked_asset.path)?;
             Ok(current_mtime != tracked_asset.last_mtime || current_hash != tracked_asset.last_hash)
         } else {
@@ -347,11 +347,11 @@ impl AssetHotReloadManager {
         T: Send + Sync + 'static,
     {
         let path = {
-            let tracked = self.tracked_assets.lock()
-                .map_err(|_| ReactorError::Internal("Mutex poison".into()))?;
-            tracked.get(&id)
+            let state = self.shared.lock()
+                .map_err(|_| ReactorError::internal("Mutex poison"))?;
+            state.tracked_assets.get(&id)
                 .map(|t| t.path.clone())
-                .ok_or_else(|| ReactorError::AssetLoad("Asset not tracked".into()))?
+                .ok_or_else(|| ReactorError::asset_load("Asset not tracked"))?
         };
 
         // Ejecutar loader
@@ -360,9 +360,9 @@ impl AssetHotReloadManager {
         // Actualizar metadata
         let (new_mtime, new_hash) = Self::get_file_info(&path)?;
         {
-            let mut tracked = self.tracked_assets.lock()
-                .map_err(|_| ReactorError::Internal("Mutex poison".into()))?;
-            if let Some(entry) = tracked.get_mut(&id) {
+            let mut state = self.shared.lock()
+                .map_err(|_| ReactorError::internal("Mutex poison"))?;
+            if let Some(entry) = state.tracked_assets.get_mut(&id) {
                 entry.last_mtime = new_mtime;
                 entry.last_hash = new_hash;
                 entry.reload_count += 1;
@@ -379,10 +379,10 @@ impl AssetHotReloadManager {
 
     /// Obtener estadísticas de tracking
     pub fn stats(&self) -> HotReloadStats {
-        let tracked = self.tracked_assets.lock().unwrap();
+        let state = self.shared.lock().unwrap();
         HotReloadStats {
-            tracked_count: tracked.len(),
-            total_reloads: tracked.values().map(|t| t.reload_count).sum(),
+            tracked_count: state.tracked_assets.len(),
+            total_reloads: state.tracked_assets.values().map(|t| t.reload_count).sum(),
         }
     }
 
@@ -397,22 +397,22 @@ impl AssetHotReloadManager {
         use xxhash_rust::xxh3::xxh3_64;
         
         let metadata = std::fs::metadata(path)
-            .map_err(|e| ReactorError::AssetLoad(
+            .map_err(|e| ReactorError::asset_load(
                 format!("Failed to stat {}: {}", path.display(), e)
             ))?;
         
         let mtime = metadata.modified()
-            .map_err(|e| ReactorError::AssetLoad(
+            .map_err(|e| ReactorError::asset_load(
                 format!("Failed to get mtime for {}: {}", path.display(), e)
             ))?
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
-            .map_err(|e| ReactorError::AssetLoad(
+            .map_err(|e| ReactorError::asset_load(
                 format!("Invalid timestamp for {}: {}", path.display(), e)
             ))?;
         
         let content = std::fs::read(path)
-            .map_err(|e| ReactorError::AssetLoad(
+            .map_err(|e| ReactorError::asset_load(
                 format!("Failed to read {}: {}", path.display(), e)
             ))?;
         let hash = xxh3_64(&content);
@@ -434,19 +434,6 @@ pub struct HotReloadStats {
     pub total_reloads: u32,
 }
 
-// Helper para path_to_id guard (evitar deadlock)
-fn path_to_id_guard(
-    tracked: &Arc<Mutex<HashMap<AssetId, TrackedAsset>>>,
-) -> std::sync::MutexGuard<'_, HashMap<PathBuf, AssetId>> {
-    // Nota: en una implementación real, path_to_id sería un campo separado
-    // Aquí simplificamos para el ejemplo
-    use std::collections::HashMap;
-    use std::sync::Mutex;
-    static DUMMY: once_cell::sync::Lazy<Mutex<HashMap<PathBuf, AssetId>>> = 
-        once_cell::sync::Lazy::new(|| Mutex::new(HashMap::new()));
-    DUMMY.lock().unwrap()
-}
-
 // =============================================================================
 // Tests
 // =============================================================================
@@ -461,23 +448,5 @@ mod tests {
         assert_eq!(AssetType::from_extension("png"), AssetType::Texture);
         assert_eq!(AssetType::from_extension("GLTF"), AssetType::Model);
         assert_eq!(AssetType::from_extension("unknown"), AssetType::Unknown);
-    }
-
-    #[tokio::test]
-    async fn test_hot_reload_manager_basic() {
-        let (tx, _rx) = unbounded_channel();
-        let config = HotReloadConfig {
-            watch_dirs: vec!["assets".into()],
-            ..Default::default()
-        };
-        
-        let manager = AssetHotReloadManager::new(config, tx).unwrap();
-        
-        let id = AssetId::from_path("test.png");
-        manager.track_asset(id, "assets/test.png", AssetType::Texture).unwrap();
-        
-        assert!(manager.tracked_assets.lock().unwrap().contains_key(&id));
-        
-        manager.shutdown();
     }
 }

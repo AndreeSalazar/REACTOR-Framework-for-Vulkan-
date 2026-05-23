@@ -100,7 +100,7 @@ impl AssetDatabase {
     /// Crear o abrir database en el path especificado
     pub fn open<P: AsRef<Path>>(path: P) -> ReactorResult<Self> {
         let db = sled::open(path.as_ref())
-            .map_err(|e| ReactorError::AssetLoad(format!("Failed to open asset DB: {}", e)))?;
+            .map_err(|e| ReactorError::asset_load(format!("Failed to open asset DB: {}", e)))?;
         
         Ok(Self {
             db,
@@ -113,7 +113,7 @@ impl AssetDatabase {
     pub fn in_memory() -> ReactorResult<Self> {
         let config = sled::Config::default().temporary(true);
         let db = config.open()
-            .map_err(|e| ReactorError::AssetLoad(format!("Failed to create in-memory DB: {}", e)))?;
+            .map_err(|e| ReactorError::asset_load(format!("Failed to create in-memory DB: {}", e)))?;
         
         Ok(Self {
             db,
@@ -132,12 +132,12 @@ impl AssetDatabase {
     pub fn register_asset(&mut self, id: AssetId, meta: AssetMetadata) -> ReactorResult<()> {
         // Serializar metadata
         let serialized = serde_json::to_vec(&meta)
-            .map_err(|e| ReactorError::AssetLoad(format!("Failed to serialize metadata: {}", e)))?;
+            .map_err(|e| ReactorError::asset_load(format!("Failed to serialize metadata: {}", e)))?;
         
         // Guardar en sled con key = AssetId como string hex
         let key = format!("meta:{:016x}", id.as_u64());
         self.db.insert(key.as_bytes(), serialized.as_slice())
-            .map_err(|e| ReactorError::AssetLoad(format!("Failed to write to DB: {}", e)))?;
+            .map_err(|e| ReactorError::asset_load(format!("Failed to write to DB: {}", e)))?;
         
         // Flush para garantizar persistencia
         self.db.flush()?;
@@ -163,10 +163,10 @@ impl AssetDatabase {
         // Load from disk
         let key = format!("meta:{:016x}", id.as_u64());
         if let Some(data) = self.db.get(key.as_bytes())
-            .map_err(|e| ReactorError::AssetLoad(format!("Failed to read from DB: {}", e)))? 
+            .map_err(|e| ReactorError::asset_load(format!("Failed to read from DB: {}", e)))? 
         {
             let meta: AssetMetadata = serde_json::from_slice(&data)
-                .map_err(|e| ReactorError::AssetLoad(format!("Failed to deserialize metadata: {}", e)))?;
+                .map_err(|e| ReactorError::asset_load(format!("Failed to deserialize metadata: {}", e)))?;
             
             // Cache in memory
             self.memory_cache.insert(id, meta.clone());
@@ -186,12 +186,12 @@ impl AssetDatabase {
     pub fn has_changed<P: AsRef<Path>>(&self, path: P) -> ReactorResult<bool> {
         let path = path.as_ref();
         let current_meta = std::fs::metadata(path)
-            .map_err(|e| ReactorError::AssetLoad(format!("Failed to stat {}: {}", path.display(), e)))?;
+            .map_err(|e| ReactorError::asset_load(format!("Failed to stat {}: {}", path.display(), e)))?;
         
         let current_mtime = current_meta.modified()
-            .map_err(|e| ReactorError::AssetLoad(format!("Failed to get mtime: {}", e)))?
+            .map_err(|e| ReactorError::asset_load(format!("Failed to get mtime: {}", e)))?
             .duration_since(UNIX_EPOCH)
-            .map_err(|_| ReactorError::AssetLoad("Invalid timestamp".into()))?
+            .map_err(|_| ReactorError::asset_load("Invalid timestamp".into()))?
             .as_secs();
         
         let current_size = current_meta.len();
@@ -212,7 +212,7 @@ impl AssetDatabase {
         use xxhash_rust::xxh3::xxh3_64;
         
         let content = std::fs::read(path.as_ref())
-            .map_err(|e| ReactorError::AssetLoad(format!("Failed to read {}: {}", path.as_ref().display(), e)))?;
+            .map_err(|e| ReactorError::asset_load(format!("Failed to read {}: {}", path.as_ref().display(), e)))?;
         
         Ok(xxh3_64(&content))
     }
@@ -272,7 +272,7 @@ impl AssetDatabase {
             
             if key_str.starts_with("meta:") {
                 if let Ok(id_str) = key_str.strip_prefix("meta:").ok_or_else(|| {
-                    ReactorError::AssetLoad("Invalid metadata key format".into())
+                    ReactorError::asset_load("Invalid metadata key format".into())
                 }) {
                     if let Ok(id_val) = u64::from_str_radix(id_str, 16) {
                         let id = AssetId::from(id_val);
@@ -300,7 +300,7 @@ impl AssetDatabase {
     pub fn compact(&self) -> ReactorResult<bool> {
         self.db.flush()?;
         Ok(self.db.compact().map_err(|e| {
-            ReactorError::AssetLoad(format!("Failed to compact DB: {}", e))
+            ReactorError::asset_load(format!("Failed to compact DB: {}", e))
         })?)
     }
 
@@ -316,13 +316,13 @@ impl AssetDatabase {
         }
         
         serde_json::to_string_pretty(&assets)
-            .map_err(|e| ReactorError::AssetLoad(format!("Failed to serialize: {}", e)))
+            .map_err(|e| ReactorError::asset_load(format!("Failed to serialize: {}", e)))
     }
 
     /// Importar metadata desde JSON
     pub fn import_json(&mut self, json: &str) -> ReactorResult<usize> {
         let assets: Vec<AssetMetadata> = serde_json::from_str(json)
-            .map_err(|e| ReactorError::AssetLoad(format!("Failed to parse JSON: {}", e)))?;
+            .map_err(|e| ReactorError::asset_load(format!("Failed to parse JSON: {}", e)))?;
         
         let mut count = 0;
         for meta in assets {
@@ -352,10 +352,10 @@ impl AssetMetadata {
     pub fn from_path<P: AsRef<Path>>(path: P) -> ReactorResult<Self> {
         let path = path.as_ref();
         let meta = std::fs::metadata(path)
-            .map_err(|e| ReactorError::AssetLoad(format!("Failed to stat {}: {}", path.display(), e)))?;
+            .map_err(|e| ReactorError::asset_load(format!("Failed to stat {}: {}", path.display(), e)))?;
         
         let content = std::fs::read(path)
-            .map_err(|e| ReactorError::AssetLoad(format!("Failed to read {}: {}", path.display(), e)))?;
+            .map_err(|e| ReactorError::asset_load(format!("Failed to read {}: {}", path.display(), e)))?;
         
         let ext = path.extension()
             .and_then(|e| e.to_str())

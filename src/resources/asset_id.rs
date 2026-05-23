@@ -8,13 +8,14 @@
 use std::path::{Path, PathBuf};
 use std::hash::{Hash, Hasher};
 use xxhash_rust::xxh3::xxh3_64;
+use serde::{Serialize, Deserialize};
 
 /// Identificador único y estable para assets (hash del path + contenido)
 /// 
 /// - Determinista: mismo archivo → mismo AssetId siempre
 /// - Robusto: cambios en el contenido cambian el ID (hot-reload)
 /// - Eficiente: u64, copiable, comparable en O(1)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct AssetId(u64);
 
 impl AssetId {
@@ -91,7 +92,7 @@ impl std::fmt::Display for AssetId {
 // AssetPath — Wrapper para paths de assets con normalización
 // =============================================================================
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct AssetPath(PathBuf);
 
 impl AssetPath {
