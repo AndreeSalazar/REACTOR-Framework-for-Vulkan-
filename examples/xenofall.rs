@@ -31,7 +31,6 @@
 // =============================================================================
 
 use reactor_vulkan::prelude::*;
-use reactor_vulkan::resources::{AssetType, LoadPriority};
 use winit::event::MouseButton;
 use winit::keyboard::KeyCode;
 

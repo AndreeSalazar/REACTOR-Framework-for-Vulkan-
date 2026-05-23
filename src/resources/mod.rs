@@ -1,19 +1,22 @@
 //! Asset and resource management
-//! 
+//!
 //! Loading, caching, and managing game assets.
-//! 
-//! ## Fase 3: Asset Pipeline
-//! - `asset_id`: AssetId estable basado en hash de contenido
-//! - `handle`: Handle<T> genérico con reference counting
-//! - `gltf_loader`: Cargador de modelos glTF 2.0 con PBR
-//! - `asset_manager`: Sistema centralizado con cache y hot-reload
+//!
+//! ## Fase 3: Asset Pipeline (en progreso)
+//!
+//! Los módulos `asset_id`, `handle`, `gltf_loader`, `asset_database`,
+//! `asset_hot_reload` y `asset_loader_queue` están **temporalmente
+//! deshabilitados** porque su API todavía no encaja con el resto del
+//! engine (varios cientos de errores de compilación). Cuando se resuelvan
+//! las firmas reales de `Material::new`, `ReactorError::AssetLoad`,
+//! `Texture::from_rgba8`, `Mesh::from_vertices_and_indices`, etc., se
+//! volverán a habilitar uno a uno.
+//!
+//! Mientras tanto, los juegos siguen pudiendo cargar modelos a través de
+//! `model.rs` (que sí compila) y `asset_manager.rs`.
 
 pub mod asset_id;
 pub mod asset_manager;
-pub mod asset_database;
-pub mod asset_hot_reload;
-pub mod asset_loader_queue;
-pub mod gltf_loader;
 pub mod handle;
 pub mod material;
 pub mod mesh;
@@ -23,15 +26,11 @@ pub mod primitives;
 pub mod texture;
 pub mod vertex;
 
-// Fase 3 exports - Asset Pipeline completo
+// Re-exports foundacionales
 pub use asset_id::{AssetId, AssetPath};
 pub use handle::{Handle, WeakHandle, AssetRef};
-pub use asset_database::{AssetDatabase, AssetMetadata, AssetType, AssetDbStats};
-pub use asset_hot_reload::{AssetHotReloadManager, HotReloadConfig, AssetReloadEvent, HotReloadStats};
-pub use asset_loader_queue::{AssetLoaderQueue, LoadPriority, LoadState, LoaderStats, LoaderQueueConfig, AssetLoaders};
-pub use gltf_loader::{GltfLoader, GltfModel, GltfNode, GltfAnimation, load_gltf_simple};
 
-// Legacy exports
+// Legacy / actualmente funcional
 pub use asset_manager::{AssetHandle, AssetManager, AssetState, AssetStats};
 pub use material::{Material, MaterialBuilder};
 pub use mesh::Mesh;

@@ -120,8 +120,28 @@ impl AssetPath {
     }
 }
 
-impl<P: AsRef<Path>> From<P> for AssetPath {
-    fn from(path: P) -> Self {
+// Implementaciones concretas (un blanket `From<P: AsRef<Path>>` chocaría con
+// la implementación reflexiva `From<T> for T` que ya provee la std).
+impl From<&Path> for AssetPath {
+    fn from(path: &Path) -> Self {
+        Self::new(path)
+    }
+}
+
+impl From<PathBuf> for AssetPath {
+    fn from(path: PathBuf) -> Self {
+        Self::new(path)
+    }
+}
+
+impl From<&str> for AssetPath {
+    fn from(path: &str) -> Self {
+        Self::new(path)
+    }
+}
+
+impl From<String> for AssetPath {
+    fn from(path: String) -> Self {
         Self::new(path)
     }
 }
