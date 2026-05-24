@@ -152,7 +152,7 @@ producir videojuegos comerciales**, manteniendo:
   - [x] âœ… `src/resources/mesh.rs` â€” imports limpios
   - [x] âœ… `src/resources/asset_manager.rs` â€” imports limpios
   - [x] âœ… `src/platform/window.rs` â€” `From<OsError>` implementado
-  - [ ] `src/reactor.rs` â€” pendiente (monolito, ~20 usos de `Box<dyn Error>`)
+  - [x] ✅ `src/reactor.rs` — **modularizado** a `src/reactor/` (mod, init, msaa, depth, render_pass, swapchain_recreate, resources, events, draw). Monolito de 1.803 LOC → 9 archivos temáticos cohesivos. 100 % `ReactorResult`.
 - [ ] Soporte completo de `VK_LAYER_KHRONOS_validation` en debug.
 
 ### 1.2 Allocator GPU
