@@ -134,6 +134,8 @@ struct Enemy {
     speed: f32,
     is_gltf: bool,
     _id: u32,
+    /// Índice del blob shadow asociado (Fase 4.3 HOTD-style).
+    blob_shadow: Option<usize>,
 }
 
 struct Tracer {
@@ -760,6 +762,9 @@ impl Xenofall {
             Vec3::new(ground_pos.x, 0.0, ground_pos.z),  // Feet on floor
         );
 
+        // 🌑 Blob shadow bajo los pies del zombie (radius 0.45m ≈ silueta humana).
+        let blob = ctx.spawn_blob_shadow(ground_pos, 0.45).ok();
+
         if let Ok(indices) = ctx.spawn_gltf("assets/models/zombie_basic.glb", initial_xf) {
             println!("    🧟 Zombie #{} spawned (glTF, scale {:.1}) at ({:.1}, {:.1}, {:.1})",
                 id, ZOMBIE_GLTF_SCALE, ground_pos.x, ground_pos.y, ground_pos.z);
@@ -774,6 +779,7 @@ impl Xenofall {
                 speed,
                 is_gltf: true,
                 _id: id,
+                blob_shadow: blob,
             });
             self.total_enemies_alive += 1;
         } else {
@@ -799,8 +805,12 @@ impl Xenofall {
                     speed,
                     is_gltf: false,
                     _id: id,
+                    blob_shadow: blob,
                 });
                 self.total_enemies_alive += 1;
+            } else if let Some(b) = blob {
+                // Si tampoco se pudo spawn-ear el cubo, recogemos el blob huérfano.
+                ctx.hide_blob_shadow(b);
             }
         }
     }
@@ -1326,6 +1336,13 @@ impl Xenofall {
         let mut deaths_this_frame: u32 = 0;
 
         for enemy in &mut self.enemies {
+            // 🌑 Mover blob shadow para que siga al zombie cada frame.
+            if enemy.state == EnemyState::Alive {
+                if let Some(b) = enemy.blob_shadow {
+                    ctx.move_blob_shadow(b, enemy.position, 0.45);
+                }
+            }
+
             match enemy.state {
                 EnemyState::Alive => {
                     // Move toward the player along the XZ plane only (keep Y at ground level)
@@ -1401,6 +1418,12 @@ impl Xenofall {
                         ctx.set_transform(idx, xf);
                     }
 
+                    // 🌑 Encoge el blob shadow conforme el zombie cae (0.45 → 0).
+                    if let Some(b) = enemy.blob_shadow {
+                        let shrink = (1.0 - t).max(0.0) * 0.45;
+                        ctx.move_blob_shadow(b, enemy.position, shrink);
+                    }
+
                     if enemy.death_timer >= ENEMY_DEATH_DURATION {
                         enemy.state = EnemyState::Dead;
                         deaths_this_frame += 1;
@@ -1409,6 +1432,10 @@ impl Xenofall {
                                 idx,
                                 Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)),
                             );
+                        }
+                        // 🌑 Ocultar definitivamente el blob al morir.
+                        if let Some(b) = enemy.blob_shadow {
+                            ctx.hide_blob_shadow(b);
                         }
                     }
                 }

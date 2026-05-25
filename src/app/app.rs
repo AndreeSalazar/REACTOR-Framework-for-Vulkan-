@@ -261,6 +261,10 @@ pub struct ReactorContext {
     pub event_bus: crate::systems::event_bus::EventBus,
     pub(crate) hot_reload_rx: Option<tokio::sync::mpsc::UnboundedReceiver<crate::resources::asset_hot_reload::AssetReloadEvent>>,
 
+    // 🌑 Blob shadows (Fase 4.3 — fallback HOTD-style sin shadow maps GPU)
+    pub(crate) blob_shadow_mesh: Option<std::sync::Arc<crate::resources::mesh::Mesh>>,
+    pub(crate) blob_shadow_material: Option<std::sync::Arc<crate::resources::material::Material>>,
+
     // Internal
     fixed_accumulator: f32,
 }
@@ -664,6 +668,98 @@ impl ReactorContext {
         self.spawn_primitive(&v, &i, xf)
     }
 
+    // =========================================================================
+    // 🌑 Blob shadows (Fase 4.3 — sombras estilo House of the Dead)
+    // =========================================================================
+    //
+    // Rail-shooters arcade clásicos (HOTD, Time Crisis) usan "blob shadows":
+    // un disco oscuro plano debajo de cada entidad dinámica. Es 100 % CPU,
+    // no requiere shadow-map GPU y aporta inmediatamente profundidad visual.
+    //
+    // Estos helpers crean/actualizan/ocultan un blob sin que el juego tenga
+    // que tocar el mesh ni el material.
+
+    /// Crea una sombra blob (disco oscuro plano) en el suelo bajo `position`.
+    /// `radius` en metros. Devuelve el `usize` para usar con
+    /// [`move_blob_shadow`](Self::move_blob_shadow) y
+    /// [`hide_blob_shadow`](Self::hide_blob_shadow).
+    ///
+    /// El mesh + material se inicializan la primera vez y se reutilizan,
+    /// así que llamar a este método miles de veces sólo allocata 1 mesh y 1
+    /// material en GPU.
+    pub fn spawn_blob_shadow(
+        &mut self,
+        position: glam::Vec3,
+        radius: f32,
+    ) -> crate::core::error::ReactorResult<usize> {
+        use crate::resources::primitives::Primitives;
+
+        // ── Lazy-init del mesh (esfera baja-poly compartida) ──
+        if self.blob_shadow_mesh.is_none() {
+            let (v, i) = Primitives::sphere(12, 6);
+            let mesh = self
+                .reactor
+                .create_mesh(&v, &i)
+                .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))?;
+            self.blob_shadow_mesh = Some(std::sync::Arc::new(mesh));
+        }
+
+        // ── Lazy-init del material (textura 1×1 oscura semi-transparente) ──
+        if self.blob_shadow_material.is_none() {
+            let dark_tex = self
+                .reactor
+                .create_solid_texture(8, 8, 10, 200)
+                .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))?;
+            let mat = self
+                .reactor
+                .create_textured_material(
+                    &crate::builtin_shaders::vert_textured(),
+                    &crate::builtin_shaders::frag_textured(),
+                    &dark_tex,
+                )
+                .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))?;
+            self.blob_shadow_material = Some(std::sync::Arc::new(mat));
+        }
+
+        let mesh = self.blob_shadow_mesh.clone().unwrap();
+        let mat = self.blob_shadow_material.clone().unwrap();
+        let xf = Self::blob_xf(position, radius);
+        Ok(self.scene.add_object(mesh, mat, xf))
+    }
+
+    /// Mueve y re-escala un blob existente para que siga a su entidad.
+    ///
+    /// Llamar cada frame con la posición actual de la entidad propietaria.
+    pub fn move_blob_shadow(
+        &mut self,
+        index: usize,
+        position: glam::Vec3,
+        radius: f32,
+    ) {
+        self.set_transform(index, Self::blob_xf(position, radius));
+    }
+
+    /// Oculta un blob (lo manda lejos del frustum). Útil al morir la entidad.
+    ///
+    /// El blob sigue ocupando su slot en la escena para permitir reutilización
+    /// inmediata con [`move_blob_shadow`](Self::move_blob_shadow).
+    pub fn hide_blob_shadow(&mut self, index: usize) {
+        self.set_transform(
+            index,
+            glam::Mat4::from_translation(glam::Vec3::new(0.0, -1000.0, 0.0)),
+        );
+    }
+
+    /// Construye el transform de un blob: aplanado en Y, escalado a `radius`
+    /// en XZ, levantado 2 cm sobre el suelo para evitar z-fighting con el piso.
+    fn blob_xf(position: glam::Vec3, radius: f32) -> glam::Mat4 {
+        glam::Mat4::from_scale_rotation_translation(
+            glam::Vec3::new(radius, 0.02, radius),
+            glam::Quat::IDENTITY,
+            glam::Vec3::new(position.x, 0.02, position.z),
+        )
+    }
+
     /// Helper interno: crea mesh + material por defecto y añade a la escena.
     fn spawn_primitive(
         &mut self,
@@ -950,6 +1046,8 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
             audio: crate::systems::audio::AudioSystem::new(),
             event_bus: crate::systems::event_bus::EventBus::new(),
             hot_reload_rx,
+            blob_shadow_mesh: None,
+            blob_shadow_material: None,
             fixed_accumulator: 0.0,
         };
 
