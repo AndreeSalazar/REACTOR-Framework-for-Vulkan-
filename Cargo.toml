@@ -91,6 +91,9 @@ notify = "6.1"
 # Audio playback
 rodio = "0.20"
 
+# Gamepad input (Fase 5.5 — 100% Rust, sin SDL ni C)
+gilrs = "0.10"
+
 # Build utilities
 walkdir = { workspace = true }
 

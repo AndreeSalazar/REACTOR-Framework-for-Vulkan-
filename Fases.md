@@ -259,11 +259,12 @@ producir videojuegos comerciales**, manteniendo:
 - [ ] Tone mapping ACES / AGX.
 
 ### 4.3 Sombras
-- [ ] CSM (Cascaded Shadow Maps) para luces direccionales.
+- [x] ✅ **Blob shadows** (estilo HOTD/Time Crisis) — `ctx.spawn_blob_shadow(pos, radius)` / `move_blob_shadow` / `hide_blob_shadow`. Mesh+material cacheados lazy. Aplicado en Xenofall: cada zombie proyecta sombra circular oscura que le sigue y se encoge al morir.
+- [ ] CSM (Cascaded Shadow Maps) para luces direccionales — *scaffolding CPU listo en `graphics/shadows.rs`, falta pipeline GPU + depth pre-pass + sampling en shader*.
 - [ ] Point light shadows (cube maps).
 - [ ] Spot light shadows (2D).
 - [ ] **VSM / PCSS** para sombras suaves.
-- [ ] Sombras de ray tracing cuando RT estÃ© disponible.
+- [ ] Sombras de ray tracing cuando RT esté disponible.
 
 ### 4.4 IluminaciÃ³n global
 - [ ] **Light probes** (esfÃ©ricos armÃ³nicos L2).
