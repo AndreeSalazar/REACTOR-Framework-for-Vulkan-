@@ -106,6 +106,7 @@ pub mod prelude {
     };
     pub use crate::systems::audio::{AudioSystem, AudioClipId, AudioSourceId, AudioListener, AudioSource};
     pub use crate::systems::event_bus::{EventBus, Observer};
+    pub use crate::platform::{Gamepad, GamepadButton, GamepadAxis};
     
     // Re-export the ReactorContext type alias if it exists
     pub use crate::app::ReactorContext;

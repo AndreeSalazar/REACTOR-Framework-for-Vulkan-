@@ -3,7 +3,8 @@ use std::collections::HashSet;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::keyboard::{KeyCode, PhysicalKey};
 
-#[derive(Default)]
+use crate::platform::gamepad::Gamepad;
+
 pub struct Input {
     pressed_keys: HashSet<KeyCode>,
     just_pressed_keys: HashSet<KeyCode>,
@@ -12,11 +13,29 @@ pub struct Input {
     mouse_position: Vec2,
     mouse_delta: Vec2,
     scroll_delta: f32,
+    /// Subsistema de gamepad (Fase 5.5 — siempre presente, "desconectado"
+    /// hasta que se enchufe un mando).
+    gamepad: Gamepad,
+}
+
+impl Default for Input {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Input {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            pressed_keys: HashSet::new(),
+            just_pressed_keys: HashSet::new(),
+            just_released_keys: HashSet::new(),
+            pressed_mouse_buttons: HashSet::new(),
+            mouse_position: Vec2::ZERO,
+            mouse_delta: Vec2::ZERO,
+            scroll_delta: 0.0,
+            gamepad: Gamepad::new(),
+        }
     }
 
     pub fn begin_frame(&mut self) {
@@ -24,6 +43,9 @@ impl Input {
         self.just_released_keys.clear();
         self.mouse_delta = Vec2::ZERO;
         self.scroll_delta = 0.0;
+        // Drenar eventos del gamepad y actualizar estado.
+        self.gamepad.begin_frame();
+        self.gamepad.poll();
     }
 
     pub fn process_event(&mut self, event: &WindowEvent) {
@@ -125,5 +147,19 @@ impl Input {
         }
 
         movement
+    }
+
+    // =========================================================================
+    // 🎮 Gamepad (Fase 5.5)
+    // =========================================================================
+
+    /// Acceso al subsistema de gamepad (sticks, gatillos, botones).
+    pub fn gamepad(&self) -> &Gamepad {
+        &self.gamepad
+    }
+
+    /// Acceso mutable (raramente necesario — sólo para ajustar `deadzone`).
+    pub fn gamepad_mut(&mut self) -> &mut Gamepad {
+        &mut self.gamepad
     }
 }
