@@ -8,7 +8,7 @@
 //! 5. Crear command pool + buffers + sync (triple buffering).
 //! 6. Intentar inicializar Ray Tracing si la GPU lo soporta.
 
-use super::{msaa, depth, Reactor, MAX_FRAMES_IN_FLIGHT};
+use super::{depth, msaa, Reactor, MAX_FRAMES_IN_FLIGHT};
 use crate::core::error::{ErrorCode, ReactorError, ReactorResult};
 use crate::core::VulkanContext;
 use crate::graphics::swapchain::Swapchain;
@@ -106,13 +106,16 @@ impl Reactor {
             .level(vk::CommandBufferLevel::PRIMARY)
             .command_buffer_count(MAX_FRAMES_IN_FLIGHT as u32);
         let command_buffers = unsafe {
-            context.device.allocate_command_buffers(&alloc_info).map_err(|e| {
-                ReactorError::with_source(
-                    ErrorCode::VulkanCommandPool,
-                    "Failed to allocate command buffers",
-                    e,
-                )
-            })?
+            context
+                .device
+                .allocate_command_buffers(&alloc_info)
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanCommandPool,
+                        "Failed to allocate command buffers",
+                        e,
+                    )
+                })?
         };
 
         // ── Sincronización (semáforos + fences por frame) ──
@@ -126,32 +129,38 @@ impl Reactor {
         for _ in 0..MAX_FRAMES_IN_FLIGHT {
             unsafe {
                 image_available_semaphores.push(
-                    context.device.create_semaphore(&semaphore_info, None).map_err(|e| {
-                        ReactorError::with_source(
-                            ErrorCode::VulkanSynchronization,
-                            "Failed to create semaphore",
-                            e,
-                        )
-                    })?,
+                    context
+                        .device
+                        .create_semaphore(&semaphore_info, None)
+                        .map_err(|e| {
+                            ReactorError::with_source(
+                                ErrorCode::VulkanSynchronization,
+                                "Failed to create semaphore",
+                                e,
+                            )
+                        })?,
                 );
                 render_finished_semaphores.push(
-                    context.device.create_semaphore(&semaphore_info, None).map_err(|e| {
-                        ReactorError::with_source(
-                            ErrorCode::VulkanSynchronization,
-                            "Failed to create semaphore",
-                            e,
-                        )
-                    })?,
+                    context
+                        .device
+                        .create_semaphore(&semaphore_info, None)
+                        .map_err(|e| {
+                            ReactorError::with_source(
+                                ErrorCode::VulkanSynchronization,
+                                "Failed to create semaphore",
+                                e,
+                            )
+                        })?,
                 );
-                in_flight_fences.push(
-                    context.device.create_fence(&fence_info, None).map_err(|e| {
+                in_flight_fences.push(context.device.create_fence(&fence_info, None).map_err(
+                    |e| {
                         ReactorError::with_source(
                             ErrorCode::VulkanSynchronization,
                             "Failed to create fence",
                             e,
                         )
-                    })?,
-                );
+                    },
+                )?);
             }
         }
 

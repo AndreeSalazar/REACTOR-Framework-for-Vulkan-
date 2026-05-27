@@ -90,5 +90,8 @@ fn main() {
         }
     }
 
-    println!("cargo:warning=Compiled {} shaders (including aliases)", compiled);
+    println!(
+        "cargo:warning=Compiled {} shaders (including aliases)",
+        compiled
+    );
 }

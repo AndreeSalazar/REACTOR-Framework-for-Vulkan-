@@ -19,11 +19,7 @@ use ash::vk;
 
 impl Reactor {
     /// Dibuja una escena completa (todos los `SceneObject`) con MVP precomputado.
-    pub fn draw_scene(
-        &mut self,
-        scene: &Scene,
-        view_projection: &glam::Mat4,
-    ) -> ReactorResult<()> {
+    pub fn draw_scene(&mut self, scene: &Scene, view_projection: &glam::Mat4) -> ReactorResult<()> {
         if self.device_lost {
             return Ok(());
         }
@@ -127,8 +123,8 @@ impl Reactor {
 
             // ── Dynamic Rendering: color + depth (MSAA opcional) ──
             let swapchain_view = self.swapchain.image_views[image_index as usize];
-            let msaa_enabled = self.msaa_samples != vk::SampleCountFlags::TYPE_1
-                && self.msaa_image_view.is_some();
+            let msaa_enabled =
+                self.msaa_samples != vk::SampleCountFlags::TYPE_1 && self.msaa_image_view.is_some();
 
             let color_attachment = if msaa_enabled {
                 vk::RenderingAttachmentInfo::default()
@@ -153,7 +149,7 @@ impl Reactor {
                     })
             };
 
-            let mut depth_attachment = vk::RenderingAttachmentInfo::default()
+            let depth_attachment = vk::RenderingAttachmentInfo::default()
                 .image_view(self.depth_image_view.unwrap())
                 .image_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
                 .load_op(vk::AttachmentLoadOp::CLEAR)
@@ -169,7 +165,7 @@ impl Reactor {
                 })
                 .layer_count(1)
                 .color_attachments(std::slice::from_ref(&color_attachment))
-                .depth_attachment(&mut depth_attachment);
+                .depth_attachment(&depth_attachment);
 
             // ── Barreras de inicio ──
             let swapchain_image = self.swapchain.images[image_index as usize];
@@ -252,8 +248,12 @@ impl Reactor {
                 offset: vk::Offset2D { x: 0, y: 0 },
                 extent: self.swapchain.extent,
             };
-            self.context.device.cmd_set_viewport(command_buffer, 0, &[viewport]);
-            self.context.device.cmd_set_scissor(command_buffer, 0, &[scissor]);
+            self.context
+                .device
+                .cmd_set_viewport(command_buffer, 0, &[viewport]);
+            self.context
+                .device
+                .cmd_set_scissor(command_buffer, 0, &[scissor]);
 
             for object in &scene.objects {
                 // Bind pipeline + descriptor sets (texturas si las hay).
@@ -527,8 +527,8 @@ impl Reactor {
                 })?;
 
             let swapchain_view = self.swapchain.image_views[image_index as usize];
-            let msaa_enabled = self.msaa_samples != vk::SampleCountFlags::TYPE_1
-                && self.msaa_image_view.is_some();
+            let msaa_enabled =
+                self.msaa_samples != vk::SampleCountFlags::TYPE_1 && self.msaa_image_view.is_some();
 
             let color_attachment = if msaa_enabled {
                 vk::RenderingAttachmentInfo::default()
@@ -553,7 +553,7 @@ impl Reactor {
                     })
             };
 
-            let mut depth_attachment = vk::RenderingAttachmentInfo::default()
+            let depth_attachment = vk::RenderingAttachmentInfo::default()
                 .image_view(self.depth_image_view.unwrap())
                 .image_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
                 .load_op(vk::AttachmentLoadOp::CLEAR)
@@ -569,7 +569,7 @@ impl Reactor {
                 })
                 .layer_count(1)
                 .color_attachments(std::slice::from_ref(&color_attachment))
-                .depth_attachment(&mut depth_attachment);
+                .depth_attachment(&depth_attachment);
 
             let swapchain_image = self.swapchain.images[image_index as usize];
             let depth_img = self.depth_image.unwrap();
@@ -656,8 +656,12 @@ impl Reactor {
                 offset: vk::Offset2D { x: 0, y: 0 },
                 extent: self.swapchain.extent,
             };
-            self.context.device.cmd_set_viewport(command_buffer, 0, &[viewport]);
-            self.context.device.cmd_set_scissor(command_buffer, 0, &[scissor]);
+            self.context
+                .device
+                .cmd_set_viewport(command_buffer, 0, &[viewport]);
+            self.context
+                .device
+                .cmd_set_scissor(command_buffer, 0, &[scissor]);
 
             let constants_array = std::slice::from_raw_parts(
                 transform as *const glam::Mat4 as *const u8,
@@ -673,9 +677,12 @@ impl Reactor {
 
             let vertex_buffers = [mesh.vertex_buffer.handle];
             let offsets = [0];
-            self.context
-                .device
-                .cmd_bind_vertex_buffers(command_buffer, 0, &vertex_buffers, &offsets);
+            self.context.device.cmd_bind_vertex_buffers(
+                command_buffer,
+                0,
+                &vertex_buffers,
+                &offsets,
+            );
             self.context.device.cmd_bind_index_buffer(
                 command_buffer,
                 mesh.index_buffer.handle,

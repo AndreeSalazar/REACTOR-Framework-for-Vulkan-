@@ -20,9 +20,9 @@
 //! son newtypes sobre `u32` con valor sentinela `u32::MAX` (`INVALID`).
 //! Se pueden copiar libremente, pasar por push constants, escribir a disco, etc.
 
-use ash::vk;
-use crate::core::error::{ReactorError, ReactorResult, ErrorCode};
 use crate::core::arc_handle::ArcDevice;
+use crate::core::error::{ErrorCode, ReactorError, ReactorResult};
+use ash::vk;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Handles (newtypes u32)
@@ -41,34 +41,59 @@ macro_rules! define_handle {
 
             /// Raw index into the bindless array.
             #[inline(always)]
-            pub fn index(&self) -> u32 { self.0 }
+            pub fn index(&self) -> u32 {
+                self.0
+            }
 
             /// True if this handle is not `INVALID`.
             #[inline(always)]
-            pub fn is_valid(&self) -> bool { self.0 != u32::MAX }
+            pub fn is_valid(&self) -> bool {
+                self.0 != u32::MAX
+            }
 
             /// Build from a raw index.
             #[inline(always)]
-            pub fn from_index(i: u32) -> Self { Self(i) }
+            pub fn from_index(i: u32) -> Self {
+                Self(i)
+            }
         }
 
         impl From<u32> for $name {
             #[inline(always)]
-            fn from(v: u32) -> Self { Self(v) }
+            fn from(v: u32) -> Self {
+                Self(v)
+            }
         }
 
         impl From<$name> for u32 {
             #[inline(always)]
-            fn from(h: $name) -> Self { h.0 }
+            fn from(h: $name) -> Self {
+                h.0
+            }
         }
     };
 }
 
-define_handle!(TextureHandle, "Índice al array bindless de texturas (binding 0).");
-define_handle!(SamplerHandle, "Índice al array bindless de samplers (binding 1).");
-define_handle!(BufferHandle,  "Índice al array bindless de buffers genéricos (binding 2).");
-define_handle!(MeshHandle,    "Índice al array bindless de `MeshData` (binding 3).");
-define_handle!(MaterialHandle,"Índice al array bindless de `MaterialData` (binding 4).");
+define_handle!(
+    TextureHandle,
+    "Índice al array bindless de texturas (binding 0)."
+);
+define_handle!(
+    SamplerHandle,
+    "Índice al array bindless de samplers (binding 1)."
+);
+define_handle!(
+    BufferHandle,
+    "Índice al array bindless de buffers genéricos (binding 2)."
+);
+define_handle!(
+    MeshHandle,
+    "Índice al array bindless de `MeshData` (binding 3)."
+);
+define_handle!(
+    MaterialHandle,
+    "Índice al array bindless de `MaterialData` (binding 4)."
+);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Datos que viajan al GPU (repr C, alineados a 16 bytes)
@@ -215,7 +240,6 @@ pub struct BindlessRegistry {
     free_mesh_slots: Vec<u32>,
     free_material_slots: Vec<u32>,
     // Nota: los samplers se registran manualmente (pocos, se reutilizan)
-
     config: BindlessConfig,
 }
 
@@ -277,8 +301,8 @@ impl BindlessRegistry {
                 | vk::DescriptorBindingFlags::VARIABLE_DESCRIPTOR_COUNT,
         ];
 
-        let mut flags_info = vk::DescriptorSetLayoutBindingFlagsCreateInfo::default()
-            .binding_flags(&binding_flags);
+        let mut flags_info =
+            vk::DescriptorSetLayoutBindingFlagsCreateInfo::default().binding_flags(&binding_flags);
 
         let layout_info = vk::DescriptorSetLayoutCreateInfo::default()
             .flags(vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL)
@@ -289,9 +313,15 @@ impl BindlessRegistry {
 
         // ── Descriptor pool ────────────────────────────────────────────
         let pool_sizes = [
-            vk::DescriptorPoolSize::default().ty(vk::DescriptorType::SAMPLED_IMAGE).descriptor_count(config.max_textures),
-            vk::DescriptorPoolSize::default().ty(vk::DescriptorType::SAMPLER).descriptor_count(config.max_samplers),
-            vk::DescriptorPoolSize::default().ty(vk::DescriptorType::STORAGE_BUFFER).descriptor_count(config.max_buffers + config.max_meshes + config.max_materials),
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::SAMPLED_IMAGE)
+                .descriptor_count(config.max_textures),
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::SAMPLER)
+                .descriptor_count(config.max_samplers),
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::STORAGE_BUFFER)
+                .descriptor_count(config.max_buffers + config.max_meshes + config.max_materials),
         ];
 
         let pool_info = vk::DescriptorPoolCreateInfo::default()
@@ -320,13 +350,11 @@ impl BindlessRegistry {
         let descriptor_set = sets[0];
 
         // ── Pipeline layout (con push constant para transform + índices) ──
-        let push_constant_ranges = [
-            vk::PushConstantRange {
-                stage_flags: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
-                offset: 0,
-                size: 128, // Mat4 (64) + índices mesh/material/transform (16) + padding
-            },
-        ];
+        let push_constant_ranges = [vk::PushConstantRange {
+            stage_flags: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+            offset: 0,
+            size: 128, // Mat4 (64) + índices mesh/material/transform (16) + padding
+        }];
         let layout_info = vk::PipelineLayoutCreateInfo::default()
             .set_layouts(std::slice::from_ref(&set_layout))
             .push_constant_ranges(&push_constant_ranges);
@@ -339,78 +367,136 @@ impl BindlessRegistry {
         let free_material_slots: Vec<u32> = (0..config.max_materials).rev().collect();
 
         Ok(Self {
-            device, descriptor_pool, descriptor_set, set_layout, pipeline_layout,
-            free_texture_slots, free_buffer_slots, free_mesh_slots, free_material_slots,
+            device,
+            descriptor_pool,
+            descriptor_set,
+            set_layout,
+            pipeline_layout,
+            free_texture_slots,
+            free_buffer_slots,
+            free_mesh_slots,
+            free_material_slots,
             config,
         })
     }
 
     // ── Texturas ───────────────────────────────────────────────────────
     pub fn register_texture(&mut self, image_view: vk::ImageView) -> ReactorResult<TextureHandle> {
-        let slot = self.free_texture_slots.pop()
-            .ok_or_else(|| ReactorError::new(ErrorCode::ResourceLimit, "Bindless texture slots exhausted"))?;
+        let slot = self.free_texture_slots.pop().ok_or_else(|| {
+            ReactorError::new(ErrorCode::ResourceLimit, "Bindless texture slots exhausted")
+        })?;
         let image_info = vk::DescriptorImageInfo::default()
             .image_view(image_view)
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
         let write = vk::WriteDescriptorSet::default()
             .dst_set(self.descriptor_set)
-            .dst_binding(0).dst_array_element(slot)
+            .dst_binding(0)
+            .dst_array_element(slot)
             .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
             .image_info(std::slice::from_ref(&image_info));
-        unsafe { self.device.update_descriptor_sets(std::slice::from_ref(&write), &[]); }
+        unsafe {
+            self.device
+                .update_descriptor_sets(std::slice::from_ref(&write), &[]);
+        }
         Ok(TextureHandle(slot))
     }
 
     pub fn unregister_texture(&mut self, handle: TextureHandle) {
-        if handle.is_valid() { self.free_texture_slots.push(handle.0); }
+        if handle.is_valid() {
+            self.free_texture_slots.push(handle.0);
+        }
     }
 
     // ── Samplers ───────────────────────────────────────────────────────
-    pub fn register_sampler(&mut self, sampler: vk::Sampler, slot: u32) -> ReactorResult<SamplerHandle> {
+    pub fn register_sampler(
+        &mut self,
+        sampler: vk::Sampler,
+        slot: u32,
+    ) -> ReactorResult<SamplerHandle> {
         if slot >= self.config.max_samplers {
-            return Err(ReactorError::new(ErrorCode::ResourceLimit, "Sampler slot out of range"));
+            return Err(ReactorError::new(
+                ErrorCode::ResourceLimit,
+                "Sampler slot out of range",
+            ));
         }
         let image_info = vk::DescriptorImageInfo::default().sampler(sampler);
         let write = vk::WriteDescriptorSet::default()
             .dst_set(self.descriptor_set)
-            .dst_binding(1).dst_array_element(slot)
+            .dst_binding(1)
+            .dst_array_element(slot)
             .descriptor_type(vk::DescriptorType::SAMPLER)
             .image_info(std::slice::from_ref(&image_info));
-        unsafe { self.device.update_descriptor_sets(std::slice::from_ref(&write), &[]); }
+        unsafe {
+            self.device
+                .update_descriptor_sets(std::slice::from_ref(&write), &[]);
+        }
         Ok(SamplerHandle(slot))
     }
 
     // ── Buffers genéricos ──────────────────────────────────────────────
-    pub fn register_buffer(&mut self, buffer: vk::Buffer, offset: vk::DeviceSize, range: vk::DeviceSize) -> ReactorResult<BufferHandle> {
-        let slot = self.free_buffer_slots.pop()
-            .ok_or_else(|| ReactorError::new(ErrorCode::ResourceLimit, "Bindless buffer slots exhausted"))?;
-        let buffer_info = vk::DescriptorBufferInfo::default().buffer(buffer).offset(offset).range(range);
+    pub fn register_buffer(
+        &mut self,
+        buffer: vk::Buffer,
+        offset: vk::DeviceSize,
+        range: vk::DeviceSize,
+    ) -> ReactorResult<BufferHandle> {
+        let slot = self.free_buffer_slots.pop().ok_or_else(|| {
+            ReactorError::new(ErrorCode::ResourceLimit, "Bindless buffer slots exhausted")
+        })?;
+        let buffer_info = vk::DescriptorBufferInfo::default()
+            .buffer(buffer)
+            .offset(offset)
+            .range(range);
         let write = vk::WriteDescriptorSet::default()
-            .dst_set(self.descriptor_set).dst_binding(2).dst_array_element(slot)
+            .dst_set(self.descriptor_set)
+            .dst_binding(2)
+            .dst_array_element(slot)
             .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
             .buffer_info(std::slice::from_ref(&buffer_info));
-        unsafe { self.device.update_descriptor_sets(std::slice::from_ref(&write), &[]); }
+        unsafe {
+            self.device
+                .update_descriptor_sets(std::slice::from_ref(&write), &[]);
+        }
         Ok(BufferHandle(slot))
     }
 
     pub fn unregister_buffer(&mut self, handle: BufferHandle) {
-        if handle.is_valid() { self.free_buffer_slots.push(handle.0); }
+        if handle.is_valid() {
+            self.free_buffer_slots.push(handle.0);
+        }
     }
 
     // ── Meshes (bindless MeshData) ─────────────────────────────────────
     /// Registra un mesh en el slot específico de un storage buffer que contiene
     /// un array de `GpuMeshData`. El usuario debe mantener vivo ese buffer
     /// (generalmente uno global compartido).
-    pub fn register_mesh_at(&mut self, slot: u32, buffer: vk::Buffer, offset: vk::DeviceSize, range: vk::DeviceSize) -> ReactorResult<MeshHandle> {
+    pub fn register_mesh_at(
+        &mut self,
+        slot: u32,
+        buffer: vk::Buffer,
+        offset: vk::DeviceSize,
+        range: vk::DeviceSize,
+    ) -> ReactorResult<MeshHandle> {
         if slot >= self.config.max_meshes {
-            return Err(ReactorError::new(ErrorCode::ResourceLimit, "Mesh slot out of range"));
+            return Err(ReactorError::new(
+                ErrorCode::ResourceLimit,
+                "Mesh slot out of range",
+            ));
         }
-        let buffer_info = vk::DescriptorBufferInfo::default().buffer(buffer).offset(offset).range(range);
+        let buffer_info = vk::DescriptorBufferInfo::default()
+            .buffer(buffer)
+            .offset(offset)
+            .range(range);
         let write = vk::WriteDescriptorSet::default()
-            .dst_set(self.descriptor_set).dst_binding(3).dst_array_element(slot)
+            .dst_set(self.descriptor_set)
+            .dst_binding(3)
+            .dst_array_element(slot)
             .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
             .buffer_info(std::slice::from_ref(&buffer_info));
-        unsafe { self.device.update_descriptor_sets(std::slice::from_ref(&write), &[]); }
+        unsafe {
+            self.device
+                .update_descriptor_sets(std::slice::from_ref(&write), &[]);
+        }
         // Reservamos el slot del pool para poder liberarlo después
         self.free_mesh_slots.retain(|&s| s != slot);
         Ok(MeshHandle(slot))
@@ -419,45 +505,83 @@ impl BindlessRegistry {
     /// Reserva el siguiente slot libre (sin tocar el descriptor).
     /// Útil cuando usas un solo storage buffer con array dinámico.
     pub fn allocate_mesh_slot(&mut self) -> ReactorResult<MeshHandle> {
-        let slot = self.free_mesh_slots.pop()
-            .ok_or_else(|| ReactorError::new(ErrorCode::ResourceLimit, "Bindless mesh slots exhausted"))?;
+        let slot = self.free_mesh_slots.pop().ok_or_else(|| {
+            ReactorError::new(ErrorCode::ResourceLimit, "Bindless mesh slots exhausted")
+        })?;
         Ok(MeshHandle(slot))
     }
 
     pub fn free_mesh_slot(&mut self, handle: MeshHandle) {
-        if handle.is_valid() { self.free_mesh_slots.push(handle.0); }
+        if handle.is_valid() {
+            self.free_mesh_slots.push(handle.0);
+        }
     }
 
     // ── Materials (bindless MaterialData) ──────────────────────────────
-    pub fn register_material_at(&mut self, slot: u32, buffer: vk::Buffer, offset: vk::DeviceSize, range: vk::DeviceSize) -> ReactorResult<MaterialHandle> {
+    pub fn register_material_at(
+        &mut self,
+        slot: u32,
+        buffer: vk::Buffer,
+        offset: vk::DeviceSize,
+        range: vk::DeviceSize,
+    ) -> ReactorResult<MaterialHandle> {
         if slot >= self.config.max_materials {
-            return Err(ReactorError::new(ErrorCode::ResourceLimit, "Material slot out of range"));
+            return Err(ReactorError::new(
+                ErrorCode::ResourceLimit,
+                "Material slot out of range",
+            ));
         }
-        let buffer_info = vk::DescriptorBufferInfo::default().buffer(buffer).offset(offset).range(range);
+        let buffer_info = vk::DescriptorBufferInfo::default()
+            .buffer(buffer)
+            .offset(offset)
+            .range(range);
         let write = vk::WriteDescriptorSet::default()
-            .dst_set(self.descriptor_set).dst_binding(4).dst_array_element(slot)
+            .dst_set(self.descriptor_set)
+            .dst_binding(4)
+            .dst_array_element(slot)
             .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
             .buffer_info(std::slice::from_ref(&buffer_info));
-        unsafe { self.device.update_descriptor_sets(std::slice::from_ref(&write), &[]); }
+        unsafe {
+            self.device
+                .update_descriptor_sets(std::slice::from_ref(&write), &[]);
+        }
         self.free_material_slots.retain(|&s| s != slot);
         Ok(MaterialHandle(slot))
     }
 
     pub fn allocate_material_slot(&mut self) -> ReactorResult<MaterialHandle> {
-        let slot = self.free_material_slots.pop()
-            .ok_or_else(|| ReactorError::new(ErrorCode::ResourceLimit, "Bindless material slots exhausted"))?;
+        let slot = self.free_material_slots.pop().ok_or_else(|| {
+            ReactorError::new(
+                ErrorCode::ResourceLimit,
+                "Bindless material slots exhausted",
+            )
+        })?;
         Ok(MaterialHandle(slot))
     }
 
     pub fn free_material_slot(&mut self, handle: MaterialHandle) {
-        if handle.is_valid() { self.free_material_slots.push(handle.0); }
+        if handle.is_valid() {
+            self.free_material_slots.push(handle.0);
+        }
     }
 
     // ── Accessors ──────────────────────────────────────────────────────
-    #[inline] pub fn descriptor_set(&self) -> vk::DescriptorSet { self.descriptor_set }
-    #[inline] pub fn set_layout(&self) -> vk::DescriptorSetLayout { self.set_layout }
-    #[inline] pub fn pipeline_layout(&self) -> vk::PipelineLayout { self.pipeline_layout }
-    #[inline] pub fn config(&self) -> &BindlessConfig { &self.config }
+    #[inline]
+    pub fn descriptor_set(&self) -> vk::DescriptorSet {
+        self.descriptor_set
+    }
+    #[inline]
+    pub fn set_layout(&self) -> vk::DescriptorSetLayout {
+        self.set_layout
+    }
+    #[inline]
+    pub fn pipeline_layout(&self) -> vk::PipelineLayout {
+        self.pipeline_layout
+    }
+    #[inline]
+    pub fn config(&self) -> &BindlessConfig {
+        &self.config
+    }
 
     /// Stats rápidos (útiles para el HUD del profiler).
     pub fn stats(&self) -> BindlessStats {
@@ -477,9 +601,12 @@ impl BindlessRegistry {
 impl Drop for BindlessRegistry {
     fn drop(&mut self) {
         unsafe {
-            self.device.destroy_pipeline_layout(self.pipeline_layout, None);
-            self.device.destroy_descriptor_set_layout(self.set_layout, None);
-            self.device.destroy_descriptor_pool(self.descriptor_pool, None);
+            self.device
+                .destroy_pipeline_layout(self.pipeline_layout, None);
+            self.device
+                .destroy_descriptor_set_layout(self.set_layout, None);
+            self.device
+                .destroy_descriptor_pool(self.descriptor_pool, None);
         }
     }
 }

@@ -75,10 +75,12 @@ impl LinearAllocator {
     /// Returns `None` if there is not enough space.
     #[inline]
     pub fn allocate(&self, size: usize, align: usize) -> Option<NonNull<u8>> {
+        debug_assert!(align.is_power_of_two(), "alignment must be a power of two");
         let current = self.offset.get();
-        // Align up the current offset
+        let base_addr = self.base.as_ptr() as usize;
         let mask = align.wrapping_sub(1);
-        let aligned = (current + mask) & !mask;
+        let aligned_addr = (base_addr + current + mask) & !mask;
+        let aligned = aligned_addr.checked_sub(base_addr)?;
         let new_offset = aligned.checked_add(size)?;
 
         if new_offset > self.capacity {
@@ -106,6 +108,7 @@ impl LinearAllocator {
     /// # Safety
     /// Caller must ensure elements are properly initialized before reading.
     #[inline]
+    #[allow(clippy::mut_from_ref)]
     pub fn allocate_slice<T>(&self, count: usize) -> Option<&mut [std::mem::MaybeUninit<T>]> {
         let size = count.checked_mul(std::mem::size_of::<T>())?;
         let align = std::mem::align_of::<T>();
@@ -190,6 +193,7 @@ impl BumpArena {
 
     /// Allocate a value of type `T`, returning a mutable reference with the
     /// arena's lifetime.
+    #[allow(clippy::mut_from_ref)]
     pub fn alloc<T>(&self, value: T) -> Option<&mut T> {
         let size = std::mem::size_of::<T>();
         let align = std::mem::align_of::<T>();

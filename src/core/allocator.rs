@@ -11,14 +11,13 @@
 
 use ash::vk;
 use gpu_allocator::vulkan::{
-    Allocator, AllocatorCreateDesc, Allocation, AllocationCreateDesc,
-    AllocationScheme,
+    Allocation, AllocationCreateDesc, AllocationScheme, Allocator, AllocatorCreateDesc,
 };
 use gpu_allocator::MemoryLocation;
 use std::sync::{Arc, Mutex};
 
-use crate::core::error::{ErrorCode, ReactorError, ReactorResult};
 use crate::core::context::VulkanContext;
+use crate::core::error::{ErrorCode, ReactorError, ReactorResult};
 
 /// Thread-safe GPU memory allocator.
 ///
@@ -119,12 +118,16 @@ impl MemoryAllocator {
 
     /// Free a previous allocation.
     pub fn free(&self, allocation: Allocation) -> ReactorResult<()> {
-        self.allocator.lock().unwrap().free(allocation).map_err(|e| {
-            ReactorError::with_source(
-                ErrorCode::VulkanMemoryAllocation,
-                "Failed to free allocation",
-                e,
-            )
-        })
+        self.allocator
+            .lock()
+            .unwrap()
+            .free(allocation)
+            .map_err(|e| {
+                ReactorError::with_source(
+                    ErrorCode::VulkanMemoryAllocation,
+                    "Failed to free allocation",
+                    e,
+                )
+            })
     }
 }

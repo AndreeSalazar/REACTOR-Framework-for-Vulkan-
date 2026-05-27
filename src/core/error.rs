@@ -109,7 +109,7 @@ pub enum ErrorCode {
     InvalidArgument,
     IoError,
     ShaderCompilation,
-    }
+}
 
 impl ErrorCode {
     /// Get a human-readable description of the error code
@@ -464,7 +464,6 @@ impl From<image::ImageError> for ReactorError {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -497,4 +496,3 @@ mod tests {
         assert!(!has_error());
     }
 }
-

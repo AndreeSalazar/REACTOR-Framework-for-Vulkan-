@@ -4,16 +4,19 @@
 //! Dos pipelines con el mismo hash son binariamente idénticos y se pueden
 //! reutilizar sin recompilar.
 
+use ash::vk;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use ash::vk;
 
 /// Hash único de un Pipeline State Object.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PsoHash(pub u64);
 
 impl PsoHash {
-    #[inline] pub fn as_u64(&self) -> u64 { self.0 }
+    #[inline]
+    pub fn as_u64(&self) -> u64 {
+        self.0
+    }
 
     /// Crea desde dos spirv_hash (vertex + fragment) + state bits.
     pub fn from_shaders_and_state(
@@ -30,10 +33,14 @@ impl PsoHash {
 }
 
 /// Builder incremental para calcular el hash de un PSO.
-pub struct PsoHashBuilder { hasher: DefaultHasher }
+pub struct PsoHashBuilder {
+    hasher: DefaultHasher,
+}
 
 impl PsoHashBuilder {
-    pub fn new() -> Self { Self { hasher: DefaultHasher::new() } }
+    pub fn new() -> Self {
+        Self { hasher: DefaultHasher::new() }
+    }
 
     /// Hash del SPIR-V de un shader (usar `CompiledShader::spirv_hash`).
     pub fn hash_shader_spirv(&mut self, spirv: &[u32]) -> &mut Self {
@@ -66,7 +73,10 @@ impl PsoHashBuilder {
         self
     }
 
-    pub fn hash_rasterization(&mut self, r: &vk::PipelineRasterizationStateCreateInfo) -> &mut Self {
+    pub fn hash_rasterization(
+        &mut self,
+        r: &vk::PipelineRasterizationStateCreateInfo,
+    ) -> &mut Self {
         r.depth_clamp_enable.hash(&mut self.hasher);
         r.rasterizer_discard_enable.hash(&mut self.hasher);
         r.polygon_mode.as_raw().hash(&mut self.hasher);
@@ -110,10 +120,20 @@ impl PsoHashBuilder {
         self
     }
 
-    pub fn hash_render_pass_formats(&mut self, color: &[vk::Format], depth: Option<vk::Format>) -> &mut Self {
+    pub fn hash_render_pass_formats(
+        &mut self,
+        color: &[vk::Format],
+        depth: Option<vk::Format>,
+    ) -> &mut Self {
         color.len().hash(&mut self.hasher);
-        for f in color { f.as_raw().hash(&mut self.hasher); }
-        if let Some(df) = depth { df.as_raw().hash(&mut self.hasher); } else { 0u32.hash(&mut self.hasher); }
+        for f in color {
+            f.as_raw().hash(&mut self.hasher);
+        }
+        if let Some(df) = depth {
+            df.as_raw().hash(&mut self.hasher);
+        } else {
+            0u32.hash(&mut self.hasher);
+        }
         self
     }
 
@@ -123,7 +143,13 @@ impl PsoHashBuilder {
         self
     }
 
-    pub fn finalize(&self) -> PsoHash { PsoHash(self.hasher.finish()) }
+    pub fn finalize(&self) -> PsoHash {
+        PsoHash(self.hasher.finish())
+    }
 }
 
-impl Default for PsoHashBuilder { fn default() -> Self { Self::new() } }
+impl Default for PsoHashBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}

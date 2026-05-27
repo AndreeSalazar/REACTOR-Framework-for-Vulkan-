@@ -55,13 +55,16 @@ pub(super) fn create_depth_resources(
         .samples(samples);
 
     let image = unsafe {
-        context.device.create_image(&image_info, None).map_err(|e| {
-            ReactorError::with_source(
-                ErrorCode::VulkanImageCreation,
-                "Failed to create depth image",
-                e,
-            )
-        })?
+        context
+            .device
+            .create_image(&image_info, None)
+            .map_err(|e| {
+                ReactorError::with_source(
+                    ErrorCode::VulkanImageCreation,
+                    "Failed to create depth image",
+                    e,
+                )
+            })?
     };
     let requirements = unsafe { context.device.get_image_memory_requirements(image) };
 
@@ -91,22 +94,28 @@ pub(super) fn create_depth_resources(
         .memory_type_index(memory_type_index);
 
     let memory = unsafe {
-        context.device.allocate_memory(&alloc_info, None).map_err(|e| {
-            ReactorError::with_source(
-                ErrorCode::VulkanMemoryAllocation,
-                "Failed to allocate depth memory",
-                e,
-            )
-        })?
+        context
+            .device
+            .allocate_memory(&alloc_info, None)
+            .map_err(|e| {
+                ReactorError::with_source(
+                    ErrorCode::VulkanMemoryAllocation,
+                    "Failed to allocate depth memory",
+                    e,
+                )
+            })?
     };
     unsafe {
-        context.device.bind_image_memory(image, memory, 0).map_err(|e| {
-            ReactorError::with_source(
-                ErrorCode::VulkanImageCreation,
-                "Failed to bind depth memory",
-                e,
-            )
-        })?
+        context
+            .device
+            .bind_image_memory(image, memory, 0)
+            .map_err(|e| {
+                ReactorError::with_source(
+                    ErrorCode::VulkanImageCreation,
+                    "Failed to bind depth memory",
+                    e,
+                )
+            })?
     };
 
     let view_info = vk::ImageViewCreateInfo::default()
@@ -123,13 +132,16 @@ pub(super) fn create_depth_resources(
         );
 
     let view = unsafe {
-        context.device.create_image_view(&view_info, None).map_err(|e| {
-            ReactorError::with_source(
-                ErrorCode::VulkanImageCreation,
-                "Failed to create depth image view",
-                e,
-            )
-        })?
+        context
+            .device
+            .create_image_view(&view_info, None)
+            .map_err(|e| {
+                ReactorError::with_source(
+                    ErrorCode::VulkanImageCreation,
+                    "Failed to create depth image view",
+                    e,
+                )
+            })?
     };
 
     Ok((image, view, memory))

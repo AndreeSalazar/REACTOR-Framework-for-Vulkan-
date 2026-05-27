@@ -17,9 +17,6 @@ use crate::resources::mesh::Mesh;
 use crate::resources::model::{GltfData, ObjData};
 use crate::resources::texture::Texture;
 use crate::resources::vertex::Vertex;
-use crate::resources::asset_id::{AssetId, AssetPath};
-use crate::resources::handle::{Handle, WeakHandle, AssetRef};
-use crate::core::error::{ReactorResult, ReactorError};
 
 /// Asset handle for type-safe asset references (legacy alias for Handle)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -244,19 +241,25 @@ pub struct AssetStats {
 // =============================================================================
 
 /// Load OBJ model and extract vertices/indices
-pub fn load_obj_mesh(path: &Path) -> Result<(Vec<Vertex>, Vec<u32>), Box<dyn std::error::Error + Send + Sync>> {
+pub fn load_obj_mesh(
+    path: &Path,
+) -> Result<(Vec<Vertex>, Vec<u32>), Box<dyn std::error::Error + Send + Sync>> {
     let obj = ObjData::load(path)?;
     Ok((obj.vertices, obj.indices))
 }
 
 /// Load glTF model and extract first mesh vertices/indices
-pub fn load_gltf_mesh(path: &Path) -> Result<(Vec<Vertex>, Vec<u32>), Box<dyn std::error::Error + Send + Sync>> {
+pub fn load_gltf_mesh(
+    path: &Path,
+) -> Result<(Vec<Vertex>, Vec<u32>), Box<dyn std::error::Error + Send + Sync>> {
     let gltf = GltfData::load_first(path)?;
     Ok((gltf.vertices, gltf.indices))
 }
 
 /// Load any supported model format based on extension
-pub fn load_model_auto(path: &Path) -> Result<(Vec<Vertex>, Vec<u32>), Box<dyn std::error::Error + Send + Sync>> {
+pub fn load_model_auto(
+    path: &Path,
+) -> Result<(Vec<Vertex>, Vec<u32>), Box<dyn std::error::Error + Send + Sync>> {
     let ext = path
         .extension()
         .and_then(|e| e.to_str())

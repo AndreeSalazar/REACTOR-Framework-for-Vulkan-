@@ -1,9 +1,9 @@
+use crate::core::arc_handle::ArcDevice;
+use crate::core::error::{ErrorCode, ReactorError, ReactorResult};
+use crate::core::VulkanContext;
 use crate::graphics::buffer::Buffer;
 use crate::graphics::image::Image;
 use crate::graphics::sampler::Sampler;
-use crate::core::VulkanContext;
-use crate::core::arc_handle::ArcDevice;
-use crate::core::error::{ReactorResult, ReactorError, ErrorCode};
 use ash::vk;
 use gpu_allocator::vulkan::Allocator;
 use gpu_allocator::MemoryLocation;
@@ -28,7 +28,13 @@ impl Texture {
         generate_mipmaps: bool,
     ) -> ReactorResult<Self> {
         let path_ref = path.as_ref();
-        let img = image::open(path_ref).map_err(|e| ReactorError::with_source(ErrorCode::TextureLoadFailed, format!("Failed to open texture: {}", path_ref.display()), e))?;
+        let img = image::open(path_ref).map_err(|e| {
+            ReactorError::with_source(
+                ErrorCode::TextureLoadFailed,
+                format!("Failed to open texture: {}", path_ref.display()),
+                e,
+            )
+        })?;
         let rgba = img.to_rgba8();
         let (width, height) = rgba.dimensions();
         let data = rgba.into_raw();
@@ -43,7 +49,13 @@ impl Texture {
         bytes: &[u8],
         generate_mipmaps: bool,
     ) -> ReactorResult<Self> {
-        let img = image::load_from_memory(bytes).map_err(|e| ReactorError::with_source(ErrorCode::TextureLoadFailed, "Failed to load texture from bytes", e))?;
+        let img = image::load_from_memory(bytes).map_err(|e| {
+            ReactorError::with_source(
+                ErrorCode::TextureLoadFailed,
+                "Failed to load texture from bytes",
+                e,
+            )
+        })?;
         let rgba = img.to_rgba8();
         let (width, height) = rgba.dimensions();
         let data = rgba.into_raw();
@@ -59,15 +71,17 @@ impl Texture {
     ) -> ReactorResult<Self> {
         let reader = ktx2::Reader::new(bytes)
             .map_err(|e| ReactorError::internal(format!("Failed to parse KTX2: {:?}", e)))?;
-        
+
         let header = reader.header();
         let width = header.pixel_width;
         let height = header.pixel_height;
-        
+
         // Extract level 0 data
-        let data = reader.levels().next()
+        let data = reader
+            .levels()
+            .next()
             .ok_or_else(|| ReactorError::internal("KTX2 has no mipmap levels"))?;
-        
+
         // Upload level 0 raw decompressed / transcode bytes
         Self::from_rgba(ctx, allocator, data, width, height, false)
     }
@@ -86,18 +100,12 @@ impl Texture {
     }
 
     /// Create white texture (default diffuse)
-    pub fn white(
-        ctx: &VulkanContext,
-        allocator: Arc<Mutex<Allocator>>,
-    ) -> ReactorResult<Self> {
+    pub fn white(ctx: &VulkanContext, allocator: Arc<Mutex<Allocator>>) -> ReactorResult<Self> {
         Self::solid_color(ctx, allocator, 255, 255, 255, 255)
     }
 
     /// Create black texture
-    pub fn black(
-        ctx: &VulkanContext,
-        allocator: Arc<Mutex<Allocator>>,
-    ) -> ReactorResult<Self> {
+    pub fn black(ctx: &VulkanContext, allocator: Arc<Mutex<Allocator>>) -> ReactorResult<Self> {
         Self::solid_color(ctx, allocator, 0, 0, 0, 255)
     }
 

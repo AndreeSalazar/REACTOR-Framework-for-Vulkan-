@@ -76,21 +76,20 @@ const IMPACT_POOL_SIZE: usize = 20;
 const IMPACT_LIFETIME: f32 = 0.35;
 
 // Corridor geometry constants
-const CORRIDOR_HALF_WIDTH: f32 = 3.5;  // Total 7m wide
-const CORRIDOR_HEIGHT: f32 = 3.5;      // 3.5m ceiling
-const PILLAR_X: f32 = 2.8;             // Pillar distance from center
-const CAMERA_Y: f32 = 1.7;             // Human eye level (1.7m)
+const CORRIDOR_HALF_WIDTH: f32 = 3.5; // Total 7m wide
+const CORRIDOR_HEIGHT: f32 = 3.5; // 3.5m ceiling
+const PILLAR_X: f32 = 2.8; // Pillar distance from center
+const CAMERA_Y: f32 = 1.7; // Human eye level (1.7m)
 
 // Enemy constants — tuned for UE5-scale humans
 const ENEMY_BASE_SPEED: f32 = 2.5;
-const ENEMY_HIT_RADIUS: f32 = 0.5;     // Hitbox radius for ~1.8m tall zombie
+const ENEMY_HIT_RADIUS: f32 = 0.5; // Hitbox radius for ~1.8m tall zombie
 const ENEMY_ATTACK_DIST: f32 = 2.5;
 const ENEMY_ATTACK_COOLDOWN: f32 = 1.2;
 const ENEMY_DEATH_DURATION: f32 = 0.6;
 
 // Zombie model scale — measured: 178cm native × 0.017 root = 3.03m at 1.0
 // For a 1.8m tall zombie: 0.6x. Using 0.6 for proper human height.
-const ZOMBIE_GLTF_SCALE: f32 = 0.6;
 // Cube fallback dimensions (human proportions: 0.5m wide × 1.8m tall × 0.35m deep)
 const ZOMBIE_CUBE_SCALE: Vec3 = Vec3::new(0.5, 1.8, 0.35);
 // Y offset: zombie feet at floor (Y=0). Hitbox center at ~0.9m.
@@ -196,13 +195,13 @@ enum CardType {
     PiercingRounds, // Balas atraviesan 1 enemigo extra
     ExplosiveShot,  // Daño de área al impactar
     // Defensivas
-    ArmorPlating,   // +25 HP máximo
-    Regeneration,   // Regenerar 2 HP por oleada
-    QuickReload,    // Tiempo de recarga -40%
+    ArmorPlating, // +25 HP máximo
+    Regeneration, // Regenerar 2 HP por oleada
+    QuickReload,  // Tiempo de recarga -40%
     // Utilidad
-    ExtendedMag,    // +4 balas extra por cargador
-    ComboMaster,    // Combo timeout +2 seg
-    ScoreBonus,     // +50% score por kill
+    ExtendedMag, // +4 balas extra por cargador
+    ComboMaster, // Combo timeout +2 seg
+    ScoreBonus,  // +50% score por kill
 }
 
 impl CardType {
@@ -649,9 +648,9 @@ impl Xenofall {
     // =========================================================================
 
     fn build_corridor(&mut self, ctx: &mut ReactorContext) {
-        let w = CORRIDOR_HALF_WIDTH;   // 3.5m from center
-        let h = CORRIDOR_HEIGHT;       // 3.5m
-        let pw = PILLAR_X;             // 2.8m from center
+        let w = CORRIDOR_HALF_WIDTH; // 3.5m from center
+        let h = CORRIDOR_HEIGHT; // 3.5m
+        let pw = PILLAR_X; // 2.8m from center
 
         // ── Suelo del corredor (7m wide) ──
         for i in 0..12 {
@@ -920,7 +919,9 @@ impl Xenofall {
             if hits.iter().any(|(idx, _, _)| *idx == i) {
                 continue; // Already hit as headshot
             }
-            if let Some(t) = ray_sphere_intersect(ray_origin, ray_dir, enemy.position, ENEMY_HIT_RADIUS) {
+            if let Some(t) =
+                ray_sphere_intersect(ray_origin, ray_dir, enemy.position, ENEMY_HIT_RADIUS)
+            {
                 if t < 100.0 {
                     hits.push((i, t, false));
                 }
@@ -961,7 +962,8 @@ impl Xenofall {
             // Play impact/death sound
             if died {
                 if let Some(clip) = self.audio.death {
-                    ctx.audio.play_sfx(clip, Some(self.enemies[*enemy_idx].position), 0.7);
+                    ctx.audio
+                        .play_sfx(clip, Some(self.enemies[*enemy_idx].position), 0.7);
                 }
             } else if let Some(clip) = self.audio.impact {
                 ctx.audio.play_sfx(clip, Some(hit_point), 0.6);
@@ -1053,12 +1055,7 @@ impl Xenofall {
 
     fn find_free_tracer(&self) -> Option<usize> {
         let used: Vec<usize> = self.active_tracers.iter().map(|t| t.pool_index).collect();
-        for pool_idx in 0..self.tracer_pool.len() {
-            if !used.contains(&pool_idx) {
-                return Some(pool_idx);
-            }
-        }
-        None
+        (0..self.tracer_pool.len()).find(|pool_idx| !used.contains(pool_idx))
     }
 
     // =========================================================================
@@ -1086,7 +1083,11 @@ impl Xenofall {
         if index < self.card_options.len() {
             let card = self.card_options[index];
             self.build.apply_card(card);
-            println!("  ✅ Carta seleccionada: {} — {}", card.name(), card.description());
+            println!(
+                "  ✅ Carta seleccionada: {} — {}",
+                card.name(),
+                card.description()
+            );
 
             // Play card select sound
             if let Some(clip) = self.audio.card_select {
@@ -1099,7 +1100,9 @@ impl Xenofall {
             }
 
             // Apply armor plating
-            if self.hp < self.build.max_hp && self.build.cards_collected.contains(&CardType::ArmorPlating) {
+            if self.hp < self.build.max_hp
+                && self.build.cards_collected.contains(&CardType::ArmorPlating)
+            {
                 self.hp = self.build.max_hp;
             }
 
@@ -1119,7 +1122,7 @@ impl Xenofall {
         if self.state != GameState::Playing {
             return;
         }
-        
+
         // Stop camera movement while there are active enemies in the wave!
         if self.total_enemies_alive > 0 {
             self.wave_clear_timer = WAVE_CLEAR_DELAY;
@@ -1148,7 +1151,8 @@ impl Xenofall {
         ctx.camera.set_rotation(0.0, 0.0);
 
         // Update audio listener to match camera
-        ctx.audio.update_listener(AudioListener::from_camera(&ctx.camera));
+        ctx.audio
+            .update_listener(AudioListener::from_camera(&ctx.camera));
     }
 
     fn get_aim_ray(&self, ctx: &ReactorContext) -> (Vec3, Vec3) {
@@ -1194,7 +1198,9 @@ impl Xenofall {
         }
 
         // Manual reload
-        if ctx.input().is_key_just_pressed(KeyCode::KeyR) && !self.reloading && self.ammo < self.build.effective_mag_size()
+        if ctx.input().is_key_just_pressed(KeyCode::KeyR)
+            && !self.reloading
+            && self.ammo < self.build.effective_mag_size()
         {
             self.reloading = true;
             self.reload_timer = self.build.effective_reload_time();
@@ -1213,10 +1219,10 @@ impl Xenofall {
         }
 
         // Restart on game over
-        if self.state == GameState::GameOver || self.state == GameState::Victory {
-            if ctx.input().is_key_just_pressed(KeyCode::Space) {
-                std::process::exit(0);
-            }
+        if (self.state == GameState::GameOver || self.state == GameState::Victory)
+            && ctx.input().is_key_just_pressed(KeyCode::Space)
+        {
+            std::process::exit(0);
         }
 
         // ESC to quit
@@ -1367,7 +1373,10 @@ impl Xenofall {
                         // Face toward the player
                         let facing = Quat::from_rotation_y((-move_dir.x).atan2(-move_dir.z));
                         let (scale, pos_offset) = if enemy.is_gltf {
-                            (Vec3::splat(ZOMBIE_GLTF_SCALE), Vec3::new(0.0, -ZOMBIE_GROUND_Y, 0.0))
+                            (
+                                Vec3::splat(enemy.gltf_scale),
+                                Vec3::new(0.0, -ZOMBIE_GROUND_Y, 0.0),
+                            )
                         } else {
                             (ZOMBIE_CUBE_SCALE, Vec3::ZERO)
                         };
@@ -1392,7 +1401,10 @@ impl Xenofall {
                             let face_dir = to_player.normalize();
                             let facing = Quat::from_rotation_y((-face_dir.x).atan2(-face_dir.z));
                             let (scale, pos_offset) = if enemy.is_gltf {
-                                (Vec3::splat(ZOMBIE_GLTF_SCALE), Vec3::new(0.0, -ZOMBIE_GROUND_Y, 0.0))
+                                (
+                                    Vec3::splat(enemy.gltf_scale),
+                                    Vec3::new(0.0, -ZOMBIE_GROUND_Y, 0.0),
+                                )
                             } else {
                                 (ZOMBIE_CUBE_SCALE, Vec3::ZERO)
                             };
@@ -1419,7 +1431,11 @@ impl Xenofall {
                     } else {
                         enemy.position
                     };
-                    let scale = if enemy.is_gltf { Vec3::splat(ZOMBIE_GLTF_SCALE) } else { ZOMBIE_CUBE_SCALE };
+                    let scale = if enemy.is_gltf {
+                        Vec3::splat(enemy.gltf_scale)
+                    } else {
+                        ZOMBIE_CUBE_SCALE
+                    };
                     let xf = Mat4::from_translation(base_pos + Vec3::new(0.0, -sink, 0.0))
                         * Mat4::from_rotation_x(fall_angle)
                         * Mat4::from_scale(scale);
@@ -1527,7 +1543,10 @@ impl Xenofall {
                 ctx.audio.play_sfx(clip, None, 0.7);
             }
 
-            println!("  ⚠️ OLEADA {} — {} infectados!", self.current_wave, wave.count);
+            println!(
+                "  ⚠️ OLEADA {} — {} infectados!",
+                self.current_wave, wave.count
+            );
 
             // Spawn enemies in a visible range ahead of the camera
             // They appear INSIDE the corridor, spread laterally and in depth
@@ -1537,7 +1556,9 @@ impl Xenofall {
                 let max_lateral = (CORRIDOR_HALF_WIDTH - 0.8).min(wave.spread * 0.5);
                 let x_offset = hash_rand_signed(seed * 7 + 1) * max_lateral;
                 // Depth spread: spawn between SPAWN_DIST_MIN and SPAWN_DIST_MAX ahead
-                let z_offset = ENEMY_SPAWN_DIST_MIN + hash_rand(seed * 13 + 3) * (ENEMY_SPAWN_DIST_MAX - ENEMY_SPAWN_DIST_MIN + wave.depth * 0.3);
+                let z_offset = ENEMY_SPAWN_DIST_MIN
+                    + hash_rand(seed * 13 + 3)
+                        * (ENEMY_SPAWN_DIST_MAX - ENEMY_SPAWN_DIST_MIN + wave.depth * 0.3);
 
                 // Position in world: camera looks toward -Z, so spawn further in -Z
                 let pos = Vec3::new(x_offset, 0.8, -(self.rail_progress + z_offset));
@@ -1599,7 +1620,11 @@ impl Xenofall {
             FireMode::Normal => "",
         };
 
-        let flash = if self.damage_flash > 0.0 { "⚠️ " } else { "" };
+        let flash = if self.damage_flash > 0.0 {
+            "⚠️ "
+        } else {
+            ""
+        };
 
         let cards_str = if !self.build.cards_collected.is_empty() {
             format!(" · {}🃏", self.build.cards_collected.len())
@@ -1641,7 +1666,10 @@ impl Xenofall {
         } else {
             // Hide crosshair when not playing (paused, game over, card select)
             if let Some(crosshair_idx) = self.crosshair_index {
-                ctx.set_transform(crosshair_idx, Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)));
+                ctx.set_transform(
+                    crosshair_idx,
+                    Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)),
+                );
             }
         }
 
@@ -1681,7 +1709,10 @@ impl Xenofall {
         } else {
             // Hide Victory Screen when not active
             if let Some(vic_idx) = self.victory_index {
-                ctx.set_transform(vic_idx, Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)));
+                ctx.set_transform(
+                    vic_idx,
+                    Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)),
+                );
             }
         }
     }
@@ -1796,7 +1827,11 @@ impl ReactorApp for Xenofall {
 
         println!();
         println!("  📐 Corredor: {} segmentos", self.floor_indices.len());
-        println!("  🎱 Pools: {} trazadores, {} impactos", self.tracer_pool.len(), self.impact_pool.len());
+        println!(
+            "  🎱 Pools: {} trazadores, {} impactos",
+            self.tracer_pool.len(),
+            self.impact_pool.len()
+        );
         println!("  ⚔️ {} oleadas cargadas", self.waves.len());
         println!("  🃏 Sistema de cartas roguelite activo");
         println!();
@@ -1826,20 +1861,34 @@ impl ReactorApp for Xenofall {
         println!("╔═══════════════════════════════════════════════════╗");
         println!("║       ⚡ XENOFALL — After Action Report ⚡      ║");
         println!("╠═══════════════════════════════════════════════════╣");
-        println!("║  Resultado:  {}", match self.state {
-                  GameState::Victory => "🏆 ¡VICTORIA!",
-                  GameState::GameOver => "💀 GAME OVER",
-                  _ => "🏁 Abandonado",});
+        println!(
+            "║  Resultado:  {}",
+            match self.state {
+                GameState::Victory => "🏆 ¡VICTORIA!",
+                GameState::GameOver => "💀 GAME OVER",
+                _ => "🏁 Abandonado",
+            }
+        );
         println!("║  Puntuación: {:>37}  ║", self.score);
         println!("║  Kills:      {:>37}  ║", self.kills);
         println!("║  Headshots:  {:>37}  ║", self.headshots);
         println!("║  Disparos:   {:>37}  ║", self.shots_fired);
-        let acc = if self.shots_fired > 0 {(self.shots_hit as f32 / self.shots_fired as f32 * 100.0) as u32} else {0};
+        let acc = if self.shots_fired > 0 {
+            (self.shots_hit as f32 / self.shots_fired as f32 * 100.0) as u32
+        } else {
+            0
+        };
         println!("║  Precisión:  {:>36}% ║", acc);
-        println!("║  Oleadas:    {:>37}  ║", format!("{}/{}", self.current_wave, self.waves.len()));
+        println!(
+            "║  Oleadas:    {:>37}  ║",
+            format!("{}/{}", self.current_wave, self.waves.len())
+        );
         if !self.build.cards_collected.is_empty() {
             println!("╠═══════════════════════════════════════════════════╣");
-            println!("║  Build ({} cartas):                               ║", self.build.cards_collected.len());
+            println!(
+                "║  Build ({} cartas):                               ║",
+                self.build.cards_collected.len()
+            );
             for card in &self.build.cards_collected {
                 println!("║    {}  ║", card.name());
             }

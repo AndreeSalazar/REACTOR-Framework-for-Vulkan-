@@ -213,8 +213,8 @@ where
     let identity_fn = identity;
     slice
         .par_iter()
-        .fold(|| identity_fn(), |acc, item| fold_op(acc, item))
-        .reduce(|| identity_fn(), reduce_op)
+        .fold(identity_fn.clone(), fold_op)
+        .reduce(identity_fn, reduce_op)
 }
 
 #[cfg(test)]
@@ -223,11 +223,13 @@ mod tests {
 
     #[test]
     fn test_parallel_for() {
-        let mut v = vec![0i32; 100];
+        use std::sync::atomic::{AtomicI32, Ordering};
+
+        let v = (0..100).map(|_| AtomicI32::new(0)).collect::<Vec<_>>();
         parallel_for(0..v.len(), |i| {
-            v[i] = i as i32 * 2;
+            v[i].store(i as i32 * 2, Ordering::Relaxed);
         });
-        assert_eq!(v[50], 100);
+        assert_eq!(v[50].load(Ordering::Relaxed), 100);
     }
 
     #[test]

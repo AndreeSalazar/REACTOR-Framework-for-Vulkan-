@@ -1,14 +1,14 @@
 //! # REACTOR Framework
-//! 
+//!
 //! A high-performance, memory-safe game engine built with Rust and Vulkan.
-//! 
+//!
 //! ## Quick Start
-//! 
+//!
 //! ```rust
 //! use reactor_vulkan::prelude::*;
-//! 
+//!
 //! struct MyGame;
-//! 
+//!
 //! impl ReactorApp for MyGame {
 //!     fn config(&self) -> ReactorConfig {
 //!         ReactorConfig::new("My Game")
@@ -24,7 +24,7 @@
 //!         // Game loop
 //!     }
 //! }
-//! 
+//!
 //! fn main() {
 //!     reactor_vulkan::run(MyGame);
 //! }
@@ -33,18 +33,18 @@
 #![allow(unused_variables, dead_code)]
 
 // Core modules
+pub mod app;
+pub mod builtin_shaders;
+pub mod compute;
 pub mod core;
-pub mod platform;
 pub mod graphics;
+pub mod platform;
+pub mod raytracing;
+pub mod renderer;
 pub mod resources;
 pub mod scene;
-pub mod renderer;
-pub mod raytracing;
-pub mod compute;
 pub mod systems;
-pub mod app;
 pub mod utils;
-pub mod builtin_shaders;
 
 // Main reactor module
 pub mod reactor;
@@ -53,64 +53,89 @@ pub mod reactor;
 pub use app::run;
 
 // Re-export commonly used types at the crate root
-pub use core::error::{ReactorError, ReactorResult, ErrorCode};
-pub use core::context::VulkanContext;
+pub use app::app::{quick, quick_with, ReactorApp};
 pub use app::config::{ReactorConfig, RendererMode};
-pub use app::app::{ReactorApp, quick, quick_with};
+pub use core::context::VulkanContext;
+pub use core::error::{ErrorCode, ReactorError, ReactorResult};
+pub use reactor::Reactor;
+pub use resources::font::FontAsset;
+pub use resources::material::Material;
+pub use resources::mesh::Mesh;
+pub use resources::vertex::Vertex;
 pub use scene::camera::Camera;
 pub use scene::transform::Transform;
-pub use resources::mesh::Mesh;
-pub use resources::material::Material;
-pub use resources::font::FontAsset;
 pub use systems::audio::AudioClip;
-pub use resources::vertex::Vertex;
-pub use reactor::Reactor;
 
 // Re-export system types
 pub use systems::lighting::{Light, LightType, LightingSystem};
-pub use systems::physics::{PhysicsWorld, RigidBody, Ray, Sphere, AABB};
+pub use systems::physics::{PhysicsWorld, Ray, RigidBody, Sphere, AABB};
 pub use systems::scene::Scene;
 
 // Re-export utility types
 pub use utils::{CPUDetector, ResolutionDetector};
 
 // Re-export glam types for convenience
-pub use glam::{Vec2, Vec3, Vec4, Mat3, Mat4, Quat};
+pub use glam::{Mat3, Mat4, Quat, Vec2, Vec3, Vec4};
 
 /// Prelude module - import everything you need with `use reactor_vulkan::prelude::*;`
 pub mod prelude {
+    pub use crate::platform::{Gamepad, GamepadAxis, GamepadButton};
+    pub use crate::systems::audio::{
+        AudioClipId, AudioListener, AudioSource, AudioSourceId, AudioSystem,
+    };
+    pub use crate::systems::event_bus::{EventBus, Observer};
     pub use crate::{
-        // App
-        ReactorConfig, ReactorApp, RendererMode, run, quick, quick_with,
-        
-        // Core
-        ReactorError, ReactorResult, ErrorCode, VulkanContext,
-        Reactor,
-        
-        // Scene / Systems
-        Camera, Transform, Scene,
-        Light, LightType, LightingSystem,
-        PhysicsWorld, RigidBody, Ray, Sphere, AABB,
-        
-        // Utilities
-        CPUDetector, ResolutionDetector,
-        
-        // Resources
-        Mesh, Material, FontAsset,
-        
+        quick,
+        quick_with,
+
+        run,
         // Audio
         AudioClip,
 
+        // Utilities
+        CPUDetector,
+        // Scene / Systems
+        Camera,
+        ErrorCode,
+        FontAsset,
+
+        Light,
+        LightType,
+        LightingSystem,
+        Mat3,
+        Mat4,
+        Material,
+        // Resources
+        Mesh,
+        PhysicsWorld,
+        Quat,
+        Ray,
+        Reactor,
+
+        ReactorApp,
+        // App
+        ReactorConfig,
+        // Core
+        ReactorError,
+        ReactorResult,
+        RendererMode,
+        ResolutionDetector,
+
+        RigidBody,
+        Scene,
+        Sphere,
+        Transform,
         // Math
-        Vec2, Vec3, Vec4, Mat3, Mat4, Quat,
+        Vec2,
+        Vec3,
+        Vec4,
+        VulkanContext,
+        AABB,
     };
-    pub use crate::systems::audio::{AudioSystem, AudioClipId, AudioSourceId, AudioListener, AudioSource};
-    pub use crate::systems::event_bus::{EventBus, Observer};
-    pub use crate::platform::{Gamepad, GamepadButton, GamepadAxis};
-    
+
     // Re-export the ReactorContext type alias if it exists
+    pub use crate::app::app::{GltfBounds, GltfSpawn, ModelSpawnInfo};
     pub use crate::app::ReactorContext;
-    pub use crate::app::app::{GltfSpawn, GltfBounds, ModelSpawnInfo};
 }
 
 /// Macro for declarative game definition
@@ -125,7 +150,7 @@ macro_rules! game {
         update: $update:expr
     ) => {{
         struct Game;
-        
+
         impl $crate::ReactorApp for Game {
             fn config(&self) -> $crate::ReactorConfig {
                 $crate::ReactorConfig::new($title)
@@ -133,16 +158,16 @@ macro_rules! game {
                     .with_vsync($vsync)
                     .with_msaa($msaa)
             }
-            
+
             fn init(&mut self, ctx: &mut $crate::app::ReactorContext) {
                 $crate::app::call_init($init, ctx);
             }
-            
+
             fn update(&mut self, ctx: &mut $crate::app::ReactorContext) {
                 $crate::app::call_update($update, ctx);
             }
         }
-        
+
         $crate::run(Game);
     }};
 }

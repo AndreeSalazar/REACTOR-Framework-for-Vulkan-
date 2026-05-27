@@ -102,7 +102,7 @@ impl Camera {
     }
 
     pub fn rotate_pitch(&mut self, angle: f32) {
-        self.rotation = self.rotation * Quat::from_rotation_x(angle);
+        self.rotation *= Quat::from_rotation_x(angle);
     }
 
     /// Set camera rotation from yaw and pitch angles (radians)

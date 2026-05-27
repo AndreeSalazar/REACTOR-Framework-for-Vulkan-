@@ -1,8 +1,8 @@
-use crate::graphics::pipeline::{Pipeline, PipelineConfig};
-use crate::resources::texture::Texture;
-use crate::core::VulkanContext;
 use crate::core::arc_handle::ArcDevice;
 use crate::core::error::ReactorResult;
+use crate::core::VulkanContext;
+use crate::graphics::pipeline::{Pipeline, PipelineConfig};
+use crate::resources::texture::Texture;
 use ash::vk;
 use std::sync::Arc;
 
@@ -13,8 +13,6 @@ pub struct Material {
     pub descriptor_layout: Option<vk::DescriptorSetLayout>,
     device: Option<ArcDevice>,
 }
-
-
 
 impl Material {
     /// Crea un material con soporte para MSAA (Multi-Sample Anti-Aliasing)

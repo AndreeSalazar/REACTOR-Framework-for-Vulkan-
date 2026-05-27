@@ -5,13 +5,13 @@
 // incluso si el archivo se mueve o modifica.
 // =============================================================================
 
-use std::path::{Path, PathBuf};
+use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
+use std::path::{Path, PathBuf};
 use xxhash_rust::xxh3::xxh3_64;
-use serde::{Serialize, Deserialize};
 
 /// Identificador único y estable para assets (hash del path + contenido)
-/// 
+///
 /// - Determinista: mismo archivo → mismo AssetId siempre
 /// - Robusto: cambios en el contenido cambian el ID (hot-reload)
 /// - Eficiente: u64, copiable, comparable en O(1)
@@ -26,13 +26,10 @@ impl AssetId {
     /// Útil para referencias rápidas cuando no necesitas detectar cambios
     pub fn from_path<P: AsRef<Path>>(path: P) -> Self {
         let path = path.as_ref();
-        
+
         // Normalizar: lowercase + reemplazar separators para consistencia cross-platform
-        let normalized = path
-            .to_string_lossy()
-            .to_lowercase()
-            .replace('\\', "/");
-        
+        let normalized = path.to_string_lossy().to_lowercase().replace('\\', "/");
+
         Self(xxh3_64(normalized.as_bytes()))
     }
 
@@ -46,7 +43,7 @@ impl AssetId {
     }
 
     /// Genera AssetId desde string arbitrario (para assets procedurales)
-    pub fn from_str(s: &str) -> Self {
+    pub fn from_key(s: &str) -> Self {
         Self(xxh3_64(s.as_bytes()))
     }
 
@@ -98,7 +95,8 @@ pub struct AssetPath(PathBuf);
 impl AssetPath {
     /// Crear desde string, normalizando separators
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
-        let normalized = path.as_ref()
+        let normalized = path
+            .as_ref()
             .to_string_lossy()
             .replace('\\', "/")
             .to_lowercase();
@@ -172,7 +170,7 @@ mod tests {
         let id1 = AssetId::from_path("assets/models/zombie.glb");
         let id2 = AssetId::from_path("ASSETS/MODELS/ZOMBIE.GLB"); // uppercase
         let id3 = AssetId::from_path("assets\\models\\zombie.glb"); // windows separators
-        
+
         assert_eq!(id1, id2, "Debe ser case-insensitive");
         assert_eq!(id1, id3, "Debe normalizar separators");
     }
@@ -181,10 +179,10 @@ mod tests {
     fn test_asset_id_content_sensitivity() {
         let content1 = b"hello world";
         let content2 = b"hello world!";
-        
+
         let id1 = AssetId::from_path_with_content("test.txt", content1);
         let id2 = AssetId::from_path_with_content("test.txt", content2);
-        
+
         assert_ne!(id1, id2, "Contenido diferente debe generar ID diferente");
     }
 

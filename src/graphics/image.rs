@@ -1,10 +1,8 @@
-use crate::core::VulkanContext;
 use crate::core::arc_handle::ArcDevice;
-use crate::core::error::{ReactorResult, ReactorError, ErrorCode};
+use crate::core::error::{ErrorCode, ReactorError, ReactorResult};
+use crate::core::VulkanContext;
 use ash::vk;
-use gpu_allocator::vulkan::{
-    Allocator, Allocation, AllocationCreateDesc, AllocationScheme,
-};
+use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator};
 use gpu_allocator::MemoryLocation;
 use std::sync::{Arc, Mutex};
 
@@ -46,22 +44,40 @@ impl Image {
             .samples(vk::SampleCountFlags::TYPE_1);
 
         let handle = unsafe {
-            device.create_image(&image_info, None)
-                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanImageCreation, "create_image failed", e))?
+            device.create_image(&image_info, None).map_err(|e| {
+                ReactorError::with_source(ErrorCode::VulkanImageCreation, "create_image failed", e)
+            })?
         };
         let requirements = unsafe { device.get_image_memory_requirements(handle) };
 
-        let allocation = allocator.lock().unwrap().allocate(&AllocationCreateDesc {
-            name: "image",
-            requirements,
-            location: MemoryLocation::GpuOnly,
-            linear: false,
-            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
-        }).map_err(|e| ReactorError::with_source(ErrorCode::VulkanMemoryAllocation, "image allocation failed", e))?;
+        let allocation = allocator
+            .lock()
+            .unwrap()
+            .allocate(&AllocationCreateDesc {
+                name: "image",
+                requirements,
+                location: MemoryLocation::GpuOnly,
+                linear: false,
+                allocation_scheme: AllocationScheme::GpuAllocatorManaged,
+            })
+            .map_err(|e| {
+                ReactorError::with_source(
+                    ErrorCode::VulkanMemoryAllocation,
+                    "image allocation failed",
+                    e,
+                )
+            })?;
 
         unsafe {
-            device.bind_image_memory(handle, allocation.memory(), allocation.offset())
-                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanImageCreation, "bind_image_memory failed", e))?;
+            device
+                .bind_image_memory(handle, allocation.memory(), allocation.offset())
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanImageCreation,
+                        "bind_image_memory failed",
+                        e,
+                    )
+                })?;
         }
 
         let view_info = vk::ImageViewCreateInfo::default()
@@ -78,8 +94,13 @@ impl Image {
             );
 
         let view = unsafe {
-            device.create_image_view(&view_info, None)
-                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanImageCreation, "create_image_view failed", e))?
+            device.create_image_view(&view_info, None).map_err(|e| {
+                ReactorError::with_source(
+                    ErrorCode::VulkanImageCreation,
+                    "create_image_view failed",
+                    e,
+                )
+            })?
         };
 
         Ok(Self {

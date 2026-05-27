@@ -302,8 +302,6 @@ fn gen_combo() -> Vec<i16> {
 
         for (idx, &freq) in notes.iter().enumerate() {
             let start = idx as f64 * (note_dur + gap);
-            let end = start + note_dur;
-
             if t >= start {
                 let nt = t - start;
                 // Each note has attack and exponential decay
@@ -314,7 +312,8 @@ fn gen_combo() -> Vec<i16> {
                 };
 
                 // Pure tone + slight harmonic for chime character
-                let tone = sine(freq, nt) * 0.7 + sine(freq * 2.0, nt) * 0.2 + sine(freq * 3.0, nt) * 0.08;
+                let tone =
+                    sine(freq, nt) * 0.7 + sine(freq * 2.0, nt) * 0.2 + sine(freq * 3.0, nt) * 0.08;
                 val += tone * env;
             }
         }
@@ -465,7 +464,7 @@ fn gen_victory() -> Vec<i16> {
             let chorus2 = sine(freq * 0.997, t + 0.002);
 
             // Combine with chorus effect
-            val += (main * 0.5 + chorus1 * 0.25 + chorus2 * 0.25);
+            val += main * 0.5 + chorus1 * 0.25 + chorus2 * 0.25;
         }
 
         // Normalize for 3 notes
@@ -518,7 +517,8 @@ fn main() {
     }
 
     println!();
-    println!("  Generated {} files ({:.1} KB total)",
+    println!(
+        "  Generated {} files ({:.1} KB total)",
         sound_effects.len(),
         total_bytes as f64 / 1024.0
     );

@@ -19,12 +19,12 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::reactor::Reactor;
 use crate::platform::input::Input;
 use crate::platform::time::Time;
+use crate::reactor::Reactor;
 use crate::resources::{
-    AssetManager, GltfLoader, AssetDatabase, AssetHotReloadManager, AssetLoaderQueue,
-    Handle, AssetId, AssetType
+    AssetDatabase, AssetHotReloadManager, AssetId, AssetLoaderQueue, AssetManager, GltfLoader,
+    Handle,
 };
 
 use std::sync::Arc;
@@ -34,28 +34,24 @@ use std::sync::Arc;
 // =============================================================================
 
 /// Renderer backend selection.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum RendererMode {
+    #[default]
     Forward,
     Deferred,
     RayTracing,
-}
-
-impl Default for RendererMode {
-    fn default() -> Self {
-        Self::Forward
-    }
 }
 
 /// Configuration for a REACTOR application.
 ///
 /// # Rust (builder pattern)
 /// ```rust,no_run
-/// ReactorConfig::new("My Game")
+/// # use reactor_vulkan::prelude::*;
+/// let _config = ReactorConfig::new("My Game")
 ///     .with_size(1920, 1080)
 ///     .with_vsync(true)
 ///     .with_renderer(RendererMode::RayTracing)
-///     .with_scene("assets/level1.gltf")
+///     .with_scene("assets/level1.gltf");
 /// ```
 ///
 /// # C++ (designated initializers)
@@ -164,7 +160,7 @@ impl Default for ReactorConfig {
 ///
 /// # Example
 /// ```rust,no_run
-/// use reactor::app::{ReactorApp, ReactorContext, ReactorConfig};
+/// use reactor_vulkan::prelude::*;
 ///
 /// struct MyGame {
 ///     rotation: f32,
@@ -186,7 +182,7 @@ impl Default for ReactorConfig {
 /// }
 ///
 /// fn main() {
-///     reactor::run(MyGame { rotation: 0.0 });
+///     reactor_vulkan::run(MyGame { rotation: 0.0 });
 /// }
 /// ```
 pub trait ReactorApp {
@@ -354,7 +350,9 @@ pub struct ReactorContext {
     pub asset_loader_queue: AssetLoaderQueue,
     pub audio: crate::systems::audio::AudioSystem,
     pub event_bus: crate::systems::event_bus::EventBus,
-    pub(crate) hot_reload_rx: Option<tokio::sync::mpsc::UnboundedReceiver<crate::resources::asset_hot_reload::AssetReloadEvent>>,
+    pub(crate) hot_reload_rx: Option<
+        tokio::sync::mpsc::UnboundedReceiver<crate::resources::asset_hot_reload::AssetReloadEvent>,
+    >,
 
     // 🌑 Blob shadows (Fase 4.3 — fallback HOTD-style sin shadow maps GPU)
     pub(crate) blob_shadow_mesh: Option<std::sync::Arc<crate::resources::mesh::Mesh>>,
@@ -603,8 +601,8 @@ impl ReactorContext {
     /// Coloca la cámara en `eye` y la apunta a `target`. Forma corta.
     ///
     /// ```rust,no_run
-    /// # use reactor::prelude::*;
-    /// # fn demo(ctx: &mut reactor::ReactorContext) {
+    /// # use reactor_vulkan::prelude::*;
+    /// # fn demo(ctx: &mut reactor_vulkan::app::ReactorContext) {
     /// ctx.look_at(Vec3::new(0.0, 2.0, 5.0), Vec3::ZERO);
     /// # }
     /// ```
@@ -626,7 +624,7 @@ impl ReactorContext {
     /// Añade un sol direccional con valores por defecto agradables.
     ///
     /// ```rust,no_run
-    /// # fn demo(ctx: &mut reactor::ReactorContext) {
+    /// # fn demo(ctx: &mut reactor_vulkan::app::ReactorContext) {
     /// ctx.add_sun();
     /// # }
     /// ```
@@ -712,7 +710,7 @@ impl ReactorContext {
     /// (vertex color + iluminación básica). Listo para usar sin tocar disco.
     ///
     /// ```rust,no_run
-    /// # fn demo(ctx: &mut reactor::ReactorContext) -> Result<(), reactor::core::error::ReactorError> {
+    /// # fn demo(ctx: &mut reactor_vulkan::app::ReactorContext) -> Result<(), reactor_vulkan::ReactorError> {
     /// let mat = ctx.default_material()?;
     /// # Ok(()) }
     /// ```
@@ -825,12 +823,7 @@ impl ReactorContext {
     /// Mueve y re-escala un blob existente para que siga a su entidad.
     ///
     /// Llamar cada frame con la posición actual de la entidad propietaria.
-    pub fn move_blob_shadow(
-        &mut self,
-        index: usize,
-        position: glam::Vec3,
-        radius: f32,
-    ) {
+    pub fn move_blob_shadow(&mut self, index: usize, position: glam::Vec3, radius: f32) {
         self.set_transform(index, Self::blob_xf(position, radius));
     }
 
@@ -883,7 +876,8 @@ impl ReactorContext {
         &mut self,
         path: P,
     ) -> crate::core::error::ReactorResult<crate::resources::GltfModel> {
-        self.gltf_loader.load(path)
+        self.gltf_loader
+            .load(path)
             .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
     }
 
@@ -894,10 +888,11 @@ impl ReactorContext {
     ) -> crate::core::error::ReactorResult<crate::resources::GltfModel> {
         let path_buf = path.as_ref().to_path_buf();
         let mut loader = self.gltf_loader.clone();
-        tokio::task::spawn_blocking(move || {
-            loader.load(path_buf)
-        }).await
-        .map_err(|e| crate::core::error::ReactorError::internal(format!("Blocking task failed: {}", e)))?
+        tokio::task::spawn_blocking(move || loader.load(path_buf))
+            .await
+            .map_err(|e| {
+                crate::core::error::ReactorError::internal(format!("Blocking task failed: {}", e))
+            })?
     }
 
     /// Carga un modelo glTF en la cola asíncrona (background)
@@ -906,7 +901,9 @@ impl ReactorContext {
         &mut self,
         path: P,
         priority: crate::resources::LoadPriority,
-    ) -> tokio::sync::oneshot::Receiver<crate::core::error::ReactorResult<Handle<crate::resources::GltfModel>>> {
+    ) -> tokio::sync::oneshot::Receiver<
+        crate::core::error::ReactorResult<Handle<crate::resources::GltfModel>>,
+    > {
         let path_buf = path.as_ref().to_path_buf();
         let id = AssetId::from_path(&path_buf);
         self.asset_loader_queue.enqueue_gltf(id, path_buf, priority)
@@ -1020,8 +1017,12 @@ impl ReactorContext {
         // ── 5. Spawn real ──
         let indices = self.spawn_gltf_model(&model, transform)?;
 
-        let world_min = (min - native_center) * scale + spawn.position + glam::Vec3::Y * (native_center.y * scale - min.y * scale);
-        let world_max = (max - native_center) * scale + spawn.position + glam::Vec3::Y * (native_center.y * scale - min.y * scale);
+        let world_min = (min - native_center) * scale
+            + spawn.position
+            + glam::Vec3::Y * (native_center.y * scale - min.y * scale);
+        let world_max = (max - native_center) * scale
+            + spawn.position
+            + glam::Vec3::Y * (native_center.y * scale - min.y * scale);
 
         Ok(ModelSpawnInfo {
             indices,
@@ -1054,7 +1055,7 @@ impl ReactorContext {
         indices: &mut Vec<usize>,
     ) -> crate::core::error::ReactorResult<()> {
         let world_transform = parent_transform * node.transform;
-        
+
         // Si el nodo tiene mesh, crear entidad en escena
         if let Some(mesh_idx) = node.mesh_index {
             if let Some(mesh_data) = model.meshes.get(mesh_idx) {
@@ -1066,7 +1067,7 @@ impl ReactorContext {
                     &mesh_data.indices,
                 )?;
                 let mesh_arc = std::sync::Arc::new(vulkan_mesh);
-                
+
                 // Determinar material
                 let material_arc = if let Some(mat_idx) = mesh_data.material_index {
                     if let Some(mat_data) = model.materials.get(mat_idx) {
@@ -1084,8 +1085,12 @@ impl ReactorContext {
                                 // Crear material con textura
                                 let vert = crate::builtin_shaders::vert_textured();
                                 let frag = crate::builtin_shaders::frag_textured();
-                                let mat = self.reactor.create_textured_material(&vert, &frag, &texture)
-                                    .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))?;
+                                let mat = self
+                                    .reactor
+                                    .create_textured_material(&vert, &frag, &texture)
+                                    .map_err(|e| {
+                                        crate::core::error::ReactorError::internal(e.to_string())
+                                    })?;
                                 std::sync::Arc::new(mat)
                             } else {
                                 std::sync::Arc::new(self.default_material()?)
@@ -1099,17 +1104,19 @@ impl ReactorContext {
                 } else {
                     std::sync::Arc::new(self.default_material()?)
                 };
-                
-                let obj_idx = self.scene.add_object(mesh_arc, material_arc, world_transform);
+
+                let obj_idx = self
+                    .scene
+                    .add_object(mesh_arc, material_arc, world_transform);
                 indices.push(obj_idx);
             }
         }
-        
+
         // Recursar hijos
         for child in &node.children {
             self.spawn_gltf_node_recursive(child, model, world_transform, indices)?;
         }
-        
+
         Ok(())
     }
 
@@ -1121,12 +1128,13 @@ impl ReactorContext {
     ) -> crate::core::error::ReactorResult<AssetId> {
         let path = path.as_ref();
         let id = AssetId::from_path(path);
-        
+
         if let Some(ref mut hot_reload) = self.asset_hot_reload {
-            hot_reload.track_asset(id, path, asset_type)
+            hot_reload
+                .track_asset(id, path, asset_type)
                 .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))?;
         }
-        
+
         Ok(id)
     }
 
@@ -1149,7 +1157,6 @@ pub struct AssetPipelineStats {
     pub db: crate::resources::AssetDbStats,
     pub gltf_cache: crate::resources::GltfCacheStats,
 }
-
 
 // =============================================================================
 // Internal Application Runner
@@ -1218,21 +1225,24 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
         let gltf_loader = GltfLoader::new("assets");
         let asset_db = AssetDatabase::open(".reactor/assets.db")
             .unwrap_or_else(|_| AssetDatabase::in_memory().unwrap());
-        let asset_loader_queue = AssetLoaderQueue::new()
-            .unwrap_or_else(|_| AssetLoaderQueue::with_config(
-                crate::resources::LoaderQueueConfig {
-                    num_workers: 2,
-                    ..Default::default()
-                }
-            ).unwrap());
-        
+        let asset_loader_queue = AssetLoaderQueue::new().unwrap_or_else(|_| {
+            AssetLoaderQueue::with_config(crate::resources::LoaderQueueConfig {
+                num_workers: 2,
+                ..Default::default()
+            })
+            .unwrap()
+        });
+
         // Hot-reload setup (optional, can fail if notify not supported)
         let (hot_reload_tx, hot_reload_rx) = tokio::sync::mpsc::unbounded_channel();
-        let asset_hot_reload = AssetHotReloadManager::new(
-            crate::resources::HotReloadConfig::default(),
-            hot_reload_tx
-        ).ok();
-        let hot_reload_rx = if asset_hot_reload.is_some() { Some(hot_reload_rx) } else { None };
+        let asset_hot_reload =
+            AssetHotReloadManager::new(crate::resources::HotReloadConfig::default(), hot_reload_tx)
+                .ok();
+        let hot_reload_rx = if asset_hot_reload.is_some() {
+            Some(hot_reload_rx)
+        } else {
+            None
+        };
 
         let mut ctx = ReactorContext {
             reactor,
@@ -1289,10 +1299,8 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
                 event_loop.exit();
             }
 
-            WindowEvent::Resized(size) => {
-                if size.width > 0 && size.height > 0 {
-                    self.app.on_resize(ctx, size.width, size.height);
-                }
+            WindowEvent::Resized(size) if size.width > 0 && size.height > 0 => {
+                self.app.on_resize(ctx, size.width, size.height);
             }
 
             WindowEvent::RedrawRequested => {
@@ -1375,7 +1383,7 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
 ///
 /// # Example
 /// ```rust,no_run
-/// use reactor::app::{ReactorApp, ReactorContext, ReactorConfig};
+/// use reactor_vulkan::prelude::*;
 ///
 /// struct MyGame;
 ///
@@ -1385,7 +1393,7 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
 /// }
 ///
 /// fn main() {
-///     reactor::run(MyGame);
+///     reactor_vulkan::run(MyGame);
 /// }
 /// ```
 pub fn run<A: ReactorApp + 'static>(app: A) {
@@ -1446,7 +1454,7 @@ where
 /// **One-call game launcher** — el camino MÁS corto para arrancar un juego REACTOR.
 ///
 /// ```rust,no_run
-/// reactor::quick("Mi Juego", 1280, 720, |ctx| {
+/// reactor_vulkan::quick("Mi Juego", 1280, 720, |ctx| {
 ///     // se ejecuta cada frame
 ///     ctx.camera.position.x = ctx.time.elapsed().sin() * 5.0;
 /// });
@@ -1465,10 +1473,11 @@ where
 /// Como [`quick`] pero con un closure de inicialización adicional.
 ///
 /// ```rust,no_run
-/// reactor::quick_with(
+/// # use reactor_vulkan::prelude::*;
+/// reactor_vulkan::quick_with(
 ///     ReactorConfig::new("Mi Juego").with_size(1280, 720).with_msaa(4),
 ///     |ctx| {
-///         ctx.camera.position = reactor::prelude::Vec3::new(0.0, 2.0, 5.0);
+///         ctx.camera.position = Vec3::new(0.0, 2.0, 5.0);
 ///     },
 ///     |ctx| {
 ///         // update cada frame
@@ -1501,4 +1510,3 @@ where
 {
     f(ctx);
 }
-

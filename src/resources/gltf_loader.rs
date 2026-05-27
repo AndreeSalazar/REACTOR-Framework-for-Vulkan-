@@ -10,15 +10,14 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
-use glam::{Mat4, Vec2, Vec3, Vec4, Quat};
+use glam::{Mat4, Vec2, Vec3};
 use gltf::buffer::Data as GltfBufferData;
 use gltf::image::Data as GltfImageData;
 
-use crate::core::error::{ReactorResult, ReactorError};
-use crate::resources::vertex::Vertex;
+use crate::core::error::{ReactorError, ReactorResult};
 use crate::resources::asset_id::AssetId;
+use crate::resources::vertex::Vertex;
 
 // =============================================================================
 // CPU-side data types (no Vulkan dependency)
@@ -177,51 +176,54 @@ impl GltfLoader {
     /// Cargar un archivo .glb o .gltf desde disco (síncrono)
     pub fn load<P: AsRef<Path>>(&mut self, path: P) -> ReactorResult<GltfModel> {
         let path = path.as_ref();
-        let content = std::fs::read(path)
-            .map_err(|e| ReactorError::asset_load(format!("Failed to read {}: {}", path.display(), e)))?;
-        
+        let content = std::fs::read(path).map_err(|e| {
+            ReactorError::asset_load(format!("Failed to read {}: {}", path.display(), e))
+        })?;
+
         let asset_id = AssetId::from_path_with_content(path, &content);
-        
+
         // Check cache first
         if let Some(model) = self.loaded_models.get(&asset_id) {
             return Ok(model.clone());
         }
 
         // Parse glTF (gltf::import handles both .gltf and .glb)
-        let (gltf, buffers, images) = gltf::import(path)
-            .map_err(|e| ReactorError::asset_load(format!("gltf::import failed for {}: {}", path.display(), e)))?;
-        
+        let (gltf, buffers, images) = gltf::import(path).map_err(|e| {
+            ReactorError::asset_load(format!("gltf::import failed for {}: {}", path.display(), e))
+        })?;
+
         let model = self.process_gltf_data(&gltf, &buffers, &images, path, asset_id)?;
-        
+
         // Cache the result
         self.loaded_models.insert(asset_id, model.clone());
-        
+
         Ok(model)
     }
 
     /// Carga asíncrona (para no bloquear el main thread)
-    pub async fn load_async<P: AsRef<Path> + Send + 'static>(&mut self, path: P) -> ReactorResult<GltfModel> {
+    pub async fn load_async<P: AsRef<Path> + Send + 'static>(
+        &mut self,
+        path: P,
+    ) -> ReactorResult<GltfModel> {
         let path_buf = path.as_ref().to_path_buf();
-        
+
         // Leer archivo en background
-        let content = tokio::fs::read(&path_buf)
-            .await
-            .map_err(|e| ReactorError::asset_load(format!("Failed to read {}: {}", path_buf.display(), e)))?;
-        
+        let content = tokio::fs::read(&path_buf).await.map_err(|e| {
+            ReactorError::asset_load(format!("Failed to read {}: {}", path_buf.display(), e))
+        })?;
+
         let asset_id = AssetId::from_path_with_content(&path_buf, &content);
-        
+
         // Check cache
         if let Some(model) = self.loaded_models.get(&asset_id) {
             return Ok(model.clone());
         }
 
         // Parse en background (gltf::import es síncrono pero rápido para modelos pequeños)
-        let (gltf, buffers, images) = tokio::task::spawn_blocking(move || {
-            gltf::import(&path_buf)
-        })
-        .await
-        .map_err(|e| ReactorError::asset_load(format!("Spawn failed: {}", e)))?
-        .map_err(|e| ReactorError::asset_load(format!("gltf::import failed: {}", e)))?;
+        let (gltf, buffers, images) = tokio::task::spawn_blocking(move || gltf::import(&path_buf))
+            .await
+            .map_err(|e| ReactorError::asset_load(format!("Spawn failed: {}", e)))?
+            .map_err(|e| ReactorError::asset_load(format!("gltf::import failed: {}", e)))?;
 
         // Process (CPU only, no Vulkan)
         let source = path.as_ref().to_path_buf();
@@ -240,7 +242,8 @@ impl GltfLoader {
         // Extract textures (CPU-side RGBA data)
         let mut textures = Vec::new();
         for (idx, image) in images.iter().enumerate() {
-            let texture_data = self.extract_texture(image, &format!("{}#texture_{}", path.display(), idx))?;
+            let texture_data =
+                self.extract_texture(image, &format!("{}#texture_{}", path.display(), idx))?;
             textures.push(texture_data);
         }
 
@@ -321,9 +324,10 @@ impl GltfLoader {
             _ => {
                 // Para formatos de 16-bit, intentar truncar a 8-bit
                 // En la práctica, la mayoría de modelos usan 8-bit
-                return Err(ReactorError::asset_load(
-                    format!("Unsupported texture format {:?} in {}", image.format, name)
-                ));
+                return Err(ReactorError::asset_load(format!(
+                    "Unsupported texture format {:?} in {}",
+                    image.format, name
+                )));
             }
         };
 
@@ -355,7 +359,9 @@ impl GltfLoader {
             roughness: pbr.roughness_factor(),
             base_color_texture_index: pbr.base_color_texture().map(|t| t.texture().index()),
             normal_texture_index: mat.normal_texture().map(|t| t.texture().index()),
-            metallic_roughness_texture_index: pbr.metallic_roughness_texture().map(|t| t.texture().index()),
+            metallic_roughness_texture_index: pbr
+                .metallic_roughness_texture()
+                .map(|t| t.texture().index()),
             occlusion_texture_index: mat.occlusion_texture().map(|t| t.texture().index()),
             emissive_texture_index: mat.emissive_texture().map(|t| t.texture().index()),
             emissive_factor: emissive,
@@ -377,22 +383,25 @@ impl GltfLoader {
 
         for primitive in mesh.primitives() {
             let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
-            
+
             // Positions (required)
-            let positions: Vec<[f32; 3]> = reader.read_positions()
+            let positions: Vec<[f32; 3]> = reader
+                .read_positions()
                 .ok_or_else(|| ReactorError::asset_load("Mesh missing positions"))?
                 .collect();
-            
+
             // Normals (optional but recommended for PBR)
-            let normals: Vec<[f32; 3]> = reader.read_normals()
+            let normals: Vec<[f32; 3]> = reader
+                .read_normals()
                 .map(|n| n.collect())
                 .unwrap_or_else(|| vec![[0.0, 0.0, 1.0]; positions.len()]);
-            
+
             // TexCoords (optional) — use into_f32() to normalize
-            let uvs: Vec<[f32; 2]> = reader.read_tex_coords(0)
+            let uvs: Vec<[f32; 2]> = reader
+                .read_tex_coords(0)
                 .map(|uv| uv.into_f32().collect())
                 .unwrap_or_else(|| vec![[0.0, 0.0]; positions.len()]);
-            
+
             // Build vertices using Vertex::with_normal (color slot stores normal)
             let base_vertex = vertices.len() as u32;
             for i in 0..positions.len() {
@@ -402,7 +411,7 @@ impl GltfLoader {
                     Vec2::from(uvs[i]),
                 ));
             }
-            
+
             // Indices — use into_u32() for uniform access
             if let Some(idx_reader) = reader.read_indices() {
                 indices.extend(idx_reader.into_u32().map(|i| i + base_vertex));
@@ -416,11 +425,11 @@ impl GltfLoader {
                 material_index = primitive.material().index();
             }
         }
-        
+
         if vertices.is_empty() {
             return Err(ReactorError::asset_load("Mesh has no vertices"));
         }
-        
+
         Ok(GltfMeshData {
             vertices,
             indices,
@@ -431,14 +440,16 @@ impl GltfLoader {
 
     /// Construir jerarquía de nodos recursivamente
     fn build_node_hierarchy(&self, gltf: &gltf::Document) -> ReactorResult<GltfNode> {
-        let scene = gltf.default_scene()
+        let scene = gltf
+            .default_scene()
             .or_else(|| gltf.scenes().next())
             .ok_or_else(|| ReactorError::asset_load("glTF has no scenes"))?;
-        
-        let children: Vec<GltfNode> = scene.nodes()
+
+        let children: Vec<GltfNode> = scene
+            .nodes()
             .map(|node| self.build_node(&node))
             .collect::<Result<_, _>>()?;
-        
+
         Ok(GltfNode {
             name: "root".to_string(),
             transform: Mat4::IDENTITY,
@@ -451,16 +462,18 @@ impl GltfLoader {
     /// Construir nodo individual
     fn build_node(&self, node: &gltf::Node) -> ReactorResult<GltfNode> {
         let transform = Mat4::from_cols_array_2d(&node.transform().matrix());
-        
+
         let mesh_index = node.mesh().map(|m| m.index());
-        let material_index = node.mesh()
+        let material_index = node
+            .mesh()
             .and_then(|m| m.primitives().next())
             .and_then(|p| p.material().index());
-        
-        let children: Vec<GltfNode> = node.children()
+
+        let children: Vec<GltfNode> = node
+            .children()
             .map(|child| self.build_node(&child))
             .collect::<Result<_, _>>()?;
-        
+
         Ok(GltfNode {
             name: node.name().unwrap_or("unnamed").to_string(),
             transform,
@@ -473,10 +486,10 @@ impl GltfLoader {
     /// Extraer animaciones (stub para Fase 3.2)
     fn extract_animations(&self, gltf: &gltf::Document) -> Vec<GltfAnimation> {
         let mut animations = Vec::new();
-        
+
         for anim in gltf.animations() {
             let name = anim.name().unwrap_or("unnamed").to_string();
-            
+
             // Stub: guardar metadata pero no los datos de animación aún
             animations.push(GltfAnimation {
                 name,
@@ -485,7 +498,7 @@ impl GltfLoader {
                 samplers: Vec::new(),
             });
         }
-        
+
         animations
     }
 
@@ -501,9 +514,7 @@ impl GltfLoader {
 
     /// Obtener estadísticas del cache
     pub fn cache_stats(&self) -> GltfCacheStats {
-        GltfCacheStats {
-            models_cached: self.loaded_models.len(),
-        }
+        GltfCacheStats { models_cached: self.loaded_models.len() }
     }
 }
 
@@ -527,9 +538,11 @@ impl GltfModel {
         ctx: &crate::core::VulkanContext,
         allocator: &std::sync::Arc<std::sync::Mutex<gpu_allocator::vulkan::Allocator>>,
     ) -> ReactorResult<crate::resources::mesh::Mesh> {
-        let mesh_data = self.meshes.first()
+        let mesh_data = self
+            .meshes
+            .first()
             .ok_or_else(|| ReactorError::asset_load("Model has no meshes"))?;
-        
+
         crate::resources::mesh::Mesh::new(ctx, allocator, &mesh_data.vertices, &mesh_data.indices)
     }
 
@@ -539,9 +552,15 @@ impl GltfModel {
         ctx: &crate::core::VulkanContext,
         allocator: &std::sync::Arc<std::sync::Mutex<gpu_allocator::vulkan::Allocator>>,
     ) -> ReactorResult<Vec<crate::resources::mesh::Mesh>> {
-        self.meshes.iter()
+        self.meshes
+            .iter()
             .map(|mesh_data| {
-                crate::resources::mesh::Mesh::new(ctx, allocator, &mesh_data.vertices, &mesh_data.indices)
+                crate::resources::mesh::Mesh::new(
+                    ctx,
+                    allocator,
+                    &mesh_data.vertices,
+                    &mesh_data.indices,
+                )
             })
             .collect()
     }
@@ -610,7 +629,14 @@ impl GltfModel {
             }
         }
 
-        walk(&self.root_node, self, glam::Mat4::IDENTITY, &mut min, &mut max, &mut found);
+        walk(
+            &self.root_node,
+            self,
+            glam::Mat4::IDENTITY,
+            &mut min,
+            &mut max,
+            &mut found,
+        );
 
         if found {
             Some((min, max))
@@ -624,12 +650,14 @@ impl GltfModel {
     /// Devuelve `0.0` si no hay meshes. Útil para auto-escalar
     /// (`target_height / native_height` da el factor de escala).
     pub fn height(&self) -> f32 {
-        self.bounds().map(|(mn, mx)| (mx.y - mn.y)).unwrap_or(0.0)
+        self.bounds().map(|(mn, mx)| mx.y - mn.y).unwrap_or(0.0)
     }
 
     /// Centro geométrico del AABB del modelo.
     pub fn center(&self) -> glam::Vec3 {
-        self.bounds().map(|(mn, mx)| (mn + mx) * 0.5).unwrap_or(glam::Vec3::ZERO)
+        self.bounds()
+            .map(|(mn, mx)| (mn + mx) * 0.5)
+            .unwrap_or(glam::Vec3::ZERO)
     }
 }
 

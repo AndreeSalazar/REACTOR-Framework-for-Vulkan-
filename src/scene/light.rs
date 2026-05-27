@@ -1,5 +1,5 @@
 //! Light types and management
-//! 
+//!
 //! Defines light types used in the scene graph.
 
 use glam::Vec3;

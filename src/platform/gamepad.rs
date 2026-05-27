@@ -16,6 +16,8 @@
 //! }
 //! ```
 
+#![allow(clippy::collapsible_match)]
+
 use glam::Vec2;
 use std::collections::{HashMap, HashSet};
 
@@ -58,7 +60,10 @@ impl Gamepad {
                 Some(g)
             }
             Err(e) => {
-                eprintln!("⚠️ Gamepad subsystem failed to init: {} (continuando sin mando)", e);
+                eprintln!(
+                    "⚠️ Gamepad subsystem failed to init: {} (continuando sin mando)",
+                    e
+                );
                 None
             }
         };
@@ -102,25 +107,23 @@ impl Gamepad {
     pub(crate) fn poll(&mut self) {
         // Drenar primero a un Vec local para soltar el préstamo de `self.gilrs`
         // antes de mutar el resto de campos (sticks, botones, conexión).
-        let events: Vec<(gilrs::GamepadId, gilrs::EventType)> =
-            match self.gilrs.as_mut() {
-                Some(g) => {
-                    let mut buf = Vec::new();
-                    while let Some(gilrs::Event { id, event, .. }) = g.next_event() {
-                        buf.push((id, event));
-                    }
-                    buf
+        let events: Vec<(gilrs::GamepadId, gilrs::EventType)> = match self.gilrs.as_mut() {
+            Some(g) => {
+                let mut buf = Vec::new();
+                while let Some(gilrs::Event { id, event, .. }) = g.next_event() {
+                    buf.push((id, event));
                 }
-                None => return,
-            };
+                buf
+            }
+            None => return,
+        };
 
         for (id, event) in events {
             match event {
                 gilrs::EventType::Connected => {
                     if self.active.is_none() {
                         self.active = Some(id);
-                        if let Some(pad) = self.gilrs.as_ref()
-                            .and_then(|g| g.connected_gamepad(id))
+                        if let Some(pad) = self.gilrs.as_ref().and_then(|g| g.connected_gamepad(id))
                         {
                             let name = pad.name().to_string();
                             println!("🎮 Mando conectado: {}", name);

@@ -152,9 +152,7 @@ pub struct ArcDevice {
 impl ArcDevice {
     /// Wrap a freshly-created VkDevice.
     pub fn new(device: ash::Device) -> Self {
-        Self {
-            inner: Arc::new(DeviceInner { device }),
-        }
+        Self { inner: Arc::new(DeviceInner { device }) }
     }
 
     /// Borrow the underlying `ash::Device`.
@@ -212,10 +210,7 @@ impl ArcSurface {
     /// Wrap a freshly-created VkSurfaceKHR.
     pub fn new(surface: vk::SurfaceKHR, surface_loader: ash::khr::surface::Instance) -> Self {
         Self {
-            inner: Arc::new(SurfaceInner {
-                surface,
-                surface_loader,
-            }),
+            inner: Arc::new(SurfaceInner { surface, surface_loader }),
         }
     }
 

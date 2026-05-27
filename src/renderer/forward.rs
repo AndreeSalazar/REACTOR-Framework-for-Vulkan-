@@ -1,5 +1,5 @@
 //! Forward rendering pipeline
-//! 
+//!
 //! High-level forward renderer abstraction.
 
 use crate::app::ReactorContext;

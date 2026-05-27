@@ -27,22 +27,12 @@ impl Reactor {
     }
 
     /// Crea una textura sólida 1×1 del color RGBA dado.
-    pub fn create_solid_texture(
-        &self,
-        r: u8,
-        g: u8,
-        b: u8,
-        a: u8,
-    ) -> ReactorResult<Texture> {
+    pub fn create_solid_texture(&self, r: u8, g: u8, b: u8, a: u8) -> ReactorResult<Texture> {
         Texture::solid_color(&self.context, self.allocator.clone(), r, g, b, a)
     }
 
     /// Crea un material sin texturas usando *Dynamic Rendering*.
-    pub fn create_material(
-        &self,
-        vert_code: &[u32],
-        frag_code: &[u32],
-    ) -> ReactorResult<Material> {
+    pub fn create_material(&self, vert_code: &[u32], frag_code: &[u32]) -> ReactorResult<Material> {
         Material::new_with_msaa(
             &self.context,
             None, // Dynamic Rendering

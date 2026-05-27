@@ -1,5 +1,5 @@
-use crate::resources::material::Material;
 use crate::core::error::ReactorResult;
+use crate::resources::material::Material;
 use crate::resources::mesh::Mesh;
 use crate::resources::vertex::Vertex;
 use glam::{Mat4, Vec2, Vec3};
@@ -74,8 +74,7 @@ impl ObjData {
                     // Parse face (triangulate if needed)
                     let mut face_indices: Vec<u32> = Vec::new();
 
-                    for i in 1..parts.len() {
-                        let vertex_data = parts[i];
+                    for vertex_data in parts.iter().skip(1) {
                         let indices_parts: Vec<&str> = vertex_data.split('/').collect();
 
                         let pos_idx: usize = indices_parts[0].parse::<usize>()? - 1;
@@ -255,6 +254,12 @@ impl ModelBatch {
     }
 }
 
+impl Default for ModelBatch {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // =============================================================================
 // glTF 2.0 Loader — Standard 3D model format
 // =============================================================================
@@ -298,8 +303,8 @@ impl GltfData {
                     .unwrap_or_else(|| vec![[0.0, 0.0]; positions.len()]);
 
                 // Build vertices
-                for i in 0..positions.len() {
-                    let pos = Vec3::from_array(positions[i]);
+                for (i, position) in positions.iter().enumerate() {
+                    let pos = Vec3::from_array(*position);
                     let normal =
                         Vec3::from_array(normals.get(i).copied().unwrap_or([0.0, 1.0, 0.0]));
                     let uv = Vec2::from_array(tex_coords.get(i).copied().unwrap_or([0.0, 0.0]));

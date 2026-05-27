@@ -13,7 +13,7 @@ fn main() {
         Ok((doc, buffers, _)) => {
             println!("✅ glTF loaded successfully.");
             println!("Meshes count: {}", doc.meshes().count());
-            
+
             let mut min_x = f32::MAX;
             let mut max_x = f32::MIN;
             let mut min_y = f32::MAX;
@@ -43,17 +43,41 @@ fn main() {
             println!();
             println!("📊 Geometry Bounds:");
             println!("  Vertex Count: {}", vertex_count);
-            println!("  X Bounds:     [{:.3}, {:.3}] (Width: {:.3})", min_x, max_x, max_x - min_x);
-            println!("  Y Bounds:     [{:.3}, {:.3}] (Height: {:.3})", min_y, max_y, max_y - min_y);
-            println!("  Z Bounds:     [{:.3}, {:.3}] (Depth: {:.3})", min_z, max_z, max_z - min_z);
+            println!(
+                "  X Bounds:     [{:.3}, {:.3}] (Width: {:.3})",
+                min_x,
+                max_x,
+                max_x - min_x
+            );
+            println!(
+                "  Y Bounds:     [{:.3}, {:.3}] (Height: {:.3})",
+                min_y,
+                max_y,
+                max_y - min_y
+            );
+            println!(
+                "  Z Bounds:     [{:.3}, {:.3}] (Depth: {:.3})",
+                min_z,
+                max_z,
+                max_z - min_z
+            );
             println!();
 
             if max_y - min_y > 50.0 {
-                println!("⚠️ WARNING: The model is extremely large! Height is {:.1} units.", max_y - min_y);
+                println!(
+                    "⚠️ WARNING: The model is extremely large! Height is {:.1} units.",
+                    max_y - min_y
+                );
             } else if max_y - min_y < 0.1 {
-                println!("⚠️ WARNING: The model is extremely small! Height is {:.4} units.", max_y - min_y);
+                println!(
+                    "⚠️ WARNING: The model is extremely small! Height is {:.4} units.",
+                    max_y - min_y
+                );
             } else {
-                println!("✅ Model height of {:.2} units is in a normal range.", max_y - min_y);
+                println!(
+                    "✅ Model height of {:.2} units is in a normal range.",
+                    max_y - min_y
+                );
             }
         }
         Err(e) => {

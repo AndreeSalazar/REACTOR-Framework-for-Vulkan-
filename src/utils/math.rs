@@ -1,5 +1,5 @@
 //! Math helpers and utilities
-//! 
+//!
 //! Re-exports glam types and provides additional math functions.
 
 pub use glam::{Mat3, Mat4, Quat, Vec2, Vec3, Vec4};

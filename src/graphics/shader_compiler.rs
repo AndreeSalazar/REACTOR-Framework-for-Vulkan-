@@ -30,18 +30,18 @@
 //! let layout = compiled.create_descriptor_set_layout(&device)?;
 //! ```
 
-use std::path::Path;
-use std::fs;
 use std::collections::HashMap;
 use std::ffi::CStr;
+use std::fs;
+use std::path::Path;
 
 use ash::vk;
-use naga::front;
 use naga::back::spv;
-use naga::valid::{Validator, ValidationFlags, Capabilities};
+use naga::front;
+use naga::valid::{Capabilities, ValidationFlags, Validator};
 
-use crate::core::error::{ReactorError, ReactorResult, ErrorCode};
 use crate::core::arc_handle::ArcDevice;
+use crate::core::error::{ErrorCode, ReactorError, ReactorResult};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Tipos públicos
@@ -78,16 +78,16 @@ pub enum ShaderStage {
 impl ShaderStage {
     pub fn to_vk(&self) -> vk::ShaderStageFlags {
         match self {
-            Self::Vertex   => vk::ShaderStageFlags::VERTEX,
+            Self::Vertex => vk::ShaderStageFlags::VERTEX,
             Self::Fragment => vk::ShaderStageFlags::FRAGMENT,
-            Self::Compute  => vk::ShaderStageFlags::COMPUTE,
+            Self::Compute => vk::ShaderStageFlags::COMPUTE,
         }
     }
     pub fn to_naga(&self) -> naga::ShaderStage {
         match self {
-            Self::Vertex   => naga::ShaderStage::Vertex,
+            Self::Vertex => naga::ShaderStage::Vertex,
             Self::Fragment => naga::ShaderStage::Fragment,
-            Self::Compute  => naga::ShaderStage::Compute,
+            Self::Compute => naga::ShaderStage::Compute,
         }
     }
 }
@@ -120,14 +120,14 @@ pub enum BindingType {
 impl BindingType {
     pub fn to_vk_descriptor_type(&self) -> vk::DescriptorType {
         match self {
-            Self::UniformBuffer            => vk::DescriptorType::UNIFORM_BUFFER,
-            Self::StorageBuffer { .. }     => vk::DescriptorType::STORAGE_BUFFER,
-            Self::Sampler                  => vk::DescriptorType::SAMPLER,
-            Self::SampledImage             => vk::DescriptorType::SAMPLED_IMAGE,
-            Self::CombinedImageSampler     => vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-            Self::StorageImage { .. }      => vk::DescriptorType::STORAGE_IMAGE,
-            Self::InputAttachment          => vk::DescriptorType::INPUT_ATTACHMENT,
-            Self::AccelerationStructure    => vk::DescriptorType::ACCELERATION_STRUCTURE_KHR,
+            Self::UniformBuffer => vk::DescriptorType::UNIFORM_BUFFER,
+            Self::StorageBuffer { .. } => vk::DescriptorType::STORAGE_BUFFER,
+            Self::Sampler => vk::DescriptorType::SAMPLER,
+            Self::SampledImage => vk::DescriptorType::SAMPLED_IMAGE,
+            Self::CombinedImageSampler => vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            Self::StorageImage { .. } => vk::DescriptorType::STORAGE_IMAGE,
+            Self::InputAttachment => vk::DescriptorType::INPUT_ATTACHMENT,
+            Self::AccelerationStructure => vk::DescriptorType::ACCELERATION_STRUCTURE_KHR,
         }
     }
 }
@@ -173,7 +173,11 @@ pub struct ShaderReflection {
 
 impl ShaderReflection {
     /// Construye la reflection desde un módulo naga + info de validación.
-    pub fn from_naga(module: &naga::Module, info: &naga::valid::ModuleInfo, stage: ShaderStage) -> Self {
+    pub fn from_naga(
+        module: &naga::Module,
+        info: &naga::valid::ModuleInfo,
+        stage: ShaderStage,
+    ) -> Self {
         let mut bindings = Vec::new();
         let mut push_constants = Vec::new();
         let vk_stage = stage.to_vk();
@@ -251,23 +255,27 @@ impl ShaderReflection {
         }
 
         // ── Entry points ───────────────────────────────────────────────
-        let entry_points = module.entry_points.iter().map(|ep| {
-            let stage = match ep.stage {
-                naga::ShaderStage::Vertex   => ShaderStage::Vertex,
-                naga::ShaderStage::Fragment => ShaderStage::Fragment,
-                naga::ShaderStage::Compute  => ShaderStage::Compute,
-            };
-            let workgroup_size = if ep.stage == naga::ShaderStage::Compute {
-                Some(ep.workgroup_size)
-            } else {
-                None
-            };
-            ReflectedEntryPoint {
-                name: ep.name.clone(),
-                stage,
-                workgroup_size,
-            }
-        }).collect();
+        let entry_points = module
+            .entry_points
+            .iter()
+            .map(|ep| {
+                let stage = match ep.stage {
+                    naga::ShaderStage::Vertex => ShaderStage::Vertex,
+                    naga::ShaderStage::Fragment => ShaderStage::Fragment,
+                    naga::ShaderStage::Compute => ShaderStage::Compute,
+                };
+                let workgroup_size = if ep.stage == naga::ShaderStage::Compute {
+                    Some(ep.workgroup_size)
+                } else {
+                    None
+                };
+                ReflectedEntryPoint {
+                    name: ep.name.clone(),
+                    stage,
+                    workgroup_size,
+                }
+            })
+            .collect();
 
         Self { entry_points, bindings, push_constants }
     }
@@ -297,20 +305,14 @@ impl ShaderReflection {
     fn handle_type(module: &naga::Module, ty: naga::Handle<naga::Type>) -> BindingType {
         let t = &module.types[ty];
         match t.inner {
-            naga::TypeInner::Sampler { comparison: _ } => {
-                BindingType::Sampler
-            }
-            naga::TypeInner::Image { class, .. } => {
-                match class {
-                    naga::ImageClass::Sampled { .. } => BindingType::SampledImage,
-                    naga::ImageClass::Depth { .. }   => BindingType::SampledImage,
-                    naga::ImageClass::Storage { access, .. } => {
-                        BindingType::StorageImage {
-                            read_only: !access.contains(naga::StorageAccess::STORE),
-                        }
-                    }
-                }
-            }
+            naga::TypeInner::Sampler { comparison: _ } => BindingType::Sampler,
+            naga::TypeInner::Image { class, .. } => match class {
+                naga::ImageClass::Sampled { .. } => BindingType::SampledImage,
+                naga::ImageClass::Depth { .. } => BindingType::SampledImage,
+                naga::ImageClass::Storage { access, .. } => BindingType::StorageImage {
+                    read_only: !access.contains(naga::StorageAccess::STORE),
+                },
+            },
             _ => BindingType::SampledImage, // fallback
         }
     }
@@ -321,16 +323,22 @@ impl ShaderReflection {
     /// layout unificado.
     pub fn merge_stages(&mut self, other: &ShaderReflection) {
         for other_b in &other.bindings {
-            if let Some(mine) = self.bindings.iter_mut().find(|b| {
-                b.group == other_b.group && b.binding == other_b.binding
-            }) {
+            if let Some(mine) = self
+                .bindings
+                .iter_mut()
+                .find(|b| b.group == other_b.group && b.binding == other_b.binding)
+            {
                 mine.stages |= other_b.stages;
             } else {
                 self.bindings.push(other_b.clone());
             }
         }
         for other_pc in &other.push_constants {
-            if let Some(mine) = self.push_constants.iter_mut().find(|pc| pc.name == other_pc.name) {
+            if let Some(mine) = self
+                .push_constants
+                .iter_mut()
+                .find(|pc| pc.name == other_pc.name)
+            {
                 mine.stages |= other_pc.stages;
                 mine.size = mine.size.max(other_pc.size);
             } else {
@@ -360,24 +368,29 @@ impl ShaderReflection {
         for g in 0..=max_group {
             let bindings_in_group = groups.get(&g).cloned().unwrap_or_default();
 
-            let vk_bindings: Vec<vk::DescriptorSetLayoutBinding> = bindings_in_group.iter().map(|b| {
-                vk::DescriptorSetLayoutBinding::default()
-                    .binding(b.binding)
-                    .descriptor_type(b.ty.to_vk_descriptor_type())
-                    .descriptor_count(b.count)
-                    .stage_flags(b.stages)
-            }).collect();
+            let vk_bindings: Vec<vk::DescriptorSetLayoutBinding> = bindings_in_group
+                .iter()
+                .map(|b| {
+                    vk::DescriptorSetLayoutBinding::default()
+                        .binding(b.binding)
+                        .descriptor_type(b.ty.to_vk_descriptor_type())
+                        .descriptor_count(b.count)
+                        .stage_flags(b.stages)
+                })
+                .collect();
 
-            let layout_info = vk::DescriptorSetLayoutCreateInfo::default()
-                .bindings(&vk_bindings);
+            let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&vk_bindings);
 
             let layout = unsafe {
-                device.create_descriptor_set_layout(&layout_info, None)
-                    .map_err(|e| ReactorError::with_source(
-                        ErrorCode::VulkanDescriptorSet,
-                        format!("Failed to create descriptor set layout for group {}", g),
-                        e,
-                    ))?
+                device
+                    .create_descriptor_set_layout(&layout_info, None)
+                    .map_err(|e| {
+                        ReactorError::with_source(
+                            ErrorCode::VulkanDescriptorSet,
+                            format!("Failed to create descriptor set layout for group {}", g),
+                            e,
+                        )
+                    })?
             };
             layouts.push(layout);
         }
@@ -391,25 +404,30 @@ impl ShaderReflection {
         device: &ArcDevice,
         set_layouts: &[vk::DescriptorSetLayout],
     ) -> ReactorResult<vk::PipelineLayout> {
-        let push_constant_ranges: Vec<vk::PushConstantRange> = self.push_constants.iter().map(|pc| {
-            vk::PushConstantRange {
+        let push_constant_ranges: Vec<vk::PushConstantRange> = self
+            .push_constants
+            .iter()
+            .map(|pc| vk::PushConstantRange {
                 stage_flags: pc.stages,
                 offset: 0,
                 size: pc.size,
-            }
-        }).collect();
+            })
+            .collect();
 
         let layout_info = vk::PipelineLayoutCreateInfo::default()
             .set_layouts(set_layouts)
             .push_constant_ranges(&push_constant_ranges);
 
         unsafe {
-            device.create_pipeline_layout(&layout_info, None)
-                .map_err(|e| ReactorError::with_source(
-                    ErrorCode::VulkanPipelineCreation,
-                    "Failed to create pipeline layout from reflection",
-                    e,
-                ))
+            device
+                .create_pipeline_layout(&layout_info, None)
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanPipelineCreation,
+                        "Failed to create pipeline layout from reflection",
+                        e,
+                    )
+                })
         }
     }
 }
@@ -438,12 +456,15 @@ impl CompiledShader {
     pub fn create_shader_module(&self, device: &ArcDevice) -> ReactorResult<vk::ShaderModule> {
         let create_info = vk::ShaderModuleCreateInfo::default().code(&self.spirv);
         unsafe {
-            device.create_shader_module(&create_info, None)
-                .map_err(|e| ReactorError::with_source(
-                    ErrorCode::VulkanShaderCompilation,
-                    "create_shader_module failed",
-                    e,
-                ))
+            device
+                .create_shader_module(&create_info, None)
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanShaderCompilation,
+                        "create_shader_module failed",
+                        e,
+                    )
+                })
         }
     }
 
@@ -463,7 +484,10 @@ impl CompiledShader {
     }
 
     /// Helper: crea descriptor set layouts desde la reflection.
-    pub fn create_descriptor_set_layouts(&self, device: &ArcDevice) -> ReactorResult<Vec<vk::DescriptorSetLayout>> {
+    pub fn create_descriptor_set_layouts(
+        &self,
+        device: &ArcDevice,
+    ) -> ReactorResult<Vec<vk::DescriptorSetLayout>> {
         self.reflection.create_descriptor_set_layouts(device)
     }
 }
@@ -524,9 +548,13 @@ impl ShaderCompiler {
             )
         })?;
         if bytes.len() % 4 != 0 {
-            return Err(ReactorError::new(ErrorCode::InvalidFormat, "SPIR-V file size not multiple of 4"));
+            return Err(ReactorError::new(
+                ErrorCode::InvalidFormat,
+                "SPIR-V file size not multiple of 4",
+            ));
         }
-        let spirv: Vec<u32> = bytes.chunks_exact(4)
+        let spirv: Vec<u32> = bytes
+            .chunks_exact(4)
             .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
             .collect();
         self.load_spirv_words(&spirv, stage, entry_point)
@@ -547,12 +575,20 @@ impl ShaderCompiler {
                 strict_capabilities: false,
                 block_ctx_dump_prefix: None,
             },
-        ).parse().map_err(|e| {
-            ReactorError::new(ErrorCode::ShaderCompilation, format!("SPIR-V parse error: {:?}", e))
+        )
+        .parse()
+        .map_err(|e| {
+            ReactorError::new(
+                ErrorCode::ShaderCompilation,
+                format!("SPIR-V parse error: {:?}", e),
+            )
         })?;
 
         let info = self.validator.validate(&module).map_err(|e| {
-            ReactorError::new(ErrorCode::ShaderCompilation, format!("SPIR-V validation error: {:?}", e))
+            ReactorError::new(
+                ErrorCode::ShaderCompilation,
+                format!("SPIR-V validation error: {:?}", e),
+            )
         })?;
 
         let reflection = ShaderReflection::from_naga(&module, &info, stage);
@@ -660,5 +696,7 @@ impl ShaderCompiler {
 }
 
 impl Default for ShaderCompiler {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

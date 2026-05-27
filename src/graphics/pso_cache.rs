@@ -12,16 +12,16 @@
 //! Cuando un shader cambia en disco (se detecta por `spirv_hash`), el PSO
 //! se invalida automáticamente y se recompila en el siguiente `get_or_create`.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::io::{self, Write, BufReader, BufWriter};
 use ash::vk;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs;
+use std::io::{self, BufReader, BufWriter, Write};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use crate::core::arc_handle::ArcDevice;
-use crate::core::error::{ReactorError, ReactorResult, ErrorCode};
+use crate::core::error::{ErrorCode, ReactorError, ReactorResult};
 use crate::graphics::pso_hash::PsoHash;
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -110,7 +110,10 @@ impl PsoCacheManager {
 
         // Validar magic + version
         if header.magic != PSO_CACHE_MAGIC {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid PSO cache magic"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid PSO cache magic",
+            ));
         }
         if header.version != PSO_CACHE_VERSION {
             // Versión incompatible → descartar cache silenciosamente
@@ -177,19 +180,23 @@ pub struct PsoCache {
 
 impl PsoCache {
     pub fn new(device: ArcDevice, cache_dir: &Path, device_hash: u64) -> ReactorResult<Self> {
-        let manager = PsoCacheManager::new(cache_dir, device_hash)
-            .map_err(|e| ReactorError::with_source(ErrorCode::IoError, "PSO cache init failed", e))?;
+        let manager = PsoCacheManager::new(cache_dir, device_hash).map_err(|e| {
+            ReactorError::with_source(ErrorCode::IoError, "PSO cache init failed", e)
+        })?;
 
         // Crear Vulkan PipelineCache
         // TODO: cargar blob nativo de disco si existe (vkGetPipelineCacheData)
         let cache_info = vk::PipelineCacheCreateInfo::default();
         let vk_pipeline_cache = unsafe {
-            device.create_pipeline_cache(&cache_info, None)
-                .map_err(|e| ReactorError::with_source(
-                    ErrorCode::VulkanPipelineCreation,
-                    "Failed to create Vulkan PipelineCache",
-                    e,
-                ))?
+            device
+                .create_pipeline_cache(&cache_info, None)
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanPipelineCreation,
+                        "Failed to create Vulkan PipelineCache",
+                        e,
+                    )
+                })?
         };
 
         Ok(Self {
@@ -220,7 +227,10 @@ impl PsoCache {
         }
         // Slow path: crear + insertar
         let pipeline = create()?;
-        self.pipelines.lock().unwrap().insert(*hash, pipeline.clone());
+        self.pipelines
+            .lock()
+            .unwrap()
+            .insert(*hash, pipeline.clone());
         Ok(pipeline)
     }
 
@@ -236,35 +246,46 @@ impl PsoCache {
     /// Guarda el Vulkan PipelineCache nativo a disco (llamar al shutdown).
     pub fn save_vk_cache(&self) -> ReactorResult<()> {
         let data = unsafe {
-            self.device.get_pipeline_cache_data(self.vk_pipeline_cache)
-                .map_err(|e| ReactorError::with_source(
-                    ErrorCode::IoError,
-                    "Failed to get Vulkan pipeline cache data",
-                    e,
-                ))?
+            self.device
+                .get_pipeline_cache_data(self.vk_pipeline_cache)
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::IoError,
+                        "Failed to get Vulkan pipeline cache data",
+                        e,
+                    )
+                })?
         };
         let path = self.manager.cache_file().with_extension("vkcache");
-        fs::write(&path, &data)
-            .map_err(|e| ReactorError::with_source(ErrorCode::IoError, "Failed to write Vulkan pipeline cache", e))?;
+        fs::write(&path, &data).map_err(|e| {
+            ReactorError::with_source(
+                ErrorCode::IoError,
+                "Failed to write Vulkan pipeline cache",
+                e,
+            )
+        })?;
         Ok(())
     }
 
     /// Limpia cache en memoria + disco.
     pub fn clear(&self) -> ReactorResult<()> {
         self.pipelines.lock().unwrap().clear();
-        self.manager.clear()
+        self.manager
+            .clear()
             .map_err(|e| ReactorError::with_source(ErrorCode::IoError, "PSO cache clear failed", e))
     }
 
     /// Persiste una lista de entradas serializables a disco.
     pub fn save_entries(&self, entries: &[SerializablePsoEntry]) -> ReactorResult<()> {
-        self.manager.save(entries)
+        self.manager
+            .save(entries)
             .map_err(|e| ReactorError::with_source(ErrorCode::IoError, "PSO cache save failed", e))
     }
 
     /// Carga entradas desde disco.
     pub fn load_entries(&self) -> ReactorResult<Vec<SerializablePsoEntry>> {
-        self.manager.load()
+        self.manager
+            .load()
             .map_err(|e| ReactorError::with_source(ErrorCode::IoError, "PSO cache load failed", e))
     }
 }
@@ -274,7 +295,8 @@ impl Drop for PsoCache {
         // Intentar guardar el Vulkan PipelineCache antes de destruirlo
         let _ = self.save_vk_cache();
         unsafe {
-            self.device.destroy_pipeline_cache(self.vk_pipeline_cache, None);
+            self.device
+                .destroy_pipeline_cache(self.vk_pipeline_cache, None);
         }
     }
 }

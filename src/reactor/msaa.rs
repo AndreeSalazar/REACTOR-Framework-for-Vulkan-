@@ -16,8 +16,8 @@ pub(super) fn max_supported(context: &VulkanContext) -> vk::SampleCountFlags {
             .instance
             .get_physical_device_properties(context.physical_device)
     };
-    let counts = props.limits.framebuffer_color_sample_counts
-        & props.limits.framebuffer_depth_sample_counts;
+    let counts =
+        props.limits.framebuffer_color_sample_counts & props.limits.framebuffer_depth_sample_counts;
 
     if counts.contains(vk::SampleCountFlags::TYPE_8) {
         vk::SampleCountFlags::TYPE_8
@@ -38,8 +38,8 @@ pub(super) fn msaa_from_u32(requested: u32, context: &VulkanContext) -> vk::Samp
             .instance
             .get_physical_device_properties(context.physical_device)
     };
-    let counts = props.limits.framebuffer_color_sample_counts
-        & props.limits.framebuffer_depth_sample_counts;
+    let counts =
+        props.limits.framebuffer_color_sample_counts & props.limits.framebuffer_depth_sample_counts;
 
     let requested_flag = match requested {
         1 => vk::SampleCountFlags::TYPE_1,
@@ -78,16 +78,21 @@ pub(super) fn create_msaa_resources(
         .format(format)
         .tiling(vk::ImageTiling::OPTIMAL)
         .initial_layout(vk::ImageLayout::UNDEFINED)
-        .usage(
-            vk::ImageUsageFlags::TRANSIENT_ATTACHMENT | vk::ImageUsageFlags::COLOR_ATTACHMENT,
-        )
+        .usage(vk::ImageUsageFlags::TRANSIENT_ATTACHMENT | vk::ImageUsageFlags::COLOR_ATTACHMENT)
         .sharing_mode(vk::SharingMode::EXCLUSIVE)
         .samples(samples);
 
     let image = unsafe {
-        context.device.create_image(&image_info, None).map_err(|e| {
-            ReactorError::with_source(ErrorCode::VulkanImageCreation, "Failed to create MSAA image", e)
-        })?
+        context
+            .device
+            .create_image(&image_info, None)
+            .map_err(|e| {
+                ReactorError::with_source(
+                    ErrorCode::VulkanImageCreation,
+                    "Failed to create MSAA image",
+                    e,
+                )
+            })?
     };
     let requirements = unsafe { context.device.get_image_memory_requirements(image) };
 
@@ -117,22 +122,28 @@ pub(super) fn create_msaa_resources(
         .memory_type_index(memory_type_index);
 
     let memory = unsafe {
-        context.device.allocate_memory(&alloc_info, None).map_err(|e| {
-            ReactorError::with_source(
-                ErrorCode::VulkanMemoryAllocation,
-                "Failed to allocate MSAA memory",
-                e,
-            )
-        })?
+        context
+            .device
+            .allocate_memory(&alloc_info, None)
+            .map_err(|e| {
+                ReactorError::with_source(
+                    ErrorCode::VulkanMemoryAllocation,
+                    "Failed to allocate MSAA memory",
+                    e,
+                )
+            })?
     };
     unsafe {
-        context.device.bind_image_memory(image, memory, 0).map_err(|e| {
-            ReactorError::with_source(
-                ErrorCode::VulkanImageCreation,
-                "Failed to bind MSAA memory",
-                e,
-            )
-        })?
+        context
+            .device
+            .bind_image_memory(image, memory, 0)
+            .map_err(|e| {
+                ReactorError::with_source(
+                    ErrorCode::VulkanImageCreation,
+                    "Failed to bind MSAA memory",
+                    e,
+                )
+            })?
     };
 
     let view_info = vk::ImageViewCreateInfo::default()
@@ -149,13 +160,16 @@ pub(super) fn create_msaa_resources(
         );
 
     let view = unsafe {
-        context.device.create_image_view(&view_info, None).map_err(|e| {
-            ReactorError::with_source(
-                ErrorCode::VulkanImageCreation,
-                "Failed to create MSAA image view",
-                e,
-            )
-        })?
+        context
+            .device
+            .create_image_view(&view_info, None)
+            .map_err(|e| {
+                ReactorError::with_source(
+                    ErrorCode::VulkanImageCreation,
+                    "Failed to create MSAA image view",
+                    e,
+                )
+            })?
     };
 
     Ok((image, view, memory))

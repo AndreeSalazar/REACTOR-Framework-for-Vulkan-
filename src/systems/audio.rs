@@ -61,10 +61,8 @@ impl AudioClip {
                 cursor += 8;
 
                 if chunk_id == b"fmt " && cursor + 16 <= bytes.len() {
-                    channels =
-                        u16::from_le_bytes(bytes[cursor + 2..cursor + 4].try_into()?) as u32;
-                    sample_rate =
-                        u32::from_le_bytes(bytes[cursor + 4..cursor + 8].try_into()?);
+                    channels = u16::from_le_bytes(bytes[cursor + 2..cursor + 4].try_into()?) as u32;
+                    sample_rate = u32::from_le_bytes(bytes[cursor + 4..cursor + 8].try_into()?);
                 } else if chunk_id == b"data" {
                     let bytes_per_sample = 2; // Default to 16-bit
                     let total_samples = chunk_size / (channels as usize * bytes_per_sample);
@@ -306,8 +304,7 @@ impl AudioSystem {
         let id = AudioSourceId(self.next_source_id);
         self.next_source_id += 1;
 
-        let mut source = AudioSource::default();
-        source.id = id;
+        let source = AudioSource { id, ..Default::default() };
         self.sources.insert(id, source);
 
         id
@@ -548,4 +545,3 @@ impl Default for AudioSystem {
         Self::new()
     }
 }
-

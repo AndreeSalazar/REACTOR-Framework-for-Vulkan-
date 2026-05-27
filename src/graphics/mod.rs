@@ -1,5 +1,5 @@
-﻿//! Vulkan graphics rendering
-//! 
+//! Vulkan graphics rendering
+//!
 //! Low-level rendering primitives and pipeline management.
 
 pub mod buffer;
@@ -40,27 +40,26 @@ pub use uniform_buffer::{
 
 // ═══ FASE 2 — Pipeline gráfico moderno ═══
 pub mod bindless;
-pub mod pso_hash;
-pub mod pso_cache;
-pub mod shader_compiler;
-pub mod shader_hot_reload;
 pub mod indirect;
 pub mod mesh_shader;
+pub mod pso_cache;
+pub mod pso_hash;
+pub mod shader_compiler;
+pub mod shader_hot_reload;
 
 pub use bindless::{
-    BindlessRegistry, BindlessConfig, BindlessStats,
-    TextureHandle, BufferHandle, SamplerHandle, MeshHandle, MaterialHandle,
-    GpuMeshData, GpuMaterialData,
+    BindlessConfig, BindlessRegistry, BindlessStats, BufferHandle, GpuMaterialData, GpuMeshData,
+    MaterialHandle, MeshHandle, SamplerHandle, TextureHandle,
 };
+pub use indirect::{DrawIndexedIndirectCommand, IndirectCommandWithMaterial, IndirectDrawBuffer};
+pub use mesh_shader::{
+    check_mesh_shader_support, mesh_shader_feature_chain, query_mesh_shader_properties,
+    MeshShaderPipeline, MeshShaderProperties, Meshlet, MeshletBuilder,
+};
+pub use pso_cache::{CachedPipeline, PsoCache, PsoCacheManager, SerializablePsoEntry};
 pub use pso_hash::{PsoHash, PsoHashBuilder};
-pub use pso_cache::{PsoCache, CachedPipeline, PsoCacheManager, SerializablePsoEntry};
 pub use shader_compiler::{
-    ShaderCompiler, ShaderLanguage, ShaderStage, CompiledShader,
-    ShaderReflection, ReflectedBinding, ReflectedPushConstant, ReflectedEntryPoint, BindingType,
+    BindingType, CompiledShader, ReflectedBinding, ReflectedEntryPoint, ReflectedPushConstant,
+    ShaderCompiler, ShaderLanguage, ShaderReflection, ShaderStage,
 };
 pub use shader_hot_reload::{ShaderHotReloader, ShaderReloadEvent};
-pub use indirect::{IndirectDrawBuffer, DrawIndexedIndirectCommand, IndirectCommandWithMaterial};
-pub use mesh_shader::{
-    MeshShaderPipeline, MeshShaderProperties, Meshlet, MeshletBuilder,
-    check_mesh_shader_support, mesh_shader_feature_chain, query_mesh_shader_properties,
-};

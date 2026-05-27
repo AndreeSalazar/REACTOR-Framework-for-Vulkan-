@@ -1,5 +1,5 @@
-use crate::core::VulkanContext;
 use crate::core::error::ReactorResult;
+use crate::core::VulkanContext;
 use ash::vk;
 use gpu_allocator::vulkan::*;
 use gpu_allocator::MemoryLocation;
@@ -50,8 +50,7 @@ impl MsaaTarget {
         })?;
 
         unsafe {
-            device
-                .bind_image_memory(image, allocation.memory(), allocation.offset())?;
+            device.bind_image_memory(image, allocation.memory(), allocation.offset())?;
         }
 
         let view_info = vk::ImageViewCreateInfo::default()

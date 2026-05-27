@@ -1,5 +1,5 @@
-use crate::core::VulkanContext;
 use crate::core::error::ReactorResult;
+use crate::core::VulkanContext;
 use ash::vk;
 
 pub struct Framebuffer {
@@ -88,5 +88,9 @@ impl FramebufferSet {
 
     pub fn len(&self) -> usize {
         self.framebuffers.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.framebuffers.is_empty()
     }
 }

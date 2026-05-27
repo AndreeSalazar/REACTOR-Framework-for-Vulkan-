@@ -1,6 +1,6 @@
-use crate::core::VulkanContext;
 use crate::core::arc_handle::ArcDevice;
-use crate::core::error::{ReactorResult, ReactorError, ErrorCode};
+use crate::core::error::{ErrorCode, ReactorError, ReactorResult};
+use crate::core::VulkanContext;
 use ash::vk;
 
 pub struct Sampler {
@@ -94,7 +94,13 @@ impl Sampler {
         let handle = unsafe {
             ctx.ash_device()
                 .create_sampler(&sampler_info, None)
-                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanImageCreation, "create_sampler failed", e))?
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanImageCreation,
+                        "create_sampler failed",
+                        e,
+                    )
+                })?
         };
 
         Ok(Self { handle, device: ctx.device.clone() })

@@ -57,15 +57,14 @@
 use ash::vk;
 use glam::Mat4;
 
-use crate::core::error::ReactorResult;
 use crate::core::arc_handle::ArcDevice;
+use crate::core::error::ReactorResult;
 use crate::graphics::bindless::{
-    BindlessRegistry, BindlessConfig, BindlessStats,
-    TextureHandle, MeshHandle, MaterialHandle,
+    BindlessConfig, BindlessRegistry, BindlessStats, MaterialHandle, MeshHandle, TextureHandle,
 };
-use crate::graphics::pso_cache::{PsoCache, CachedPipeline};
+use crate::graphics::pso_cache::{CachedPipeline, PsoCache};
 use crate::graphics::pso_hash::PsoHash;
-use crate::graphics::shader_compiler::{ShaderCompiler, ShaderStage, CompiledShader};
+use crate::graphics::shader_compiler::{CompiledShader, ShaderCompiler, ShaderStage};
 use crate::graphics::shader_hot_reload::ShaderHotReloader;
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -171,10 +170,7 @@ pub struct FrameStats {
 }
 
 impl BindlessForwardRenderer {
-    pub fn new(
-        device: ArcDevice,
-        config: BindlessForwardConfig,
-    ) -> ReactorResult<Self> {
+    pub fn new(device: ArcDevice, config: BindlessForwardConfig) -> ReactorResult<Self> {
         // ── Bindless Registry ────────────────────────────────────────
         let bindless = BindlessRegistry::new(device.clone(), config.bindless)?;
 
@@ -192,11 +188,7 @@ impl BindlessForwardRenderer {
             h.finish()
         };
 
-        let pso_cache = PsoCache::new(
-            device.clone(),
-            &config.cache_dir,
-            device_hash,
-        )?;
+        let pso_cache = PsoCache::new(device.clone(), &config.cache_dir, device_hash)?;
 
         // ── Shader Compiler ──────────────────────────────────────────
         let shader_compiler = ShaderCompiler::new();
@@ -210,7 +202,9 @@ impl BindlessForwardRenderer {
 
         log::info!(
             "🎨 BindlessForwardRenderer initialized: {}×{}, MSAA {:?}, hot_reload={}",
-            config.width, config.height, config.msaa_samples,
+            config.width,
+            config.height,
+            config.msaa_samples,
             config.hot_reload,
         );
 
@@ -277,7 +271,9 @@ impl BindlessForwardRenderer {
         stage: ShaderStage,
         entry_point: &str,
     ) -> ReactorResult<CompiledShader> {
-        let compiled = self.shader_compiler.compile_file(path, stage, entry_point)?;
+        let compiled = self
+            .shader_compiler
+            .compile_file(path, stage, entry_point)?;
 
         // Si hay hot-reloader, vigilar el archivo
         if let Some(ref mut reloader) = self.hot_reloader {
@@ -337,11 +333,8 @@ impl BindlessForwardRenderer {
         material: MaterialHandle,
         transform_index: u32,
     ) {
-        self.frame_objects.push(RenderObject {
-            mesh,
-            material,
-            transform_index,
-        });
+        self.frame_objects
+            .push(RenderObject { mesh, material, transform_index });
     }
 
     /// Envía múltiples objetos de una vez (batch).
@@ -375,7 +368,7 @@ impl BindlessForwardRenderer {
         let stats = FrameStats {
             total_objects: self.frame_objects.len() as u32,
             visible_objects: self.frame_objects.len() as u32, // TODO: after culling
-            draw_calls: 1, // TODO: after batching
+            draw_calls: 1,                                    // TODO: after batching
             pso_cache_hits: 0,
             pso_cache_misses: 0,
             shaders_reloaded,

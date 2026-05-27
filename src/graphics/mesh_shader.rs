@@ -31,10 +31,10 @@
 //! )?;
 //! ```
 
+use crate::core::arc_handle::ArcDevice;
+use crate::core::error::{ErrorCode, ReactorError, ReactorResult};
 use ash::vk;
 use std::ffi::CStr;
-use crate::core::error::{ReactorError, ReactorResult, ErrorCode};
-use crate::core::arc_handle::ArcDevice;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Soporte de extensión
@@ -162,12 +162,13 @@ impl MeshShaderPipeline {
         let task_module = if let Some(spirv) = task_spirv {
             let info = vk::ShaderModuleCreateInfo::default().code(spirv);
             Some(unsafe {
-                device.create_shader_module(&info, None)
-                    .map_err(|e| ReactorError::with_source(
+                device.create_shader_module(&info, None).map_err(|e| {
+                    ReactorError::with_source(
                         ErrorCode::VulkanShaderCompilation,
                         "Failed to create task shader module",
                         e,
-                    ))?
+                    )
+                })?
             })
         } else {
             None
@@ -175,22 +176,24 @@ impl MeshShaderPipeline {
 
         let mesh_info = vk::ShaderModuleCreateInfo::default().code(mesh_spirv);
         let mesh_module = unsafe {
-            device.create_shader_module(&mesh_info, None)
-                .map_err(|e| ReactorError::with_source(
+            device.create_shader_module(&mesh_info, None).map_err(|e| {
+                ReactorError::with_source(
                     ErrorCode::VulkanShaderCompilation,
                     "Failed to create mesh shader module",
                     e,
-                ))?
+                )
+            })?
         };
 
         let frag_info = vk::ShaderModuleCreateInfo::default().code(fragment_spirv);
         let fragment_module = unsafe {
-            device.create_shader_module(&frag_info, None)
-                .map_err(|e| ReactorError::with_source(
+            device.create_shader_module(&frag_info, None).map_err(|e| {
+                ReactorError::with_source(
                     ErrorCode::VulkanShaderCompilation,
                     "Failed to create fragment shader module",
                     e,
-                ))?
+                )
+            })?
         };
 
         // ── Pipeline layout ────────────────────────────────────────────
@@ -211,12 +214,15 @@ impl MeshShaderPipeline {
             .push_constant_ranges(&push_constant_ranges);
 
         let layout = unsafe {
-            device.create_pipeline_layout(&layout_info, None)
-                .map_err(|e| ReactorError::with_source(
-                    ErrorCode::VulkanPipelineCreation,
-                    "Failed to create mesh shader pipeline layout",
-                    e,
-                ))?
+            device
+                .create_pipeline_layout(&layout_info, None)
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanPipelineCreation,
+                        "Failed to create mesh shader pipeline layout",
+                        e,
+                    )
+                })?
         };
 
         // ── Shader stages ──────────────────────────────────────────────
@@ -272,13 +278,13 @@ impl MeshShaderPipeline {
         // Color blend
         let color_blend_attachments = [vk::PipelineColorBlendAttachmentState::default()
             .color_write_mask(vk::ColorComponentFlags::RGBA)];
-        let color_blend = vk::PipelineColorBlendStateCreateInfo::default()
-            .attachments(&color_blend_attachments);
+        let color_blend =
+            vk::PipelineColorBlendStateCreateInfo::default().attachments(&color_blend_attachments);
 
         // Dynamic state
         let dynamic_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
-        let dynamic_state = vk::PipelineDynamicStateCreateInfo::default()
-            .dynamic_states(&dynamic_states);
+        let dynamic_state =
+            vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
 
         // ── Pipeline creation (usa pNext para mesh shader state) ──────
         // Nota: Mesh shader pipeline NO tiene vertex_input_state ni input_assembly_state
@@ -295,12 +301,15 @@ impl MeshShaderPipeline {
         // dynamic rendering que se configura en el command buffer con beginRendering
 
         let pipelines = unsafe {
-            device.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
-                .map_err(|(_, e)| ReactorError::with_source(
-                    ErrorCode::VulkanPipelineCreation,
-                    "Failed to create mesh shader pipeline",
-                    e,
-                ))?
+            device
+                .create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
+                .map_err(|(_, e)| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanPipelineCreation,
+                        "Failed to create mesh shader pipeline",
+                        e,
+                    )
+                })?
         };
 
         Ok(Self {
@@ -330,11 +339,8 @@ impl MeshShaderPipeline {
         group_count_z: u32,
     ) {
         unsafe {
-            self.device.cmd_bind_pipeline(
-                cmd,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline,
-            );
+            self.device
+                .cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.pipeline);
             mesh_ext.cmd_draw_mesh_tasks(cmd, group_count_x, group_count_y, group_count_z);
         }
     }
@@ -350,11 +356,8 @@ impl MeshShaderPipeline {
         stride: u32,
     ) {
         unsafe {
-            self.device.cmd_bind_pipeline(
-                cmd,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline,
-            );
+            self.device
+                .cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.pipeline);
             mesh_ext.cmd_draw_mesh_tasks_indirect(cmd, buffer, offset, draw_count, stride);
         }
     }
@@ -372,11 +375,8 @@ impl MeshShaderPipeline {
         stride: u32,
     ) {
         unsafe {
-            self.device.cmd_bind_pipeline(
-                cmd,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline,
-            );
+            self.device
+                .cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.pipeline);
             mesh_ext.cmd_draw_mesh_tasks_indirect_count(
                 cmd,
                 buffer,
@@ -409,7 +409,8 @@ impl Drop for MeshShaderPipeline {
                 self.device.destroy_shader_module(task_mod, None);
             }
             self.device.destroy_shader_module(self.mesh_module, None);
-            self.device.destroy_shader_module(self.fragment_module, None);
+            self.device
+                .destroy_shader_module(self.fragment_module, None);
         }
     }
 }

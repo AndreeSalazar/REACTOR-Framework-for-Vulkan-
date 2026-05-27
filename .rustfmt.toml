@@ -13,14 +13,7 @@ newline_style = "Unix"
 
 # Imports
 reorder_imports = true
-group_imports = "StdExternalCrate"
-imports_granularity = "Crate"
 
 # Structs & enums
 struct_lit_width = 40
 struct_variant_width = 40
-
-# Comments
-wrap_comments = true
-comment_width = 90
-normalize_comments = true

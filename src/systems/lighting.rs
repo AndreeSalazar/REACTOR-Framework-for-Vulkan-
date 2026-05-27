@@ -157,14 +157,15 @@ impl LightingSystem {
     }
 
     pub fn to_gpu_data(&self) -> LightUniformData {
-        let mut data = LightUniformData::default();
-
-        data.ambient_color = [
-            self.ambient_color.x * self.ambient_intensity,
-            self.ambient_color.y * self.ambient_intensity,
-            self.ambient_color.z * self.ambient_intensity,
-            1.0,
-        ];
+        let mut data = LightUniformData {
+            ambient_color: [
+                self.ambient_color.x * self.ambient_intensity,
+                self.ambient_color.y * self.ambient_intensity,
+                self.ambient_color.z * self.ambient_intensity,
+                1.0,
+            ],
+            ..Default::default()
+        };
 
         let enabled_lights: Vec<_> = self.lights.iter().filter(|l| l.enabled).collect();
         data.light_count = enabled_lights.len().min(MAX_LIGHTS) as u32;

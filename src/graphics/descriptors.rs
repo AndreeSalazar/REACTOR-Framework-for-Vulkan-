@@ -1,5 +1,5 @@
-use crate::core::VulkanContext;
 use crate::core::error::ReactorResult;
+use crate::core::VulkanContext;
 use ash::vk;
 
 // ============================================================================
@@ -20,10 +20,7 @@ pub struct DescriptorBinding {
 }
 
 impl DescriptorSetLayout {
-    pub fn new(
-        ctx: &VulkanContext,
-        bindings: &[DescriptorBinding],
-    ) -> ReactorResult<Self> {
+    pub fn new(ctx: &VulkanContext, bindings: &[DescriptorBinding]) -> ReactorResult<Self> {
         let vk_bindings: Vec<vk::DescriptorSetLayoutBinding> = bindings
             .iter()
             .map(|b| {
@@ -38,10 +35,7 @@ impl DescriptorSetLayout {
         let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&vk_bindings);
 
         let device = ctx.ash_device();
-        let handle = unsafe {
-            device
-                .create_descriptor_set_layout(&layout_info, None)?
-        };
+        let handle = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
 
         Ok(Self { handle, device: device.clone() })
     }
@@ -98,11 +92,7 @@ pub struct PoolSize {
 }
 
 impl DescriptorPool {
-    pub fn new(
-        ctx: &VulkanContext,
-        max_sets: u32,
-        pool_sizes: &[PoolSize],
-    ) -> ReactorResult<Self> {
+    pub fn new(ctx: &VulkanContext, max_sets: u32, pool_sizes: &[PoolSize]) -> ReactorResult<Self> {
         let vk_sizes: Vec<vk::DescriptorPoolSize> = pool_sizes
             .iter()
             .map(|s| {
@@ -157,10 +147,7 @@ impl DescriptorPool {
         let device = ctx.ash_device();
         let sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
 
-        Ok(DescriptorSet {
-            handle: sets[0],
-            device: device.clone(),
-        })
+        Ok(DescriptorSet { handle: sets[0], device: device.clone() })
     }
 }
 

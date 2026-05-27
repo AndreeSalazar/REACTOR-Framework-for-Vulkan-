@@ -2,7 +2,7 @@ use ash::vk;
 
 use crate::core::arc_handle::ArcDevice;
 use crate::core::context::VulkanContext;
-use crate::core::error::{ReactorResult, ReactorError, ErrorCode};
+use crate::core::error::{ErrorCode, ReactorError, ReactorResult};
 
 pub struct CommandManager {
     pub pool: vk::CommandPool,
@@ -19,7 +19,13 @@ impl CommandManager {
         let pool = unsafe {
             ctx.ash_device()
                 .create_command_pool(&pool_create_info, None)
-                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "create_command_pool failed", e))?
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanCommandPool,
+                        "create_command_pool failed",
+                        e,
+                    )
+                })?
         };
 
         let alloc_info = vk::CommandBufferAllocateInfo::default()
@@ -30,7 +36,13 @@ impl CommandManager {
         let buffers = unsafe {
             ctx.ash_device()
                 .allocate_command_buffers(&alloc_info)
-                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "allocate_command_buffers failed", e))?
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanCommandPool,
+                        "allocate_command_buffers failed",
+                        e,
+                    )
+                })?
         };
 
         Ok(Self {
@@ -40,10 +52,7 @@ impl CommandManager {
         })
     }
 
-    pub fn begin_single_time(
-        &self,
-        ctx: &VulkanContext,
-    ) -> ReactorResult<vk::CommandBuffer> {
+    pub fn begin_single_time(&self, ctx: &VulkanContext) -> ReactorResult<vk::CommandBuffer> {
         let alloc_info = vk::CommandBufferAllocateInfo::default()
             .level(vk::CommandBufferLevel::PRIMARY)
             .command_pool(self.pool)
@@ -52,7 +61,13 @@ impl CommandManager {
         let command_buffer = unsafe {
             ctx.ash_device()
                 .allocate_command_buffers(&alloc_info)
-                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "allocate_command_buffers failed", e))?[0]
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanCommandPool,
+                        "allocate_command_buffers failed",
+                        e,
+                    )
+                })?[0]
         };
 
         let begin_info = vk::CommandBufferBeginInfo::default()
@@ -61,7 +76,13 @@ impl CommandManager {
         unsafe {
             ctx.ash_device()
                 .begin_command_buffer(command_buffer, &begin_info)
-                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "begin_command_buffer failed", e))?;
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanCommandPool,
+                        "begin_command_buffer failed",
+                        e,
+                    )
+                })?;
         }
 
         Ok(command_buffer)
@@ -75,19 +96,38 @@ impl CommandManager {
         unsafe {
             ctx.ash_device()
                 .end_command_buffer(command_buffer)
-                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool, "end_command_buffer failed", e))?;
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanCommandPool,
+                        "end_command_buffer failed",
+                        e,
+                    )
+                })?;
 
             let command_buffers = [command_buffer];
             let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
 
             ctx.ash_device()
                 .queue_submit(ctx.graphics_queue, &[submit_info], vk::Fence::null())
-                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanSynchronization, "queue_submit failed", e))?;
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanSynchronization,
+                        "queue_submit failed",
+                        e,
+                    )
+                })?;
             ctx.ash_device()
                 .queue_wait_idle(ctx.graphics_queue)
-                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanSynchronization, "queue_wait_idle failed", e))?;
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanSynchronization,
+                        "queue_wait_idle failed",
+                        e,
+                    )
+                })?;
 
-            ctx.ash_device().free_command_buffers(self.pool, &command_buffers);
+            ctx.ash_device()
+                .free_command_buffers(self.pool, &command_buffers);
         }
         Ok(())
     }

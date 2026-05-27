@@ -1,5 +1,5 @@
 //! Hashing utilities
-//! 
+//!
 //! Fast hashing functions for resource IDs and asset lookups.
 
 use std::hash::{Hash, Hasher};
@@ -9,7 +9,7 @@ use std::hash::{Hash, Hasher};
 pub fn hash_u64(value: u64) -> u64 {
     const FNV_OFFSET: u64 = 0xcbf29ce484222325;
     const FNV_PRIME: u64 = 0x100000001b3;
-    
+
     let mut hash = FNV_OFFSET;
     hash ^= value;
     hash = hash.wrapping_mul(FNV_PRIME);
@@ -21,7 +21,7 @@ pub fn hash_u64(value: u64) -> u64 {
 pub fn hash_str(s: &str) -> u64 {
     const FNV_OFFSET: u64 = 0xcbf29ce484222325;
     const FNV_PRIME: u64 = 0x100000001b3;
-    
+
     let mut hash = FNV_OFFSET;
     for byte in s.bytes() {
         hash ^= byte as u64;

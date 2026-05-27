@@ -68,19 +68,24 @@ impl Default for GPUParticleEmitterConfig {
 }
 
 /// Emission shape
-#[derive(Clone, Debug)]
+#[derive(Default, Clone, Debug)]
 pub enum EmitShape {
+    #[default]
     Point,
-    Sphere { radius: f32 },
-    Box { half_extents: Vec3 },
-    Cone { angle: f32, height: f32 },
-    Ring { radius: f32, width: f32 },
-}
-
-impl Default for EmitShape {
-    fn default() -> Self {
-        Self::Point
-    }
+    Sphere {
+        radius: f32,
+    },
+    Box {
+        half_extents: Vec3,
+    },
+    Cone {
+        angle: f32,
+        height: f32,
+    },
+    Ring {
+        radius: f32,
+        width: f32,
+    },
 }
 
 /// GPU Particle system push constants

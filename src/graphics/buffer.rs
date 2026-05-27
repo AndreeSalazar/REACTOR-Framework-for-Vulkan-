@@ -1,10 +1,8 @@
-use crate::core::VulkanContext;
 use crate::core::arc_handle::ArcDevice;
-use crate::core::error::{ReactorResult, ReactorError, ErrorCode};
+use crate::core::error::{ErrorCode, ReactorError, ReactorResult};
+use crate::core::VulkanContext;
 use ash::vk;
-use gpu_allocator::vulkan::{
-    Allocator, Allocation, AllocationCreateDesc, AllocationScheme,
-};
+use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator};
 use gpu_allocator::MemoryLocation;
 use std::sync::{Arc, Mutex};
 
@@ -31,24 +29,44 @@ impl Buffer {
             .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
         let handle = unsafe {
-            device
-                .create_buffer(&create_info, None)
-                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanBufferCreation, "create_buffer failed", e))?
+            device.create_buffer(&create_info, None).map_err(|e| {
+                ReactorError::with_source(
+                    ErrorCode::VulkanBufferCreation,
+                    "create_buffer failed",
+                    e,
+                )
+            })?
         };
         let requirements = unsafe { device.get_buffer_memory_requirements(handle) };
 
-        let allocation = allocator.lock().unwrap().allocate(&AllocationCreateDesc {
-            name: "buffer",
-            requirements,
-            location,
-            linear: true,
-            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
-        }).map_err(|e| ReactorError::with_source(ErrorCode::VulkanMemoryAllocation, "buffer allocation failed", e))?;
+        let allocation = allocator
+            .lock()
+            .unwrap()
+            .allocate(&AllocationCreateDesc {
+                name: "buffer",
+                requirements,
+                location,
+                linear: true,
+                allocation_scheme: AllocationScheme::GpuAllocatorManaged,
+            })
+            .map_err(|e| {
+                ReactorError::with_source(
+                    ErrorCode::VulkanMemoryAllocation,
+                    "buffer allocation failed",
+                    e,
+                )
+            })?;
 
         unsafe {
             device
                 .bind_buffer_memory(handle, allocation.memory(), allocation.offset())
-                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanBufferCreation, "bind_buffer_memory failed", e))?;
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanBufferCreation,
+                        "bind_buffer_memory failed",
+                        e,
+                    )
+                })?;
         }
 
         Ok(Self {

@@ -15,6 +15,8 @@
 //   Console
 // =============================================================================
 
+#![allow(dead_code)]
+#![allow(clippy::collapsible_if)]
 #![allow(clippy::new_without_default)]
 
 mod editor;

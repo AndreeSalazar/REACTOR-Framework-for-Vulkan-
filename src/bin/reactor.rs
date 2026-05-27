@@ -5,8 +5,8 @@
 // Usage: cargo run --bin reactor cook --input assets/ --output cooked/
 // =============================================================================
 
-use std::env;
 use reactor_vulkan::resources::AssetCooker;
+use std::env;
 
 fn print_help() {
     println!("⚛ REACTOR Framework CLI");

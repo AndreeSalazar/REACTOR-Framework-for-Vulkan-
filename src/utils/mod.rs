@@ -1,5 +1,5 @@
 //! Utility functions and helpers
-//! 
+//!
 //! General-purpose utilities for the REACTOR framework.
 
 pub mod cpu_detector;

@@ -149,13 +149,15 @@ impl VulkanContext {
     /// Never panics.
     pub fn new(window: &impl HasWindowHandle) -> ReactorResult<Self> {
         // 1. Load Vulkan entry
-        let entry = unsafe { Entry::load().map_err(|e| {
-            ReactorError::with_source(
-                ErrorCode::VulkanInstanceCreation,
-                "Failed to load Vulkan entry — is the Vulkan runtime installed?",
-                e,
-            )
-        })? };
+        let entry = unsafe {
+            Entry::load().map_err(|e| {
+                ReactorError::with_source(
+                    ErrorCode::VulkanInstanceCreation,
+                    "Failed to load Vulkan entry — is the Vulkan runtime installed?",
+                    e,
+                )
+            })?
+        };
 
         // 2. Instance creation (with validation layers in debug)
         let (instance, debug_utils, debug_messenger) =
@@ -180,11 +182,7 @@ impl VulkanContext {
             arc_surface.handle(),
         )
         .map_err(|e| {
-            ReactorError::with_source(
-                ErrorCode::VulkanDeviceCreation,
-                "GPU detection failed",
-                e,
-            )
+            ReactorError::with_source(ErrorCode::VulkanDeviceCreation, "GPU detection failed", e)
         })?;
         let pdevice = gpu_info.device;
         let queue_family_index = gpu_info.queue_family_index;
@@ -228,8 +226,7 @@ impl VulkanContext {
         vk::Result,
     > {
         // Validation layers (debug only)
-        let layer_names =
-            [CStr::from_bytes_with_nul(b"VK_LAYER_KHRONOS_validation\0").unwrap()];
+        let layer_names = [CStr::from_bytes_with_nul(b"VK_LAYER_KHRONOS_validation\0").unwrap()];
         let layers_ptr: Vec<*const i8> = layer_names.iter().map(|r| r.as_ptr()).collect();
 
         // Extensions
@@ -313,8 +310,8 @@ impl VulkanContext {
             {
                 RawWindowHandle::Win32(handle) => {
                     let create_info = vk::Win32SurfaceCreateInfoKHR::default()
-                        .hinstance(handle.hinstance.unwrap().get() as isize)
-                        .hwnd(handle.hwnd.get() as isize);
+                        .hinstance(handle.hinstance.unwrap().get())
+                        .hwnd(handle.hwnd.get());
                     let win32_loader =
                         ash::khr::win32_surface::Instance::new(instance.entry(), instance.get());
                     win32_loader
@@ -414,13 +411,15 @@ impl VulkanContext {
 
     /// Block until the device is idle (all submitted work completed).
     pub fn wait_idle(&self) -> ReactorResult<()> {
-        unsafe { self.device.get().device_wait_idle().map_err(|e| {
-            ReactorError::with_source(
-                ErrorCode::VulkanSynchronization,
-                "device_wait_idle failed",
-                e,
-            )
-        }) }
+        unsafe {
+            self.device.get().device_wait_idle().map_err(|e| {
+                ReactorError::with_source(
+                    ErrorCode::VulkanSynchronization,
+                    "device_wait_idle failed",
+                    e,
+                )
+            })
+        }
     }
 
     /// Borrow the underlying `ash::Instance`.

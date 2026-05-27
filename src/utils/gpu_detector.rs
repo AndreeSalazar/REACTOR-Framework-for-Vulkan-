@@ -1,5 +1,5 @@
-use ash::vk;
 use crate::core::error::ReactorResult;
+use ash::vk;
 use ash::Instance;
 use std::ffi::CStr;
 
@@ -110,7 +110,7 @@ impl GPUDetector {
         }
 
         // Sort by score descending
-        candidates.sort_by(|a, b| b.score.cmp(&a.score));
+        candidates.sort_by_key(|candidate| std::cmp::Reverse(candidate.score));
 
         if let Some(best) = candidates.first() {
             println!("Selected GPU: {}", best.name);

@@ -5,18 +5,18 @@
 // - Hash de contenido para detectar cambios (hot-reload)
 // - Metadata de assets (tamaño, formato, dependencias)
 // - Cache de assets procesados (texturas comprimidas, meshes optimizados)
-// 
+//
 // Usa sled (embedded KV store) para persistencia ligera sin dependencias externas.
 // =============================================================================
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::UNIX_EPOCH;
 
 use serde::{Deserialize, Serialize};
 use sled::Db;
 
-use crate::core::error::{ReactorResult, ReactorError};
+use crate::core::error::{ReactorError, ReactorResult};
 use crate::resources::asset_id::AssetId;
 
 /// Metadata persistente de un asset
@@ -61,7 +61,9 @@ pub enum AssetType {
 impl AssetType {
     pub fn from_extension(ext: &str) -> Self {
         match ext.to_lowercase().as_str() {
-            "png" | "jpg" | "jpeg" | "bmp" | "tga" | "ktx2" | "dds" | "exr" | "hdr" => AssetType::Texture,
+            "png" | "jpg" | "jpeg" | "bmp" | "tga" | "ktx2" | "dds" | "exr" | "hdr" => {
+                AssetType::Texture
+            }
             "obj" | "fbx" | "gltf" | "glb" => AssetType::Model,
             "vert" | "frag" | "comp" | "spv" | "wgsl" | "glsl" => AssetType::Shader,
             "wav" | "mp3" | "ogg" | "flac" | "xm" => AssetType::Audio,
@@ -101,7 +103,7 @@ impl AssetDatabase {
     pub fn open<P: AsRef<Path>>(path: P) -> ReactorResult<Self> {
         let db = sled::open(path.as_ref())
             .map_err(|e| ReactorError::asset_load(format!("Failed to open asset DB: {}", e)))?;
-        
+
         Ok(Self {
             db,
             memory_cache: HashMap::new(),
@@ -112,9 +114,10 @@ impl AssetDatabase {
     /// Crear database en memoria (para tests)
     pub fn in_memory() -> ReactorResult<Self> {
         let config = sled::Config::default().temporary(true);
-        let db = config.open()
-            .map_err(|e| ReactorError::asset_load(format!("Failed to create in-memory DB: {}", e)))?;
-        
+        let db = config.open().map_err(|e| {
+            ReactorError::asset_load(format!("Failed to create in-memory DB: {}", e))
+        })?;
+
         Ok(Self {
             db,
             memory_cache: HashMap::new(),
@@ -131,25 +134,27 @@ impl AssetDatabase {
     /// Registrar metadata de un asset
     pub fn register_asset(&mut self, id: AssetId, meta: AssetMetadata) -> ReactorResult<()> {
         // Serializar metadata
-        let serialized = serde_json::to_vec(&meta)
-            .map_err(|e| ReactorError::asset_load(format!("Failed to serialize metadata: {}", e)))?;
-        
+        let serialized = serde_json::to_vec(&meta).map_err(|e| {
+            ReactorError::asset_load(format!("Failed to serialize metadata: {}", e))
+        })?;
+
         // Guardar en sled con key = AssetId como string hex
         let key = format!("meta:{:016x}", id.as_u64());
-        self.db.insert(key.as_bytes(), serialized.as_slice())
+        self.db
+            .insert(key.as_bytes(), serialized.as_slice())
             .map_err(|e| ReactorError::asset_load(format!("Failed to write to DB: {}", e)))?;
-        
+
         // Flush para garantizar persistencia
         self.db.flush()?;
-        
+
         // Actualizar cache en memoria
         self.memory_cache.insert(id, meta.clone());
-        
+
         // Registrar dependencias inversas
         for dep_id in &meta.dependencies {
             self.add_dependent(*dep_id, id)?;
         }
-        
+
         Ok(())
     }
 
@@ -159,15 +164,18 @@ impl AssetDatabase {
         if let Some(meta) = self.memory_cache.get(&id) {
             return Ok(Some(meta.clone()));
         }
-        
+
         // Load from disk
         let key = format!("meta:{:016x}", id.as_u64());
-        if let Some(data) = self.db.get(key.as_bytes())
-            .map_err(|e| ReactorError::asset_load(format!("Failed to read from DB: {}", e)))? 
+        if let Some(data) = self
+            .db
+            .get(key.as_bytes())
+            .map_err(|e| ReactorError::asset_load(format!("Failed to read from DB: {}", e)))?
         {
-            let meta: AssetMetadata = serde_json::from_slice(&data)
-                .map_err(|e| ReactorError::asset_load(format!("Failed to deserialize metadata: {}", e)))?;
-            
+            let meta: AssetMetadata = serde_json::from_slice(&data).map_err(|e| {
+                ReactorError::asset_load(format!("Failed to deserialize metadata: {}", e))
+            })?;
+
             // Cache in memory
             self.memory_cache.insert(id, meta.clone());
             Ok(Some(meta))
@@ -185,24 +193,26 @@ impl AssetDatabase {
     /// Verificar si un asset ha cambiado desde la última vez registrado
     pub fn has_changed<P: AsRef<Path>>(&self, path: P) -> ReactorResult<bool> {
         let path = path.as_ref();
-        let current_meta = std::fs::metadata(path)
-            .map_err(|e| ReactorError::asset_load(format!("Failed to stat {}: {}", path.display(), e)))?;
-        
-        let current_mtime = current_meta.modified()
+        let current_meta = std::fs::metadata(path).map_err(|e| {
+            ReactorError::asset_load(format!("Failed to stat {}: {}", path.display(), e))
+        })?;
+
+        let current_mtime = current_meta
+            .modified()
             .map_err(|e| ReactorError::asset_load(format!("Failed to get mtime: {}", e)))?
             .duration_since(UNIX_EPOCH)
             .map_err(|_| ReactorError::asset_load("Invalid timestamp"))?
             .as_secs();
-        
+
         let current_size = current_meta.len();
         let current_hash = self.compute_content_hash(path)?;
-        
+
         // Check against stored metadata
         let id = AssetId::from_path(path);
         if let Some(stored) = self.memory_cache.get(&id) {
             return Ok(stored.content_hash != current_hash || stored.last_modified != current_mtime);
         }
-        
+
         // If not in cache, assume it's new/changed
         Ok(true)
     }
@@ -210,10 +220,11 @@ impl AssetDatabase {
     /// Calcular hash de contenido de un archivo
     pub fn compute_content_hash<P: AsRef<Path>>(&self, path: P) -> ReactorResult<u64> {
         use xxhash_rust::xxh3::xxh3_64;
-        
-        let content = std::fs::read(path.as_ref())
-            .map_err(|e| ReactorError::asset_load(format!("Failed to read {}: {}", path.as_ref().display(), e)))?;
-        
+
+        let content = std::fs::read(path.as_ref()).map_err(|e| {
+            ReactorError::asset_load(format!("Failed to read {}: {}", path.as_ref().display(), e))
+        })?;
+
         Ok(xxh3_64(&content))
     }
 
@@ -242,38 +253,39 @@ impl AssetDatabase {
     /// Invalidar asset y todos sus dependientes (para hot-reload en cascada)
     pub fn invalidate_with_dependents(&mut self, id: AssetId) -> ReactorResult<Vec<AssetId>> {
         let mut invalidated = Vec::new();
-        
+
         if let Some(meta) = self.get_metadata(id)? {
             // Invalidar dependientes recursivamente
             for dep_id in &meta.dependents {
                 invalidated.extend(self.invalidate_with_dependents(*dep_id)?);
             }
-            
+
             // Remover de cache
             self.memory_cache.remove(&id);
-            
+
             // Remover de DB
             let key = format!("meta:{:016x}", id.as_u64());
             self.db.remove(key.as_bytes())?;
-            
+
             invalidated.push(id);
         }
-        
+
         Ok(invalidated)
     }
 
     /// Listar todos los assets registrados
     pub fn list_assets(&self) -> ReactorResult<Vec<(AssetId, AssetMetadata)>> {
         let mut assets = Vec::new();
-        
+
         for item in self.db.iter() {
             let (key, value) = item?;
             let key_str = std::str::from_utf8(&key).unwrap_or("");
-            
+
             if key_str.starts_with("meta:") {
-                if let Ok(id_str) = key_str.strip_prefix("meta:").ok_or_else(|| {
-                    ReactorError::asset_load("Invalid metadata key format")
-                }) {
+                if let Ok(id_str) = key_str
+                    .strip_prefix("meta:")
+                    .ok_or_else(|| ReactorError::asset_load("Invalid metadata key format"))
+                {
                     if let Ok(id_val) = u64::from_str_radix(id_str, 16) {
                         let id = AssetId::from(id_val);
                         if let Ok(meta) = serde_json::from_slice::<AssetMetadata>(&value) {
@@ -283,7 +295,7 @@ impl AssetDatabase {
                 }
             }
         }
-        
+
         Ok(assets)
     }
 
@@ -291,7 +303,7 @@ impl AssetDatabase {
     pub fn stats(&self) -> AssetDbStats {
         AssetDbStats {
             cached_in_memory: self.memory_cache.len(),
-            total_entries: self.db.len() as usize,
+            total_entries: self.db.len(),
             size_on_disk: self.db.size_on_disk().unwrap_or(0) as usize,
         }
     }
@@ -305,14 +317,14 @@ impl AssetDatabase {
     /// Exportar metadata a JSON (para debugging o backup)
     pub fn export_json(&self) -> ReactorResult<String> {
         let mut assets = Vec::new();
-        
+
         for item in self.db.iter() {
             let (_, value) = item?;
             if let Ok(meta) = serde_json::from_slice::<AssetMetadata>(&value) {
                 assets.push(meta);
             }
         }
-        
+
         serde_json::to_string_pretty(&assets)
             .map_err(|e| ReactorError::asset_load(format!("Failed to serialize: {}", e)))
     }
@@ -321,14 +333,14 @@ impl AssetDatabase {
     pub fn import_json(&mut self, json: &str) -> ReactorResult<usize> {
         let assets: Vec<AssetMetadata> = serde_json::from_str(json)
             .map_err(|e| ReactorError::asset_load(format!("Failed to parse JSON: {}", e)))?;
-        
+
         let mut count = 0;
         for meta in assets {
             let id = AssetId::from_path(&meta.source_path);
             self.register_asset(id, meta)?;
             count += 1;
         }
-        
+
         Ok(count)
     }
 }
@@ -349,21 +361,25 @@ impl AssetMetadata {
     /// Crear metadata básica desde un path de archivo
     pub fn from_path<P: AsRef<Path>>(path: P) -> ReactorResult<Self> {
         let path = path.as_ref();
-        let meta = std::fs::metadata(path)
-            .map_err(|e| ReactorError::asset_load(format!("Failed to stat {}: {}", path.display(), e)))?;
-        
-        let content = std::fs::read(path)
-            .map_err(|e| ReactorError::asset_load(format!("Failed to read {}: {}", path.display(), e)))?;
-        
-        let ext = path.extension()
+        let meta = std::fs::metadata(path).map_err(|e| {
+            ReactorError::asset_load(format!("Failed to stat {}: {}", path.display(), e))
+        })?;
+
+        let content = std::fs::read(path).map_err(|e| {
+            ReactorError::asset_load(format!("Failed to read {}: {}", path.display(), e))
+        })?;
+
+        let ext = path
+            .extension()
             .and_then(|e| e.to_str())
             .unwrap_or("")
             .to_lowercase();
-        
+
         Ok(Self {
             source_path: path.to_string_lossy().to_string(),
             content_hash: xxhash_rust::xxh3::xxh3_64(&content),
-            last_modified: meta.modified()
+            last_modified: meta
+                .modified()
                 .unwrap_or(UNIX_EPOCH)
                 .duration_since(UNIX_EPOCH)
                 .map(|d| d.as_secs())
@@ -379,7 +395,11 @@ impl AssetMetadata {
     }
 
     /// Añadir metadata extra
-    pub fn with_extra(mut self, key: impl Into<String>, value: impl Into<serde_json::Value>) -> Self {
+    pub fn with_extra(
+        mut self,
+        key: impl Into<String>,
+        value: impl Into<serde_json::Value>,
+    ) -> Self {
         self.extra.insert(key.into(), value.into());
         self
     }
@@ -409,7 +429,7 @@ mod tests {
     #[test]
     fn test_database_basic() -> ReactorResult<()> {
         let mut db = AssetDatabase::in_memory()?;
-        
+
         let id = AssetId::from_path("test.png");
         let meta = AssetMetadata {
             source_path: "test.png".into(),
@@ -423,13 +443,13 @@ mod tests {
             dependents: Vec::new(),
             extra: HashMap::new(),
         };
-        
+
         db.register_asset(id, meta.clone())?;
-        
+
         let retrieved = db.get_metadata(id)?;
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap().content_hash, 12345);
-        
+
         Ok(())
     }
 }

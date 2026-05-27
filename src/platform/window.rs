@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use crate::core::error::ReactorResult;
+use std::sync::Arc;
 use winit::dpi::LogicalSize;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::Window;
@@ -13,10 +13,7 @@ pub struct ReactorWindow {
 
 impl ReactorWindow {
     /// Create a new window from config and event loop
-    pub fn new(
-        event_loop: &ActiveEventLoop,
-        config: &ReactorConfig,
-    ) -> ReactorResult<Self> {
+    pub fn new(event_loop: &ActiveEventLoop, config: &ReactorConfig) -> ReactorResult<Self> {
         let mut attributes = Window::default_attributes()
             .with_title(&config.title)
             .with_inner_size(LogicalSize::new(config.width as f32, config.height as f32))

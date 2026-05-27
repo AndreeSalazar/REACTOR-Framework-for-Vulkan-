@@ -1,5 +1,5 @@
 //! Core framework modules
-//! 
+//!
 //! This module contains the foundational systems that power REACTOR.
 
 // Vulkan abstractions
@@ -40,12 +40,12 @@ pub mod linear_allocator;
 // Re-exports
 // =============================================================================
 
-pub use error::{ReactorError, ReactorResult, ErrorCode};
-pub use context::VulkanContext;
 pub use allocator::MemoryAllocator;
 pub use arc_handle::{ArcDevice, ArcInstance, ArcSurface};
 pub use command::CommandManager;
+pub use context::VulkanContext;
 pub use device::DeviceInfo;
+pub use error::{ErrorCode, ReactorError, ReactorResult};
 pub use frame_graph::{
     Barrier, FrameGraph, FrameGraphStats, PassDesc, PassId, ResourceFormat, ResourceId,
     ResourceType,

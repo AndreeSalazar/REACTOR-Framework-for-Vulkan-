@@ -37,15 +37,15 @@
 //! ```
 
 use std::collections::HashMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
-use std::fs;
 
-use notify::{Watcher, RecursiveMode, Event, EventKind};
+use notify::{Event, EventKind, RecursiveMode, Watcher};
 
-use crate::core::error::{ReactorError, ReactorResult, ErrorCode};
-use crate::graphics::shader_compiler::{ShaderCompiler, ShaderStage, CompiledShader};
+use crate::core::error::{ErrorCode, ReactorError, ReactorResult};
+use crate::graphics::shader_compiler::{CompiledShader, ShaderCompiler, ShaderStage};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Tipos
@@ -94,19 +94,15 @@ impl ShaderHotReloader {
     /// Crea un nuevo reloader que vigila los paths dados.
     ///
     /// Compila todos los shaders una vez al inicio para obtener los hashes iniciales.
-    pub fn new(
-        shaders: Vec<(PathBuf, ShaderStage)>,
-        entry_point: &str,
-    ) -> ReactorResult<Self> {
+    pub fn new(shaders: Vec<(PathBuf, ShaderStage)>, entry_point: &str) -> ReactorResult<Self> {
         let (tx, rx) = mpsc::channel();
 
         let mut watcher = notify::recommended_watcher(move |res| {
             let _ = tx.send(res);
-        }).map_err(|e| ReactorError::with_source(
-            ErrorCode::IoError,
-            "Failed to create file watcher",
-            e,
-        ))?;
+        })
+        .map_err(|e| {
+            ReactorError::with_source(ErrorCode::IoError, "Failed to create file watcher", e)
+        })?;
 
         let mut compiler = ShaderCompiler::new();
         let mut watched = Vec::with_capacity(shaders.len());
@@ -114,12 +110,15 @@ impl ShaderHotReloader {
         for (path, stage) in &shaders {
             // Vigilar el directorio padre (más robusto que vigilar el archivo)
             let parent = path.parent().unwrap_or(Path::new("."));
-            watcher.watch(parent, RecursiveMode::NonRecursive)
-                .map_err(|e| ReactorError::with_source(
-                    ErrorCode::IoError,
-                    format!("Failed to watch directory: {}", parent.display()),
-                    e,
-                ))?;
+            watcher
+                .watch(parent, RecursiveMode::NonRecursive)
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::IoError,
+                        format!("Failed to watch directory: {}", parent.display()),
+                        e,
+                    )
+                })?;
 
             // Compilar una vez para obtener el hash inicial
             let compiled = if path.exists() {
@@ -130,9 +129,7 @@ impl ShaderHotReloader {
 
             let (hash, modified) = match &compiled {
                 Some(c) => {
-                    let modified = fs::metadata(path)
-                        .ok()
-                        .and_then(|m| m.modified().ok());
+                    let modified = fs::metadata(path).ok().and_then(|m| m.modified().ok());
                     (c.spirv_hash, modified)
                 }
                 None => (0, None),
@@ -163,11 +160,10 @@ impl ShaderHotReloader {
         let (tx, rx) = mpsc::channel();
         let watcher = notify::recommended_watcher(move |res| {
             let _ = tx.send(res);
-        }).map_err(|e| ReactorError::with_source(
-            ErrorCode::IoError,
-            "Failed to create file watcher",
-            e,
-        ))?;
+        })
+        .map_err(|e| {
+            ReactorError::with_source(ErrorCode::IoError, "Failed to create file watcher", e)
+        })?;
 
         Ok(Self {
             compiler: ShaderCompiler::new(),
@@ -187,12 +183,15 @@ impl ShaderHotReloader {
         entry_point: &str,
     ) -> ReactorResult<Option<CompiledShader>> {
         let parent = path.parent().unwrap_or(Path::new("."));
-        self.watcher.watch(parent, RecursiveMode::NonRecursive)
-            .map_err(|e| ReactorError::with_source(
-                ErrorCode::IoError,
-                format!("Failed to watch: {}", parent.display()),
-                e,
-            ))?;
+        self.watcher
+            .watch(parent, RecursiveMode::NonRecursive)
+            .map_err(|e| {
+                ReactorError::with_source(
+                    ErrorCode::IoError,
+                    format!("Failed to watch: {}", parent.display()),
+                    e,
+                )
+            })?;
 
         let compiled = if path.exists() {
             self.compiler.compile_file(path, stage, entry_point).ok()
@@ -202,9 +201,7 @@ impl ShaderHotReloader {
 
         let (hash, modified) = match &compiled {
             Some(c) => {
-                let modified = fs::metadata(path)
-                    .ok()
-                    .and_then(|m| m.modified().ok());
+                let modified = fs::metadata(path).ok().and_then(|m| m.modified().ok());
                 (c.spirv_hash, modified)
             }
             None => (0, None),
@@ -277,16 +274,17 @@ impl ShaderHotReloader {
             let stage = self.watched[idx].stage;
             let old_hash = self.watched[idx].last_spirv_hash;
 
-            match self.compiler.compile_file(&self.watched[idx].path, stage, &entry_point) {
+            match self
+                .compiler
+                .compile_file(&self.watched[idx].path, stage, &entry_point)
+            {
                 Ok(compiled) => {
                     // Solo notificar si el SPIR-V realmente cambió
                     if compiled.spirv_hash != old_hash {
                         self.watched[idx].last_spirv_hash = compiled.spirv_hash;
                         self.watched[idx].last_modified = current_modified;
-                        self.last_recompile.insert(
-                            self.watched[idx].path.clone(),
-                            Instant::now(),
-                        );
+                        self.last_recompile
+                            .insert(self.watched[idx].path.clone(), Instant::now());
 
                         log::info!(
                             "🔄 Shader hot-reload: {} (hash: {:#x} → {:#x})",

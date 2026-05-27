@@ -14,8 +14,10 @@ pub struct RayTracingContext {
 
 impl RayTracingContext {
     pub fn new(ctx: &VulkanContext) -> ReactorResult<Self> {
-        let pipeline_fn = ash::khr::ray_tracing_pipeline::Device::new(ctx.ash_instance(), ctx.ash_device());
-        let accel_fn = ash::khr::acceleration_structure::Device::new(ctx.ash_instance(), ctx.ash_device());
+        let pipeline_fn =
+            ash::khr::ray_tracing_pipeline::Device::new(ctx.ash_instance(), ctx.ash_device());
+        let accel_fn =
+            ash::khr::acceleration_structure::Device::new(ctx.ash_instance(), ctx.ash_device());
 
         // Get properties
         let mut pipeline_properties = vk::PhysicalDeviceRayTracingPipelinePropertiesKHR::default();

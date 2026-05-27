@@ -1,6 +1,6 @@
-use crate::core::VulkanContext;
 use crate::core::arc_handle::ArcDevice;
-use crate::core::error::{ReactorResult, ReactorError, ErrorCode};
+use crate::core::error::{ErrorCode, ReactorError, ReactorResult};
+use crate::core::VulkanContext;
 use ash::vk;
 
 pub struct RenderPass {
@@ -123,7 +123,13 @@ impl RenderPass {
         let handle = unsafe {
             ctx.ash_device()
                 .create_render_pass(&render_pass_info, None)
-                .map_err(|e| ReactorError::with_source(ErrorCode::VulkanRenderPassCreation, "create_render_pass failed", e))?
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanRenderPassCreation,
+                        "create_render_pass failed",
+                        e,
+                    )
+                })?
         };
 
         Ok(Self { handle, device: ctx.device.clone() })

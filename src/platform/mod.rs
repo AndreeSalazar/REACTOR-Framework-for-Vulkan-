@@ -1,13 +1,13 @@
 //! Platform abstraction layer
-//! 
+//!
 //! Handles OS-specific functionality, windowing, and input.
 
-pub mod window;
-pub mod input;
 pub mod gamepad;
+pub mod input;
 pub mod time;
+pub mod window;
 
-pub use window::ReactorWindow;
+pub use gamepad::{Gamepad, GamepadAxis, GamepadButton};
 pub use input::Input;
-pub use gamepad::{Gamepad, GamepadButton, GamepadAxis};
 pub use time::Time;
+pub use window::ReactorWindow;

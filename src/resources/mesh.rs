@@ -1,7 +1,7 @@
+use crate::core::error::ReactorResult;
+use crate::core::VulkanContext;
 use crate::graphics::buffer::Buffer;
 use crate::resources::vertex::Vertex;
-use crate::core::VulkanContext;
-use crate::core::error::ReactorResult;
 use ash::vk;
 use gpu_allocator::vulkan::Allocator;
 use gpu_allocator::MemoryLocation;
@@ -21,8 +21,8 @@ impl Mesh {
         vertices: &[Vertex],
         indices: &[u32],
     ) -> ReactorResult<Self> {
-        let vertex_size = (vertices.len() * std::mem::size_of::<Vertex>()) as u64;
-        let index_size = (indices.len() * std::mem::size_of::<u32>()) as u64;
+        let vertex_size = std::mem::size_of_val(vertices) as u64;
+        let index_size = std::mem::size_of_val(indices) as u64;
 
         // Create Staging Buffers
         let staging_vertex = Buffer::new(
@@ -158,10 +158,7 @@ impl Mesh {
 
 // Primitive mesh generators
 impl Mesh {
-    pub fn cube(
-        ctx: &VulkanContext,
-        allocator: &Arc<Mutex<Allocator>>,
-    ) -> ReactorResult<Self> {
+    pub fn cube(ctx: &VulkanContext, allocator: &Arc<Mutex<Allocator>>) -> ReactorResult<Self> {
         let vertices = [
             // Front
             Vertex::new(
@@ -219,10 +216,7 @@ impl Mesh {
         Self::new(ctx, allocator, &vertices, &indices)
     }
 
-    pub fn quad(
-        ctx: &VulkanContext,
-        allocator: &Arc<Mutex<Allocator>>,
-    ) -> ReactorResult<Self> {
+    pub fn quad(ctx: &VulkanContext, allocator: &Arc<Mutex<Allocator>>) -> ReactorResult<Self> {
         let vertices = [
             Vertex::new(
                 glam::Vec3::new(-0.5, -0.5, 0.0),

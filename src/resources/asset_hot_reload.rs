@@ -13,12 +13,12 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
-use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::sync::mpsc::UnboundedSender;
 
-use crate::core::error::{ReactorResult, ReactorError};
+use crate::core::error::{ReactorError, ReactorResult};
+use crate::resources::asset_database::AssetType;
 use crate::resources::asset_id::AssetId;
 use crate::resources::handle::Handle;
-use crate::resources::asset_database::{AssetType, AssetMetadata};
 
 /// Evento emitido cuando un asset es recargado
 #[derive(Debug, Clone)]
@@ -70,11 +70,25 @@ impl Default for HotReloadConfig {
         Self {
             watch_dirs: vec![PathBuf::from("assets")],
             extensions: HashSet::from([
-                "png".into(), "jpg".into(), "jpeg".into(), "bmp".into(), "tga".into(),
-                "gltf".into(), "glb".into(), "obj".into(), "fbx".into(),
-                "vert".into(), "frag".into(), "comp".into(), "spv".into(), "wgsl".into(),
-                "wav".into(), "mp3".into(), "ogg".into(),
-                "ktx2".into(), "dds".into(),
+                "png".into(),
+                "jpg".into(),
+                "jpeg".into(),
+                "bmp".into(),
+                "tga".into(),
+                "gltf".into(),
+                "glb".into(),
+                "obj".into(),
+                "fbx".into(),
+                "vert".into(),
+                "frag".into(),
+                "comp".into(),
+                "spv".into(),
+                "wgsl".into(),
+                "wav".into(),
+                "mp3".into(),
+                "ogg".into(),
+                "ktx2".into(),
+                "dds".into(),
             ]),
             debounce_duration: Duration::from_millis(250),
             ignore_patterns: vec![".git".into(), "target".into(), "tmp".into(), ".tmp".into()],
@@ -141,7 +155,10 @@ impl AssetHotReloadManager {
     }
 
     /// Vincular con AssetDatabase para metadata persistente
-    pub fn with_asset_db(mut self, db: Arc<Mutex<crate::resources::asset_database::AssetDatabase>>) -> Self {
+    pub fn with_asset_db(
+        mut self,
+        db: Arc<Mutex<crate::resources::asset_database::AssetDatabase>>,
+    ) -> Self {
         self.asset_db = Some(db);
         self
     }
@@ -152,26 +169,31 @@ impl AssetHotReloadManager {
         let shutdown = self.shutdown.clone();
         let config = self.config.clone();
         let shared = Arc::clone(&self.shared);
-        
+
         // Callback para eventos de filesystem
-        let mut watcher: RecommendedWatcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
-            if *shutdown.lock().unwrap() {
-                return;
-            }
-            
-            match res {
-                Ok(event) => Self::handle_filesystem_event(&event, &config, &tx, &shared),
-                Err(e) => eprintln!("[AssetHotReload] Watcher error: {}", e),
-            }
-        }).map_err(|e| ReactorError::asset_load(format!("Failed to create watcher: {}", e)))?;
+        let mut watcher: RecommendedWatcher =
+            notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
+                if *shutdown.lock().unwrap() {
+                    return;
+                }
+
+                match res {
+                    Ok(event) => Self::handle_filesystem_event(&event, &config, &tx, &shared),
+                    Err(e) => eprintln!("[AssetHotReload] Watcher error: {}", e),
+                }
+            })
+            .map_err(|e| ReactorError::asset_load(format!("Failed to create watcher: {}", e)))?;
 
         // Registrar directorios a watch
         for dir in &self.config.watch_dirs {
             if dir.exists() {
-                watcher.watch(dir, RecursiveMode::Recursive)
-                    .map_err(|e| ReactorError::asset_load(
-                        format!("Failed to watch directory {}: {}", dir.display(), e)
-                    ))?;
+                watcher.watch(dir, RecursiveMode::Recursive).map_err(|e| {
+                    ReactorError::asset_load(format!(
+                        "Failed to watch directory {}: {}",
+                        dir.display(),
+                        e
+                    ))
+                })?;
                 println!("[AssetHotReload] Watching: {}", dir.display());
             }
         }
@@ -220,14 +242,17 @@ impl AssetHotReloadManager {
         }
 
         // Filtrar por ignore patterns
-        if config.ignore_patterns.iter().any(|pat| {
-            path.to_string_lossy().contains(pat.as_str())
-        }) {
+        if config
+            .ignore_patterns
+            .iter()
+            .any(|pat| path.to_string_lossy().contains(pat.as_str()))
+        {
             return;
         }
 
         let asset_id = AssetId::from_path(path);
-        let asset_type = path.extension()
+        let asset_type = path
+            .extension()
             .and_then(|e| e.to_str())
             .map_or(AssetType::Unknown, AssetType::from_extension);
 
@@ -271,7 +296,7 @@ impl AssetHotReloadManager {
         }
 
         let asset_id = AssetId::from_path(path);
-        
+
         // Remover del tracking
         {
             let mut state = shared.lock().unwrap();
@@ -295,7 +320,7 @@ impl AssetHotReloadManager {
     ) -> ReactorResult<()> {
         let path = path.as_ref().to_path_buf();
         let (mtime, hash) = Self::get_file_info(&path)?;
-        
+
         let tracked = TrackedAsset {
             path: path.clone(),
             asset_type,
@@ -303,13 +328,15 @@ impl AssetHotReloadManager {
             last_hash: hash,
             reload_count: 0,
         };
-        
-        let mut state = self.shared.lock()
+
+        let mut state = self
+            .shared
+            .lock()
             .map_err(|_| ReactorError::internal("Mutex poison"))?;
-        
+
         state.tracked_assets.insert(id, tracked);
         state.path_to_id.insert(path, id);
-        
+
         Ok(())
     }
 
@@ -324,43 +351,50 @@ impl AssetHotReloadManager {
 
     /// Verificar si un asset ha cambiado desde la última vez
     pub fn has_changed(&self, id: AssetId) -> ReactorResult<bool> {
-        let state = self.shared.lock()
+        let state = self
+            .shared
+            .lock()
             .map_err(|_| ReactorError::internal("Mutex poison"))?;
-        
+
         if let Some(tracked_asset) = state.tracked_assets.get(&id) {
             let (current_mtime, current_hash) = Self::get_file_info(&tracked_asset.path)?;
-            Ok(current_mtime != tracked_asset.last_mtime || current_hash != tracked_asset.last_hash)
+            Ok(
+                current_mtime != tracked_asset.last_mtime
+                    || current_hash != tracked_asset.last_hash,
+            )
         } else {
             Ok(false)
         }
     }
 
     /// Forzar recarga de un asset específico (llamado por el engine al recibir evento)
-    pub async fn reload_asset<T, F, Fut>(
-        &self,
-        id: AssetId,
-        loader: F,
-    ) -> ReactorResult<Handle<T>>
+    pub async fn reload_asset<T, F, Fut>(&self, id: AssetId, loader: F) -> ReactorResult<Handle<T>>
     where
         F: FnOnce(&Path) -> Fut + Send + 'static,
         Fut: std::future::Future<Output = ReactorResult<T>> + Send + 'static,
         T: Send + Sync + 'static,
     {
         let path = {
-            let state = self.shared.lock()
+            let state = self
+                .shared
+                .lock()
                 .map_err(|_| ReactorError::internal("Mutex poison"))?;
-            state.tracked_assets.get(&id)
+            state
+                .tracked_assets
+                .get(&id)
                 .map(|t| t.path.clone())
                 .ok_or_else(|| ReactorError::asset_load("Asset not tracked"))?
         };
 
         // Ejecutar loader
         let new_asset = loader(&path).await?;
-        
+
         // Actualizar metadata
         let (new_mtime, new_hash) = Self::get_file_info(&path)?;
         {
-            let mut state = self.shared.lock()
+            let mut state = self
+                .shared
+                .lock()
                 .map_err(|_| ReactorError::internal("Mutex poison"))?;
             if let Some(entry) = state.tracked_assets.get_mut(&id) {
                 entry.last_mtime = new_mtime;
@@ -395,28 +429,31 @@ impl AssetHotReloadManager {
     /// Helper: obtener mtime y hash de archivo
     fn get_file_info(path: &Path) -> ReactorResult<(u64, u64)> {
         use xxhash_rust::xxh3::xxh3_64;
-        
-        let metadata = std::fs::metadata(path)
-            .map_err(|e| ReactorError::asset_load(
-                format!("Failed to stat {}: {}", path.display(), e)
-            ))?;
-        
-        let mtime = metadata.modified()
-            .map_err(|e| ReactorError::asset_load(
-                format!("Failed to get mtime for {}: {}", path.display(), e)
-            ))?
+
+        let metadata = std::fs::metadata(path).map_err(|e| {
+            ReactorError::asset_load(format!("Failed to stat {}: {}", path.display(), e))
+        })?;
+
+        let mtime = metadata
+            .modified()
+            .map_err(|e| {
+                ReactorError::asset_load(format!(
+                    "Failed to get mtime for {}: {}",
+                    path.display(),
+                    e
+                ))
+            })?
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
-            .map_err(|e| ReactorError::asset_load(
-                format!("Invalid timestamp for {}: {}", path.display(), e)
-            ))?;
-        
-        let content = std::fs::read(path)
-            .map_err(|e| ReactorError::asset_load(
-                format!("Failed to read {}: {}", path.display(), e)
-            ))?;
+            .map_err(|e| {
+                ReactorError::asset_load(format!("Invalid timestamp for {}: {}", path.display(), e))
+            })?;
+
+        let content = std::fs::read(path).map_err(|e| {
+            ReactorError::asset_load(format!("Failed to read {}: {}", path.display(), e))
+        })?;
         let hash = xxh3_64(&content);
-        
+
         Ok((mtime, hash))
     }
 }
@@ -441,8 +478,6 @@ pub struct HotReloadStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::sync::mpsc::unbounded_channel;
-
     #[test]
     fn test_asset_type_from_extension() {
         assert_eq!(AssetType::from_extension("png"), AssetType::Texture);

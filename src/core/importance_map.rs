@@ -422,18 +422,48 @@ impl ImportanceMap {
         println!("╔══════════════════════════════════════════════════════════════════╗");
         println!("║                   Importance Map Stats                           ║");
         println!("╠══════════════════════════════════════════════════════════════════╣");
-        println!("║ Total Tiles:     {:5}                                            ║", self.stats.total_tiles);
-        println!("║ Visible Tiles:   {:5}                                            ║", self.stats.visible_tiles);
-        println!("║ Important Tiles: {:5}                                            ║", self.stats.important_tiles);
-        println!("║ Avg Importance:  {:5.2}                                          ║", self.stats.average_importance);
+        println!(
+            "║ Total Tiles:     {:5}                                            ║",
+            self.stats.total_tiles
+        );
+        println!(
+            "║ Visible Tiles:   {:5}                                            ║",
+            self.stats.visible_tiles
+        );
+        println!(
+            "║ Important Tiles: {:5}                                            ║",
+            self.stats.important_tiles
+        );
+        println!(
+            "║ Avg Importance:  {:5.2}                                          ║",
+            self.stats.average_importance
+        );
         println!("║ LOD Distribution:                                                ║");
-        println!("║ Important Tiles: {:5}                                            ║", self.stats.important_tiles);
-        println!("║ Avg Importance:  {:5.2}                                          ║", self.stats.average_importance);
+        println!(
+            "║ Important Tiles: {:5}                                            ║",
+            self.stats.important_tiles
+        );
+        println!(
+            "║ Avg Importance:  {:5.2}                                          ║",
+            self.stats.average_importance
+        );
         println!("║ LOD Distribution:                                                ║");
-        println!("║   LOD 0 (Max):   {:5}                                            ║", self.stats.lod_distribution[0]);
-        println!("║   LOD 1:         {:5}                                            ║", self.stats.lod_distribution[1]);
-        println!("║   LOD 2:         {:5}                                            ║", self.stats.lod_distribution[2]);
-        println!("║   LOD 3 (Min):   {:5}                                            ║", self.stats.lod_distribution[3]);
+        println!(
+            "║   LOD 0 (Max):   {:5}                                            ║",
+            self.stats.lod_distribution[0]
+        );
+        println!(
+            "║   LOD 1:         {:5}                                            ║",
+            self.stats.lod_distribution[1]
+        );
+        println!(
+            "║   LOD 2:         {:5}                                            ║",
+            self.stats.lod_distribution[2]
+        );
+        println!(
+            "║   LOD 3 (Min):   {:5}                                            ║",
+            self.stats.lod_distribution[3]
+        );
         println!("╚══════════════════════════════════════════════════════════════════╝");
     }
 }

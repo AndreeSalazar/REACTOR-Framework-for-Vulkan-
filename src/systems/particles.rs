@@ -324,13 +324,15 @@ impl ParticleSystem {
     }
 
     fn create_new_particle(&self) -> Particle {
-        let mut particle = Particle::default();
-        particle.alive = true;
-        particle.lifetime = 0.0;
-        particle.max_lifetime = self.config.lifetime.sample();
-        particle.size = self.config.start_size.sample();
-        particle.rotation = self.config.start_rotation.sample();
-        particle.color = self.config.start_color;
+        let mut particle = Particle {
+            alive: true,
+            lifetime: 0.0,
+            max_lifetime: self.config.lifetime.sample(),
+            size: self.config.start_size.sample(),
+            rotation: self.config.start_rotation.sample(),
+            color: self.config.start_color,
+            ..Default::default()
+        };
 
         // Position and velocity based on shape
         let (pos_offset, direction) = match &self.config.shape {

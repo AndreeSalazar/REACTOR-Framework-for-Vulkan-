@@ -3,7 +3,7 @@
 // =============================================================================
 // Permite enqueue de loads que se ejecutan en worker threads sin bloquear
 // el main thread. Soporta prioridad, cancelación y progress tracking.
-// 
+//
 // Fase 3.2: Asset Pipeline completo con loading no-bloqueante.
 // =============================================================================
 
@@ -13,30 +13,25 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
-use crate::core::error::{ReactorResult, ReactorError};
+use crate::core::error::{ReactorError, ReactorResult};
 use crate::resources::asset_id::AssetId;
 use crate::resources::handle::Handle;
 
 /// Prioridad de carga de asset
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum LoadPriority {
     /// Carga inmediata (próximo frame) - crítico para gameplay
     Critical = 0,
     /// Carga pronto (próximos 2-3 frames) - assets visibles pronto
     High = 1,
     /// Carga normal (background) - assets que pueden esperar
+    #[default]
     Normal = 2,
     /// Carga baja (solo cuando idle) - precaching, streaming lejano
     Low = 3,
-}
-
-impl Default for LoadPriority {
-    fn default() -> Self {
-        Self::Normal
-    }
 }
 
 /// Estado de una carga en la cola
@@ -132,29 +127,22 @@ impl AssetLoaderQueue {
         let stats = Arc::new(Mutex::new(LoaderStats::default()));
         let queue = Arc::new(Mutex::new(VecDeque::new()));
         let work_available = Arc::new(tokio::sync::Notify::new());
-        
+
         let mut workers = Vec::with_capacity(config.num_workers);
-        
+
         for worker_id in 0..config.num_workers {
             let stats = Arc::clone(&stats);
             let queue = Arc::clone(&queue);
             let work_available = Arc::clone(&work_available);
             let shutdown = Arc::clone(&shutdown);
             let config = config.clone();
-            
+
             let handle = tokio::spawn(async move {
-                Self::worker_loop(
-                    worker_id,
-                    shutdown,
-                    queue,
-                    work_available,
-                    stats,
-                    config,
-                ).await;
+                Self::worker_loop(worker_id, shutdown, queue, work_available, stats, config).await;
             });
             workers.push(handle);
         }
-        
+
         Ok(Self {
             queue,
             work_available,
@@ -197,17 +185,17 @@ impl AssetLoaderQueue {
                 // Prioridad: sacar el de mayor prioridad (menor valor enum)
                 let mut best_idx = None;
                 let mut best_priority = LoadPriority::Low;
-                
+
                 for (idx, req) in q.iter().enumerate() {
                     if best_idx.is_none() || req.priority < best_priority {
                         best_priority = req.priority;
                         best_idx = Some(idx);
                     }
                 }
-                
+
                 best_idx.and_then(|idx| q.remove(idx))
             };
-            
+
             if let Some(req) = request {
                 // Extract fields before consuming the loader
                 let req_id = req.id;
@@ -221,36 +209,33 @@ impl AssetLoaderQueue {
                     s.queued = s.queued.saturating_sub(1);
                     s.loading += 1;
                 }
-                
+
                 let start = Instant::now();
-                
+
                 // Ejecutar loader con timeout
-                let result = tokio::time::timeout(
-                    config.load_timeout,
-                    tokio::task::spawn_blocking(move || {
-                        (loader)()
-                    })
-                ).await;
-                
+                let result =
+                    tokio::time::timeout(config.load_timeout, tokio::task::spawn_blocking(loader))
+                        .await;
+
                 let load_time = start.elapsed().as_secs_f64() * 1000.0;
-                
+
                 let final_result = match result {
-                    Ok(Ok(Ok(data))) => {
-                        Ok(LoadResult {
-                            id: req_id,
-                            data,
-                            load_time_ms: load_time,
-                        })
-                    }
+                    Ok(Ok(Ok(data))) => Ok(LoadResult {
+                        id: req_id,
+                        data,
+                        load_time_ms: load_time,
+                    }),
                     Ok(Ok(Err(e))) => Err(e),
-                    Ok(Err(join_err)) => Err(ReactorError::internal(
-                        format!("Loader task panicked: {}", join_err)
-                    )),
-                    Err(_) => Err(ReactorError::timeout(
-                        format!("Load timeout for {:?}", req_path)
-                    )),
+                    Ok(Err(join_err)) => Err(ReactorError::internal(format!(
+                        "Loader task panicked: {}",
+                        join_err
+                    ))),
+                    Err(_) => Err(ReactorError::timeout(format!(
+                        "Load timeout for {:?}",
+                        req_path
+                    ))),
                 };
-                
+
                 // Update stats
                 {
                     let mut s = stats.lock().unwrap();
@@ -269,7 +254,7 @@ impl AssetLoaderQueue {
                         Err(_) => s.failed += 1,
                     }
                 }
-                
+
                 // Enviar resultado
                 let _ = response_tx.send(final_result);
             }
@@ -288,14 +273,13 @@ impl AssetLoaderQueue {
         F: FnOnce() -> ReactorResult<T> + Send + 'static,
         T: Send + Sync + 'static,
     {
-        
         // Wrapper para type-erase el loader
         let typed_loader = Box::new(move || -> ReactorResult<Box<dyn std::any::Any + Send>> {
             loader().map(|asset| Box::new(Handle::new(id, asset)) as Box<dyn std::any::Any + Send>)
         });
-        
+
         let (response_tx, response_rx) = oneshot::channel();
-        
+
         let request = LoadRequest {
             id,
             path,
@@ -304,7 +288,7 @@ impl AssetLoaderQueue {
             response_tx,
             created_at: Instant::now(),
         };
-        
+
         // Insertar en cola
         {
             let mut queue = self.queue.lock().unwrap();
@@ -312,13 +296,13 @@ impl AssetLoaderQueue {
             let mut s = self.stats.lock().unwrap();
             s.queued += 1;
         }
-        
+
         // Notificar a workers
         self.work_available.notify_one();
-        
+
         // Wrapper del receiver para convertir LoadResult a Handle<T>
         let (wrap_tx, wrap_rx) = oneshot::channel::<ReactorResult<Handle<T>>>();
-        
+
         tokio::spawn(async move {
             match response_rx.await {
                 Ok(Ok(result)) => {
@@ -326,7 +310,7 @@ impl AssetLoaderQueue {
                         let _ = wrap_tx.send(Ok(*handle));
                     } else {
                         let _ = wrap_tx.send(Err(ReactorError::internal(
-                            "Type mismatch in loader result"
+                            "Type mismatch in loader result",
                         )));
                     }
                 }
@@ -334,13 +318,12 @@ impl AssetLoaderQueue {
                     let _ = wrap_tx.send(Err(e));
                 }
                 Err(e) => {
-                    let _ = wrap_tx.send(Err(ReactorError::internal(
-                        format!("Channel error: {}", e)
-                    )));
+                    let _ =
+                        wrap_tx.send(Err(ReactorError::internal(format!("Channel error: {}", e))));
                 }
             }
         });
-        
+
         wrap_rx
     }
 
@@ -414,16 +397,18 @@ impl AssetLoaderQueue {
         self.shutdown.store(true, Ordering::Relaxed);
         // Wake all workers so they can see the shutdown flag
         self.work_available.notify_waiters();
-        
+
         // Esperar a que terminen
         for worker in self.workers {
             let _ = worker.await;
         }
-        
+
         if self.config.log_stats {
             let stats = self.stats.lock().unwrap();
-            println!("[LoaderQueue] Final stats: completed={}, failed={}, avg_time={:.2}ms",
-                stats.completed, stats.failed, stats.avg_load_time_ms);
+            println!(
+                "[LoaderQueue] Final stats: completed={}, failed={}, avg_time={:.2}ms",
+                stats.completed, stats.failed, stats.avg_load_time_ms
+            );
         }
     }
 }
@@ -439,7 +424,7 @@ mod tests {
     #[tokio::test]
     async fn test_queue_priority_order() {
         let queue = AssetLoaderQueue::new().unwrap();
-        
+
         // Enqueue en orden aleatorio
         let _rx_low = queue.enqueue(
             AssetId::from_path("low.png"),
@@ -453,14 +438,14 @@ mod tests {
             LoadPriority::Critical,
             || Ok("critical"),
         );
-        
+
         // Verificar stats
         let stats = queue.stats();
         assert_eq!(stats.queued, 2);
-        
+
         // Esperar un poco para que los workers procesen
         tokio::time::sleep(Duration::from_millis(50)).await;
-        
+
         queue.shutdown().await;
     }
 

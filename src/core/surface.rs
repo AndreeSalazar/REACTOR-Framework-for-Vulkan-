@@ -26,14 +26,13 @@ impl SurfaceInfo {
         };
 
         // Prefer SRGB format
-        let format = formats
+        let format = *formats
             .iter()
             .find(|f| {
                 f.format == vk::Format::B8G8R8A8_SRGB
                     && f.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
             })
-            .unwrap_or(&formats[0])
-            .clone();
+            .unwrap_or(&formats[0]);
 
         // Prefer Mailbox (triple buffering), fallback to FIFO
         let present_mode = present_modes
