@@ -36,57 +36,109 @@ void main() {
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(push.camera_pos.xyz - fragPos);
 
-    // 1. Cyberpunk 2077 Hemispherical Ambient (Sky / Ground gradient)
-    // Deep midnight purple/blue (top) transitioning to a dark steel gray (bottom)
-    vec3 skyAmbient = vec3(0.04, 0.02, 0.08);
-    vec3 groundAmbient = vec3(0.01, 0.01, 0.02);
+    // 1. Dark Atmospheric Ambient
+    // Very subtle dark blue sky glow and near-black ground reflection to preserve shadow depth
+    vec3 skyAmbient = vec3(0.008, 0.006, 0.012);
+    vec3 groundAmbient = vec3(0.002, 0.002, 0.003);
     float hemiW = N.y * 0.5 + 0.5;
     vec3 ambient = mix(groundAmbient, skyAmbient, hemiW);
 
-    // 2. Main Key Light: Warm Cyberpunk Neon Pink/Orange (Streetlights, holographic billboards)
-    vec3 keyLightPos = vec3(10.0, 15.0, 10.0);
-    vec3 L_key = normalize(keyLightPos - fragPos);
-    float diff_key = max(dot(N, L_key), 0.0);
-    vec3 keyColor = vec3(1.0, 0.25, 0.55) * 1.5; // High intensity hot magenta/pink
-    vec3 diffuse_key = diff_key * keyColor;
+    vec3 totalDiffuse = vec3(0.0);
+    vec3 totalSpecular = vec3(0.0);
 
-    // 3. Fill Light: Cool Cyberpunk Teal/Cyan (City sky glow, neon signs)
-    vec3 fillLightDir = normalize(vec3(-1.0, 0.2, -0.5));
-    float diff_fill = max(dot(N, fillLightDir), 0.0);
-    vec3 fillColor = vec3(0.0, 0.9, 0.95) * 0.7; // Cooler cyber-teal
-    vec3 diffuse_fill = diff_fill * fillColor;
+    // 2. Cyberpunk 2077 Spaced Corridor Point Lights (Spaced every 8 meters)
+    const float spacing = 8.0;
+    float seg = round(fragPos.z / spacing);
 
-    // 4. Stylized Specular Highlights (Blinn-Phong) for a wet, high-quality, metallic finish
-    // Key Light specular (pinkish glow)
-    vec3 H_key = normalize(L_key + V);
-    float spec_key = pow(max(dot(N, H_key), 0.0), 32.0);
-    vec3 specular_key = spec_key * keyColor * 0.8;
+    // Accumulate from nearest 3 light segments to ensure seamless transitions
+    for (int i = -1; i <= 1; ++i) {
+        float zPos = (seg + float(i)) * spacing;
+        
+        // Alternating sides and colors (Magenta / Teal)
+        // Even segment -> Magenta light on the left
+        // Odd segment -> Teal light on the right
+        bool isEven = (int(abs(seg + float(i))) % 2 == 0);
+        
+        vec3 lightPos;
+        vec3 lightColor;
+        
+        if (isEven) {
+            // Magenta neon light on the left wall
+            lightPos = vec3(-2.8, 1.8, zPos);
+            lightColor = vec3(1.0, 0.05, 0.5) * 1.5; // Intense hot pink
+        } else {
+            // Teal neon light on the right wall
+            lightPos = vec3(2.8, 1.8, zPos);
+            lightColor = vec3(0.0, 0.75, 1.0) * 1.5; // Intense neon teal
+        }
+        
+        // Buzz/flicker effect based on light Z position (stable procedural flickering neon)
+        float buzz = sin(zPos * 123.456) * 0.03 + 0.97;
+        lightColor *= buzz;
+        
+        // Calculate vector & distance
+        vec3 L = lightPos - fragPos;
+        float dist = length(L);
+        L = normalize(L);
+        
+        // Physical quadratic attenuation
+        float attenuation = 1.0 / (1.0 + 0.15 * dist + 0.25 * dist * dist);
+        
+        // Diffuse
+        float diff = max(dot(N, L), 0.0);
+        totalDiffuse += diff * lightColor * attenuation;
+        
+        // Specular (Blinn-Phong)
+        vec3 H = normalize(L + V);
+        float spec = pow(max(dot(N, H), 0.0), 32.0);
+        totalSpecular += spec * lightColor * attenuation * 0.5;
+    }
 
-    // Fill Light specular (teal glow)
-    vec3 H_fill = normalize(fillLightDir + V);
-    float spec_fill = pow(max(dot(N, H_fill), 0.0), 16.0);
-    vec3 specular_fill = spec_fill * fillColor * 0.4;
+    // 3. Tactical Flashlight (Attached to Player Camera)
+    vec3 flashlightPos = push.camera_pos.xyz;
+    vec3 flashlightDir = vec3(0.0, 0.0, -1.0); // Facing straight down the corridor (-Z)
+    vec3 L_flash = flashlightPos - fragPos;
+    float dist_flash = length(L_flash);
+    L_flash = normalize(L_flash);
+    
+    // Spotlight cone calculations
+    float theta = dot(-L_flash, flashlightDir);
+    float cutOff = cos(radians(15.0)); // 15 degrees inner cone
+    float outerCutOff = cos(radians(22.0)); // 22 degrees outer cone
+    float epsilon = cutOff - outerCutOff;
+    float intensity = clamp((theta - outerCutOff) / epsilon, 0.0, 1.0);
+    
+    // Flashlight attenuation
+    float att_flash = 1.0 / (1.0 + 0.04 * dist_flash + 0.06 * dist_flash * dist_flash);
+    vec3 flashColor = vec3(0.9, 0.95, 1.0) * 2.0; // Sharp cool white
+    
+    float diff_flash = max(dot(N, L_flash), 0.0);
+    vec3 flashDiffuse = diff_flash * flashColor * att_flash * intensity;
+    
+    vec3 H_flash = normalize(L_flash + V);
+    float spec_flash = pow(max(dot(N, H_flash), 0.0), 64.0);
+    vec3 flashSpecular = spec_flash * flashColor * att_flash * intensity * 0.6;
 
-    // 5. Creepy Sci-Fi Neon Rim Light / Backlight (wraps beautifully around character silhouettes)
-    // High intensity emerald green/electric cyan rim light
+    // 4. Stylized Rim Light (Backlight silhouette halo)
     float rimFactor = 1.0 - max(dot(N, V), 0.0);
-    rimFactor = pow(rimFactor, 4.0); // Sharp, fine rim glow
-    vec3 rimColor = vec3(0.05, 1.0, 0.6) * 1.8; // Electric toxic emerald
+    rimFactor = pow(rimFactor, 5.0); // Fine sharp rim
+    vec3 rimColor = vec3(0.0, 0.9, 1.0) * 0.8; // Cyan rim light
     vec3 rimLight = rimFactor * rimColor;
 
-    // 6. Combine all lighting contributions
-    vec3 finalLight = ambient + diffuse_key + diffuse_fill;
-    vec3 finalColor = texColor.rgb * finalLight + specular_key + specular_fill + rimLight;
+    // 5. Assemble all lighting contributions
+    vec3 diffuseAccum = ambient + totalDiffuse + flashDiffuse;
+    vec3 specularAccum = totalSpecular + flashSpecular;
+    vec3 finalColor = texColor.rgb * diffuseAccum + specularAccum + rimLight;
 
-    // 7. Cinematic Contrast & Color Grading (Cyberpunk grade)
-    finalColor = mix(finalColor, vec3(dot(finalColor, vec3(0.2126, 0.7152, 0.0722))), 0.15); // Slight desaturation for gritty look
-    finalColor.r *= 1.05; // Slightly boost reds for organic tissue/zombie feel
-    finalColor.b *= 1.02; // Warm cyberpunk shadows
+    // 6. Cinematic Color Grading & Contrast
+    finalColor = mix(finalColor, vec3(dot(finalColor, vec3(0.2126, 0.7152, 0.0722))), 0.12); // subtle desaturation
+    finalColor.r *= 1.03; // organic touch
+    finalColor.b *= 1.01;
 
-    // 8. ACES Filmic Tone Mapping (AAA standard)
+    // 7. ACES Filmic Tone Mapping (AAA standard)
     finalColor = aces_tonemap(finalColor);
 
-    // 9. Gamma Correction (sRGB space)
+    // 8. Gamma Correction (sRGB space)
     finalColor = pow(finalColor, vec3(1.0 / 2.2));
 
     outColor = vec4(finalColor, texColor.a);
