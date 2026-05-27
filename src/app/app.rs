@@ -827,6 +827,118 @@ impl ReactorContext {
         self.spawn_gltf_model(&model, transform)
     }
 
+    // =========================================================================
+    // 🧊 Spawning inteligente de modelos Blender (auto-escala + auto-orientación)
+    // =========================================================================
+
+    /// Inspecciona un glTF/GLB y devuelve sus dimensiones nativas sin spawnearlo.
+    ///
+    /// Útil para conocer la altura/anchura "real" exportada desde Blender antes
+    /// de decidir cómo posicionarlo.
+    pub fn gltf_bounds<P: AsRef<std::path::Path>>(
+        &mut self,
+        path: P,
+    ) -> crate::core::error::ReactorResult<GltfBounds> {
+        let model = self.load_gltf(path)?;
+        let (min, max) = model.bounds().ok_or_else(|| {
+            crate::core::error::ReactorError::asset_load("glTF model has no meshes")
+        })?;
+        Ok(GltfBounds {
+            min,
+            max,
+            center: (min + max) * 0.5,
+            size: max - min,
+            height: max.y - min.y,
+        })
+    }
+
+    /// Spawn "inteligente" de un modelo glTF: auto-escala a la altura objetivo,
+    /// auto-orienta hacia una dirección, y coloca los pies del modelo en
+    /// `position` (no el pivot, que en Blender suele estar mal calibrado).
+    ///
+    /// ```ignore
+    /// let info = ctx.spawn_gltf_smart(
+    ///     "assets/models/zombie.glb",
+    ///     GltfSpawn::at(Vec3::new(0.0, 0.0, -10.0))
+    ///         .with_height(1.8)              // re-escala a 1.8 m de alto
+    ///         .facing(Vec3::new(0.0, 0.0, 1.0)), // mira hacia +Z (la cámara)
+    /// )?;
+    /// println!("Zombie spawned: scale {:.2}, height {:.2}m",
+    ///     info.applied_scale, info.world_height);
+    /// ```
+    pub fn spawn_gltf_smart<P: AsRef<std::path::Path>>(
+        &mut self,
+        path: P,
+        spawn: GltfSpawn,
+    ) -> crate::core::error::ReactorResult<ModelSpawnInfo> {
+        let model = self.load_gltf(path)?;
+
+        // ── 1. Bounds nativos ──
+        let (min, max) = model.bounds().ok_or_else(|| {
+            crate::core::error::ReactorError::asset_load("glTF model has no meshes")
+        })?;
+        let native_height = max.y - min.y;
+        let native_center = (min + max) * 0.5;
+
+        // ── 2. Auto-escala ──
+        let scale = if let Some(target_h) = spawn.target_height {
+            if native_height > 1e-6 {
+                target_h / native_height
+            } else {
+                1.0
+            }
+        } else {
+            1.0
+        };
+
+        // ── 3. Auto-orientación (rotación Y para mirar hacia `face_direction`) ──
+        let rotation = if let Some(dir) = spawn.face_direction {
+            let flat = glam::Vec3::new(dir.x, 0.0, dir.z);
+            if flat.length_squared() > 1e-6 {
+                let n = flat.normalize();
+                // atan2(x, z) coloca el modelo (mira por defecto a -Z) en `n`.
+                let yaw = (-n.x).atan2(-n.z);
+                glam::Quat::from_rotation_y(yaw)
+            } else {
+                glam::Quat::IDENTITY
+            }
+        } else {
+            glam::Quat::IDENTITY
+        };
+
+        // ── 4. Offset: pies del modelo en position.y (no su pivot) ──
+        //    Después de escalar, los pies del modelo están en min.y * scale.
+        //    Para subirlos a position.y, sumamos -min.y * scale al transform.
+        let feet_offset = if spawn.feet_at_position {
+            glam::Vec3::new(0.0, -min.y * scale, 0.0)
+        } else {
+            glam::Vec3::ZERO
+        };
+
+        let final_pos = spawn.position + feet_offset;
+        let transform = glam::Mat4::from_scale_rotation_translation(
+            glam::Vec3::splat(scale),
+            rotation,
+            final_pos,
+        );
+
+        // ── 5. Spawn real ──
+        let indices = self.spawn_gltf_model(&model, transform)?;
+
+        let world_min = (min - native_center) * scale + spawn.position + glam::Vec3::Y * (native_center.y * scale - min.y * scale);
+        let world_max = (max - native_center) * scale + spawn.position + glam::Vec3::Y * (native_center.y * scale - min.y * scale);
+
+        Ok(ModelSpawnInfo {
+            indices,
+            applied_scale: scale,
+            applied_rotation: rotation,
+            native_height,
+            world_height: native_height * scale,
+            world_bounds_min: world_min,
+            world_bounds_max: world_max,
+        })
+    }
+
     /// Spawn de un GltfModel ya cargado en la escena
     pub fn spawn_gltf_model(
         &mut self,

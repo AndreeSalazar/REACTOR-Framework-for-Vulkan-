@@ -567,6 +567,70 @@ impl GltfModel {
             Ok(None)
         }
     }
+
+    // =========================================================================
+    // 📐 Análisis geométrico del modelo (Fase 3 — Blender workflow)
+    // =========================================================================
+
+    /// Calcula el AABB (axis-aligned bounding box) del modelo en su sistema
+    /// de coordenadas local, aplicando los transforms de la jerarquía glTF.
+    ///
+    /// Devuelve `None` si el modelo no tiene meshes. Útil para auto-escalar
+    /// modelos importados de Blender sin tener que medir manualmente.
+    pub fn bounds(&self) -> Option<(glam::Vec3, glam::Vec3)> {
+        if self.meshes.is_empty() {
+            return None;
+        }
+
+        let mut min = glam::Vec3::splat(f32::INFINITY);
+        let mut max = glam::Vec3::splat(f32::NEG_INFINITY);
+        let mut found = false;
+
+        fn walk(
+            node: &GltfNode,
+            model: &GltfModel,
+            parent: glam::Mat4,
+            min: &mut glam::Vec3,
+            max: &mut glam::Vec3,
+            found: &mut bool,
+        ) {
+            let world = parent * node.transform;
+            if let Some(mesh_idx) = node.mesh_index {
+                if let Some(mesh) = model.meshes.get(mesh_idx) {
+                    for v in &mesh.vertices {
+                        let p = world.transform_point3(glam::Vec3::from(v.position));
+                        *min = min.min(p);
+                        *max = max.max(p);
+                        *found = true;
+                    }
+                }
+            }
+            for child in &node.children {
+                walk(child, model, world, min, max, found);
+            }
+        }
+
+        walk(&self.root_node, self, glam::Mat4::IDENTITY, &mut min, &mut max, &mut found);
+
+        if found {
+            Some((min, max))
+        } else {
+            None
+        }
+    }
+
+    /// Altura total del modelo en su escala nativa (Y_max − Y_min).
+    ///
+    /// Devuelve `0.0` si no hay meshes. Útil para auto-escalar
+    /// (`target_height / native_height` da el factor de escala).
+    pub fn height(&self) -> f32 {
+        self.bounds().map(|(mn, mx)| (mx.y - mn.y)).unwrap_or(0.0)
+    }
+
+    /// Centro geométrico del AABB del modelo.
+    pub fn center(&self) -> glam::Vec3 {
+        self.bounds().map(|(mn, mx)| (mn + mx) * 0.5).unwrap_or(glam::Vec3::ZERO)
+    }
 }
 
 // =============================================================================
