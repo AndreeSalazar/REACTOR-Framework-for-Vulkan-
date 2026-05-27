@@ -231,6 +231,101 @@ pub trait ReactorApp {
 // ReactorContext — Everything the user needs in one place
 // =============================================================================
 
+// =============================================================================
+// 🧊 Tipos para spawning inteligente de modelos Blender → REACTOR
+// =============================================================================
+
+/// Dimensiones nativas (sin re-escalar) de un modelo glTF.
+///
+/// Devuelto por [`ReactorContext::gltf_bounds`]. Útil para que el juego
+/// decida tamaños sin tener que calcular AABB manualmente.
+#[derive(Clone, Copy, Debug)]
+pub struct GltfBounds {
+    /// Esquina mínima del bounding box (XYZ).
+    pub min: glam::Vec3,
+    /// Esquina máxima del bounding box (XYZ).
+    pub max: glam::Vec3,
+    /// Centro geométrico del bounding box.
+    pub center: glam::Vec3,
+    /// Tamaño en cada eje (`max − min`).
+    pub size: glam::Vec3,
+    /// Altura total (`max.y − min.y`). Atajo común.
+    pub height: f32,
+}
+
+/// Opciones declarativas para [`ReactorContext::spawn_gltf_smart`].
+///
+/// Builder estilo Bevy: empezar con `GltfSpawn::at(pos)` y encadenar.
+#[derive(Clone, Copy, Debug)]
+pub struct GltfSpawn {
+    /// Posición donde colocar el modelo (los pies, no el pivot).
+    pub position: glam::Vec3,
+    /// Si `Some(h)`, re-escala el modelo para que su altura final sea `h` metros.
+    pub target_height: Option<f32>,
+    /// Si `Some(dir)`, rota el modelo en torno a Y para que su frente apunte a `dir`.
+    pub face_direction: Option<glam::Vec3>,
+    /// Si `true`, coloca los pies del modelo en `position.y` (en vez del pivot).
+    pub feet_at_position: bool,
+}
+
+impl Default for GltfSpawn {
+    fn default() -> Self {
+        Self {
+            position: glam::Vec3::ZERO,
+            target_height: None,
+            face_direction: None,
+            feet_at_position: true,
+        }
+    }
+}
+
+impl GltfSpawn {
+    /// Empezar un builder con la posición dada (pies del modelo).
+    pub fn at(position: glam::Vec3) -> Self {
+        Self { position, ..Default::default() }
+    }
+
+    /// Auto-escalar el modelo para que su altura final sea `meters` metros.
+    pub fn with_height(mut self, meters: f32) -> Self {
+        self.target_height = Some(meters);
+        self
+    }
+
+    /// Auto-orientar el modelo para que su frente apunte hacia `dir`.
+    pub fn facing(mut self, dir: glam::Vec3) -> Self {
+        self.face_direction = Some(dir);
+        self
+    }
+
+    /// Si `false`, el pivot del modelo (no sus pies) va en `position`.
+    pub fn with_pivot_at_position(mut self, on: bool) -> Self {
+        self.feet_at_position = !on;
+        self
+    }
+}
+
+/// Información devuelta tras un [`ReactorContext::spawn_gltf_smart`].
+///
+/// Incluye los índices de los objetos en la escena (uno por mesh-node del glTF),
+/// más metadatos útiles para que el juego ajuste hit-boxes o lógica.
+#[derive(Clone, Debug)]
+pub struct ModelSpawnInfo {
+    /// Índices `usize` en `ctx.scene` — uno por mesh-node del glTF.
+    pub indices: Vec<usize>,
+    /// Factor de escala aplicado para alcanzar la altura objetivo.
+    pub applied_scale: f32,
+    /// Rotación aplicada para apuntar hacia `face_direction`.
+    pub applied_rotation: glam::Quat,
+    /// Altura nativa del modelo (antes de escalar).
+    pub native_height: f32,
+    /// Altura final tras escalar (debe coincidir con `target_height` si se dio).
+    pub world_height: f32,
+    /// Esquina mínima del AABB en coordenadas de mundo.
+    pub world_bounds_min: glam::Vec3,
+    /// Esquina máxima del AABB en coordenadas de mundo.
+    pub world_bounds_max: glam::Vec3,
+}
+
 /// Context passed to all ReactorApp callbacks.
 /// Contains the ENTIRE engine — all systems inherited and ready to use.
 ///

@@ -110,6 +110,7 @@ pub mod prelude {
     
     // Re-export the ReactorContext type alias if it exists
     pub use crate::app::ReactorContext;
+    pub use crate::app::app::{GltfSpawn, GltfBounds, ModelSpawnInfo};
 }
 
 /// Macro for declarative game definition

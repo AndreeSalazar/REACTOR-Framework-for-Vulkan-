@@ -136,6 +136,9 @@ struct Enemy {
     _id: u32,
     /// Índice del blob shadow asociado (Fase 4.3 HOTD-style).
     blob_shadow: Option<usize>,
+    /// Escala glTF aplicada por `spawn_gltf_smart` (auto-calculada por REACTOR
+    /// a partir de la altura nativa del modelo en Blender).
+    gltf_scale: f32,
 }
 
 struct Tracer {
@@ -754,48 +757,25 @@ impl Xenofall {
         // Place at ground level — center of model at ZOMBIE_GROUND_Y (~0.9m)
         let ground_pos = Vec3::new(pos.x, ZOMBIE_GROUND_Y, pos.z);
 
-        // Spawn glTF zombie model at UE5-standard human scale
-        // Model feet should be at Y=0 (floor). We place the transform origin at ground.
-        let initial_xf = Mat4::from_scale_rotation_translation(
-            Vec3::splat(ZOMBIE_GLTF_SCALE),  // 3.0x scale → ~1.8m tall zombie
-            Quat::from_rotation_y(std::f32::consts::PI), // Face toward player
-            Vec3::new(ground_pos.x, 0.0, ground_pos.z),  // Feet on floor
-        );
-
         // 🌑 Blob shadow bajo los pies del zombie (radius 0.45m ≈ silueta humana).
         let blob = ctx.spawn_blob_shadow(ground_pos, 0.45).ok();
 
-        if let Ok(indices) = ctx.spawn_gltf("assets/models/zombie_basic.glb", initial_xf) {
-            println!("    🧟 Zombie #{} spawned (glTF, scale {:.1}) at ({:.1}, {:.1}, {:.1})",
-                id, ZOMBIE_GLTF_SCALE, ground_pos.x, ground_pos.y, ground_pos.z);
-            self.enemies.push(Enemy {
-                scene_indices: indices,
-                position: ground_pos,
-                health: hp,
-                max_health: hp,
-                state: EnemyState::Alive,
-                death_timer: 0.0,
-                attack_timer: 0.0,
-                speed,
-                is_gltf: true,
-                _id: id,
-                blob_shadow: blob,
-            });
-            self.total_enemies_alive += 1;
-        } else {
-            // Fallback to cube — human-proportioned silhouette (0.5m × 1.8m × 0.35m)
-            if let Ok(idx) = ctx.spawn_cube(Vec3::ZERO) {
-                let cube_xf = Mat4::from_scale_rotation_translation(
-                    ZOMBIE_CUBE_SCALE,
-                    Quat::IDENTITY,
-                    ground_pos,
+        // 🧊 Spawn inteligente: REACTOR mide el modelo, lo escala a 1.8 m y lo
+        // orienta automáticamente hacia +Z (la cámara mira desde +Z hacia -Z).
+        // Antes esto requería medir el modelo a mano en Blender. Ahora es 1 línea.
+        let spawn = GltfSpawn::at(Vec3::new(ground_pos.x, 0.0, ground_pos.z))
+            .with_height(1.8)
+            .facing(Vec3::new(0.0, 0.0, 1.0));
+
+        match ctx.spawn_gltf_smart("assets/models/zombie_basic.glb", spawn) {
+            Ok(info) => {
+                println!(
+                    "    🧟 Zombie #{} (glTF, auto-scale {:.2}×, altura final {:.2} m) en ({:.1}, {:.1}, {:.1})",
+                    id, info.applied_scale, info.world_height,
+                    ground_pos.x, ground_pos.y, ground_pos.z,
                 );
-                ctx.set_transform(idx, cube_xf);
-                println!("    🟥 Zombie #{} spawned (cube, {:.1}×{:.1}×{:.1}m) at ({:.1}, {:.1}, {:.1})",
-                    id, ZOMBIE_CUBE_SCALE.x, ZOMBIE_CUBE_SCALE.y, ZOMBIE_CUBE_SCALE.z,
-                    ground_pos.x, ground_pos.y, ground_pos.z);
                 self.enemies.push(Enemy {
-                    scene_indices: vec![idx],
+                    scene_indices: info.indices,
                     position: ground_pos,
                     health: hp,
                     max_health: hp,
@@ -803,14 +783,44 @@ impl Xenofall {
                     death_timer: 0.0,
                     attack_timer: 0.0,
                     speed,
-                    is_gltf: false,
+                    is_gltf: true,
                     _id: id,
                     blob_shadow: blob,
+                    gltf_scale: info.applied_scale,
                 });
                 self.total_enemies_alive += 1;
-            } else if let Some(b) = blob {
-                // Si tampoco se pudo spawn-ear el cubo, recogemos el blob huérfano.
-                ctx.hide_blob_shadow(b);
+            }
+            Err(_) => {
+                // Fallback to cube — human-proportioned silhouette (0.5m × 1.8m × 0.35m)
+                if let Ok(idx) = ctx.spawn_cube(Vec3::ZERO) {
+                    let cube_xf = Mat4::from_scale_rotation_translation(
+                        ZOMBIE_CUBE_SCALE,
+                        Quat::IDENTITY,
+                        ground_pos,
+                    );
+                    ctx.set_transform(idx, cube_xf);
+                    println!("    🟥 Zombie #{} spawned (cube, {:.1}×{:.1}×{:.1}m) at ({:.1}, {:.1}, {:.1})",
+                        id, ZOMBIE_CUBE_SCALE.x, ZOMBIE_CUBE_SCALE.y, ZOMBIE_CUBE_SCALE.z,
+                        ground_pos.x, ground_pos.y, ground_pos.z);
+                    self.enemies.push(Enemy {
+                        scene_indices: vec![idx],
+                        position: ground_pos,
+                        health: hp,
+                        max_health: hp,
+                        state: EnemyState::Alive,
+                        death_timer: 0.0,
+                        attack_timer: 0.0,
+                        speed,
+                        is_gltf: false,
+                        _id: id,
+                        blob_shadow: blob,
+                        gltf_scale: 1.0,
+                    });
+                    self.total_enemies_alive += 1;
+                } else if let Some(b) = blob {
+                    // Si tampoco se pudo spawn-ear el cubo, recogemos el blob huérfano.
+                    ctx.hide_blob_shadow(b);
+                }
             }
         }
     }
