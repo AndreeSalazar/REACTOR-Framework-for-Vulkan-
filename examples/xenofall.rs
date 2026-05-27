@@ -1427,16 +1427,22 @@ impl Xenofall {
                     let to_player = target - enemy.position;
                     let dist = to_player.length();
 
+                    // Procedural zombie waddle (bobbing up/down and rolling side-to-side)
+                    // Makes T-posing models feel like funny/creepy spirits with deliberate waddles!
+                    let bob = (self.t * 6.0 + enemy._id as f32 * 1.5).sin() * 0.05;
+                    let sway = (self.t * 5.0 + enemy._id as f32 * 1.5).cos() * 0.07;
+
                     if dist > ENEMY_ATTACK_DIST {
                         let move_dir = to_player.normalize();
                         enemy.position += move_dir * enemy.speed * dt;
 
-                        // Face toward the player
-                        let facing = Quat::from_rotation_y((-move_dir.x).atan2(-move_dir.z));
+                        // Face toward the player correctly (native model looks at +Z)
+                        let facing = Quat::from_rotation_y(move_dir.x.atan2(move_dir.z))
+                            * Quat::from_rotation_z(sway); // Z-roll waddle
                         let new_parent_pos = if enemy.is_gltf {
-                            Vec3::new(enemy.position.x, 0.0, enemy.position.z)
+                            Vec3::new(enemy.position.x, bob, enemy.position.z)
                         } else {
-                            enemy.position
+                            enemy.position + Vec3::new(0.0, bob, 0.0)
                         };
                         let p_base = Mat4::from_rotation_translation(facing, new_parent_pos);
                         for &(idx, local_xf) in &enemy.initial_transforms {
@@ -1450,14 +1456,16 @@ impl Xenofall {
                             self.damage_pending += DAMAGE_PER_HIT;
                         }
 
-                        // Still face the player while attacking
+                        // Still face the player while attacking, with aggressive tremble
                         if dist > 0.1 {
                             let face_dir = to_player.normalize();
-                            let facing = Quat::from_rotation_y((-face_dir.x).atan2(-face_dir.z));
+                            let tremble = (self.t * 22.0).sin() * 0.02; // fast jitter
+                            let facing = Quat::from_rotation_y(face_dir.x.atan2(face_dir.z))
+                                * Quat::from_rotation_x(tremble);
                             let new_parent_pos = if enemy.is_gltf {
-                                Vec3::new(enemy.position.x, 0.0, enemy.position.z)
+                                Vec3::new(enemy.position.x, tremble * 0.5, enemy.position.z)
                             } else {
-                                enemy.position
+                                enemy.position + Vec3::new(0.0, tremble * 0.5, 0.0)
                             };
                             let p_base = Mat4::from_rotation_translation(facing, new_parent_pos);
                             for &(idx, local_xf) in &enemy.initial_transforms {
@@ -1476,7 +1484,9 @@ impl Xenofall {
 
                     let to_player = Vec3::new(cam_pos.x, enemy.position.y, cam_pos.z) - enemy.position;
                     let face_dir = if to_player.length_squared() > 1e-6 { to_player.normalize() } else { Vec3::new(0.0, 0.0, 1.0) };
-                    let facing_yaw = Quat::from_rotation_y((-face_dir.x).atan2(-face_dir.z));
+                    
+                    // Keep correct facing yaw direction when falling (native model looks at +Z)
+                    let facing_yaw = Quat::from_rotation_y(face_dir.x.atan2(face_dir.z));
 
                     let new_parent_pos = if enemy.is_gltf {
                         Vec3::new(enemy.position.x, 0.0, enemy.position.z)

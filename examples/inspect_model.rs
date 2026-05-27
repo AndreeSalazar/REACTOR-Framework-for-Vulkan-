@@ -1,4 +1,4 @@
-// Tool to inspect zombie_basic.glb geometry bounds
+// Tool to inspect zombie_basic.glb geometry bounds, materials, and textures
 use std::path::Path;
 
 fn main() {
@@ -10,9 +10,20 @@ fn main() {
     }
 
     match gltf::import(path) {
-        Ok((doc, buffers, _)) => {
+        Ok((doc, buffers, images)) => {
             println!("✅ glTF loaded successfully.");
             println!("Meshes count: {}", doc.meshes().count());
+            println!("Materials count: {}", doc.materials().count());
+            println!("Textures count: {}", doc.textures().count());
+            println!("Images count: {}", images.len());
+
+            for (i, tex) in doc.textures().enumerate() {
+                println!("Texture #{} Index: {}, Source Image: {}", i, tex.index(), tex.source().index());
+            }
+
+            for (i, img) in images.iter().enumerate() {
+                println!("Image #{} Format: {:?}, Dimensions: {}x{}", i, img.format, img.width, img.height);
+            }
 
             let mut min_x = f32::MAX;
             let mut max_x = f32::MIN;
@@ -61,24 +72,6 @@ fn main() {
                 max_z,
                 max_z - min_z
             );
-            println!();
-
-            if max_y - min_y > 50.0 {
-                println!(
-                    "⚠️ WARNING: The model is extremely large! Height is {:.1} units.",
-                    max_y - min_y
-                );
-            } else if max_y - min_y < 0.1 {
-                println!(
-                    "⚠️ WARNING: The model is extremely small! Height is {:.4} units.",
-                    max_y - min_y
-                );
-            } else {
-                println!(
-                    "✅ Model height of {:.2} units is in a normal range.",
-                    max_y - min_y
-                );
-            }
         }
         Err(e) => {
             println!("❌ Failed to load glTF: {}", e);

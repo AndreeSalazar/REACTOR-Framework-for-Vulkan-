@@ -1176,41 +1176,48 @@ impl ReactorContext {
                 let mesh_arc = std::sync::Arc::new(vulkan_mesh);
 
                 // Determinar material
-                let material_arc = if let Some(mat_idx) = mesh_data.material_index {
-                    if let Some(mat_data) = model.materials.get(mat_idx) {
-                        if let Some(tex_idx) = mat_data.base_color_texture_index {
-                            if let Some(tex_data) = model.textures.get(tex_idx) {
-                                // Subir textura a GPU
-                                let texture = crate::resources::texture::Texture::from_rgba(
-                                    &self.reactor.context,
-                                    self.reactor.allocator.clone(),
-                                    &tex_data.pixels,
-                                    tex_data.width,
-                                    tex_data.height,
-                                    true,
-                                )?;
-                                // Crear material con textura
-                                let vert = crate::builtin_shaders::vert_textured();
-                                let frag = crate::builtin_shaders::frag_textured();
-                                let mat = self
-                                    .reactor
-                                    .create_textured_material(&vert, &frag, &texture)
-                                    .map_err(|e| {
-                                        crate::core::error::ReactorError::internal(e.to_string())
-                                    })?
-                                    .with_kept_texture(texture);
-                                std::sync::Arc::new(mat)
-                            } else {
-                                std::sync::Arc::new(self.default_material()?)
-                            }
+                let material_arc = {
+                    let mut tex_to_use = None;
+                    if let Some(mat_idx) = mesh_data.material_index {
+                        if let Some(mat_data) = model.materials.get(mat_idx) {
+                            tex_to_use = mat_data.base_color_texture_index;
+                        }
+                    }
+                    // Fallback inteligente: si el material no especifica base_color_texture_index,
+                    // pero el modelo glTF tiene texturas cargadas, usar la primera (index 0)
+                    // para que los personajes no se vean completamente grises/planos.
+                    if tex_to_use.is_none() && !model.textures.is_empty() {
+                        tex_to_use = Some(0);
+                    }
+
+                    if let Some(tex_idx) = tex_to_use {
+                        if let Some(tex_data) = model.textures.get(tex_idx) {
+                            // Subir textura a GPU
+                            let texture = crate::resources::texture::Texture::from_rgba(
+                                &self.reactor.context,
+                                self.reactor.allocator.clone(),
+                                &tex_data.pixels,
+                                tex_data.width,
+                                tex_data.height,
+                                true,
+                            )?;
+                            // Crear material con textura
+                            let vert = crate::builtin_shaders::vert_textured();
+                            let frag = crate::builtin_shaders::frag_textured();
+                            let mat = self
+                                .reactor
+                                .create_textured_material(&vert, &frag, &texture)
+                                .map_err(|e| {
+                                    crate::core::error::ReactorError::internal(e.to_string())
+                                })?
+                                .with_kept_texture(texture);
+                            std::sync::Arc::new(mat)
                         } else {
                             std::sync::Arc::new(self.default_material()?)
                         }
                     } else {
                         std::sync::Arc::new(self.default_material()?)
                     }
-                } else {
-                    std::sync::Arc::new(self.default_material()?)
                 };
 
                 let obj_idx = self
