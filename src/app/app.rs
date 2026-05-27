@@ -543,6 +543,7 @@ impl ReactorContext {
             self.window.inner_size().height as f32,
         );
         let vp = self.camera.view_projection_matrix();
+        self.reactor.camera_pos = self.camera.position;
         if let Err(e) = self.reactor.draw_scene(&self.scene, &vp) {
             eprintln!("REACTOR draw error: {}", e);
         }
@@ -550,6 +551,7 @@ impl ReactorContext {
 
     /// Render the scene with a custom view-projection matrix
     pub fn draw_scene_with_vp(&mut self, view_projection: &glam::Mat4) {
+        self.reactor.camera_pos = self.camera.position;
         if let Err(e) = self.reactor.draw_scene(&self.scene, view_projection) {
             eprintln!("REACTOR draw error: {}", e);
         }
@@ -561,6 +563,7 @@ impl ReactorContext {
         scene: &crate::systems::scene::Scene,
         view_projection: &glam::Mat4,
     ) {
+        self.reactor.camera_pos = self.camera.position;
         if let Err(e) = self.reactor.draw_scene(scene, view_projection) {
             eprintln!("REACTOR draw error: {}", e);
         }

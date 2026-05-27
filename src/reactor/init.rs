@@ -260,6 +260,7 @@ impl Reactor {
             resized: false,
             device_lost: false,
             vsync,
+            camera_pos: glam::Vec3::ZERO,
             msaa_samples,
             msaa_image,
             msaa_image_view,

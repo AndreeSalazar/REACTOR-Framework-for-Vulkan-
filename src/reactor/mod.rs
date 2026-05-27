@@ -71,6 +71,7 @@ pub struct Reactor {
     pub resized: bool,
     pub device_lost: bool,
     pub vsync: bool,
+    pub camera_pos: glam::Vec3,
 
     // ── Contexto Vulkan (al final: se libera al final por orden de Drop) ──
     pub context: VulkanContext,

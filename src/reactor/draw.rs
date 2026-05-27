@@ -318,37 +318,28 @@ impl Reactor {
 
                 let mvp = *view_projection * object.transform;
 
-                if object.material.descriptor_set.is_some() {
-                    #[repr(C)]
-                    struct PushConstants {
-                        mvp: glam::Mat4,
-                        model: glam::Mat4,
-                    }
-                    let push = PushConstants { mvp, model: object.transform };
-                    let constants_array = std::slice::from_raw_parts(
-                        &push as *const PushConstants as *const u8,
-                        std::mem::size_of::<PushConstants>(),
-                    );
-                    self.context.device.cmd_push_constants(
-                        command_buffer,
-                        object.material.pipeline.layout,
-                        vk::ShaderStageFlags::VERTEX,
-                        0,
-                        constants_array,
-                    );
-                } else {
-                    let constants_array = std::slice::from_raw_parts(
-                        &mvp as *const glam::Mat4 as *const u8,
-                        std::mem::size_of::<glam::Mat4>(),
-                    );
-                    self.context.device.cmd_push_constants(
-                        command_buffer,
-                        object.material.pipeline.layout,
-                        vk::ShaderStageFlags::VERTEX,
-                        0,
-                        constants_array,
-                    );
+                #[repr(C)]
+                struct PushConstants {
+                    mvp: glam::Mat4,
+                    model: glam::Mat4,
+                    camera_pos: glam::Vec4,
                 }
+                let push = PushConstants {
+                    mvp,
+                    model: object.transform,
+                    camera_pos: glam::Vec4::new(self.camera_pos.x, self.camera_pos.y, self.camera_pos.z, 1.0),
+                };
+                let constants_array = std::slice::from_raw_parts(
+                    &push as *const PushConstants as *const u8,
+                    std::mem::size_of::<PushConstants>(),
+                );
+                self.context.device.cmd_push_constants(
+                    command_buffer,
+                    object.material.pipeline.layout,
+                    vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                    0,
+                    constants_array,
+                );
 
                 let vertex_buffers = [object.mesh.vertex_buffer.handle];
                 let offsets = [0];

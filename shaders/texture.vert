@@ -11,11 +11,12 @@ layout(location = 2) out vec3 fragPos;
 layout(push_constant) uniform Constants {
     mat4 mvp;
     mat4 model;
+    vec4 camera_pos;
 } push;
 
 void main() {
     gl_Position = push.mvp * vec4(position, 1.0);
-    fragNormal = mat3(push.model) * normal;
+    fragNormal = normalize(mat3(push.model) * normal);
     fragUV = uv;
     fragPos = vec3(push.model * vec4(position, 1.0));
 }
