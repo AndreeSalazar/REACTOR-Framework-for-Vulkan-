@@ -368,6 +368,9 @@ impl Drop for ReactorContext {
         // This releases Arc references to Mesh/Material which contain Vulkan resources
         // that need the allocator (which is inside reactor) to be freed
         self.scene.clear();
+        self.blob_shadow_mesh = None;
+        self.blob_shadow_material = None;
+        self.asset_manager.clear();
 
         // SAFETY: device_wait_idle() blocks until all GPU operations complete.
         // This is safe to call at any time and has no aliasing requirements.
@@ -1200,16 +1203,11 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
         };
 
         println!("╔══════════════════════════════════════════════════════════════╗");
-        println!("║              🚀 REACTOR Framework Initialized                ║");
-        println!("║  Title: {:52} ║", config.title);
-        println!(
-            "║  Resolution: {}x{:<44} ║",
-            window.inner_size().width,
-            format!("{}", window.inner_size().height)
-        );
+        println!("║                 REACTOR Framework Initialized                ║");
+        println!("║  Title: {:52}                                                ║", config.title);
+        println!("║  Resolution: {}x{:<44}                                       ║", window.inner_size().width, format!("{}", window.inner_size().height));
         println!("║  MSAA: {:?}{:<49} ║", reactor.msaa_samples, "");
-        println!(
-            "║  Ray Tracing: {:<47} ║",
+        println!("║  Ray Tracing: {:<47} ║",
             if reactor.ray_tracing.is_some() {
                 "✅ Enabled"
             } else {

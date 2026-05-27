@@ -182,7 +182,7 @@ impl Pipeline {
         let push_constant_range = vk::PushConstantRange {
             stage_flags: vk::ShaderStageFlags::VERTEX,
             offset: 0,
-            size: std::mem::size_of::<glam::Mat4>() as u32,
+            size: 128,
         };
 
         let push_constant_ranges = [push_constant_range];

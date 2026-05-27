@@ -499,6 +499,9 @@ struct Xenofall {
     // Pending damage
     damage_pending: i32,
 
+    // Overlay textures to keep alive
+    keep_textures: Vec<reactor_vulkan::resources::texture::Texture>,
+
     // Audio
     audio: GameAudio,
 
@@ -551,6 +554,7 @@ impl Xenofall {
             next_enemy_id: 0,
             t: 0.0,
             damage_pending: 0,
+            keep_textures: Vec::new(),
             audio: GameAudio::new(),
             crosshair_index: None,
             game_over_index: None,
@@ -1783,6 +1787,7 @@ impl ReactorApp for Xenofall {
                     let idx = ctx.spawn(sphere_mesh_arc.clone(), red_mat_arc, Mat4::IDENTITY);
                     self.crosshair_index = Some(idx);
                 }
+                self.keep_textures.push(red_tex);
             }
         }
 
@@ -1805,6 +1810,7 @@ impl ReactorApp for Xenofall {
                     );
                     self.game_over_index = Some(idx);
                 }
+                self.keep_textures.push(go_tex);
             }
 
             // Victory Screen Overlay
@@ -1822,6 +1828,7 @@ impl ReactorApp for Xenofall {
                     );
                     self.victory_index = Some(idx);
                 }
+                self.keep_textures.push(vic_tex);
             }
         }
 
@@ -1857,6 +1864,7 @@ impl ReactorApp for Xenofall {
     }
 
     fn on_exit(&mut self, _ctx: &mut ReactorContext) {
+        self.keep_textures.clear();
         println!();
         println!("╔═══════════════════════════════════════════════════╗");
         println!("║       ⚡ XENOFALL — After Action Report ⚡      ║");
