@@ -705,6 +705,11 @@ impl ReactorContext {
         }
     }
 
+    /// Obtiene el transform actual del objeto en `index`.
+    pub fn get_transform(&self, index: usize) -> Option<glam::Mat4> {
+        self.scene.objects.get(index).map(|obj| obj.transform)
+    }
+
     // =========================================================================
     // 🧱 Default Material + Primitive Spawning (UE5-style helpers)
     // =========================================================================

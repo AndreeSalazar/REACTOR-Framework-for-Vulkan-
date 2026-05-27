@@ -138,6 +138,8 @@ struct Enemy {
     /// Escala glTF aplicada por `spawn_gltf_smart` (auto-calculada por REACTOR
     /// a partir de la altura nativa del modelo en Blender).
     gltf_scale: f32,
+    /// Transforms locales originales de cada malla para mantener la jerarquía al mover el zombie
+    initial_transforms: Vec<(usize, Mat4)>,
 }
 
 struct Tracer {
@@ -356,11 +358,11 @@ impl GameAudio {
     fn try_load(audio: &mut AudioSystem, path: &str) -> Option<AudioClipId> {
         match audio.load_clip(path) {
             Ok(id) => {
-                println!("  🔊 Loaded: {}", path);
+                Log::audio(&format!("Loaded: {}", path));
                 Some(id)
             }
             Err(e) => {
-                println!("  🔇 Could not load {}: {}", path, e);
+                Log::error(&format!("Could not load {}: {}", path, e));
                 None
             }
         }
@@ -499,9 +501,6 @@ struct Xenofall {
     // Pending damage
     damage_pending: i32,
 
-    // Overlay textures to keep alive
-    keep_textures: Vec<reactor_vulkan::resources::texture::Texture>,
-
     // Audio
     audio: GameAudio,
 
@@ -554,7 +553,6 @@ impl Xenofall {
             next_enemy_id: 0,
             t: 0.0,
             damage_pending: 0,
-            keep_textures: Vec::new(),
             audio: GameAudio::new(),
             crosshair_index: None,
             game_over_index: None,
@@ -772,11 +770,25 @@ impl Xenofall {
 
         match ctx.spawn_gltf_smart("assets/models/zombie_basic.glb", spawn) {
             Ok(info) => {
-                println!(
-                    "    🧟 Zombie #{} (glTF, auto-scale {:.2}×, altura final {:.2} m) en ({:.1}, {:.1}, {:.1})",
+                Log::game(&format!(
+                    "Zombie #{} spawn (glTF, escala {:.2}x, altura {:.2}m) en ({:.1}, {:.1}, {:.1})",
                     id, info.applied_scale, info.world_height,
-                    ground_pos.x, ground_pos.y, ground_pos.z,
+                    ground_pos.x, ground_pos.y, ground_pos.z
+                ));
+
+                // Compute local node transforms relative to the initial parent base transform
+                let p_base_0 = Mat4::from_rotation_translation(
+                    Quat::from_rotation_y(std::f32::consts::PI), // facing direction Vec3(0,0,1) -> PI
+                    Vec3::new(ground_pos.x, 0.0, ground_pos.z),
                 );
+                let mut initial_transforms = Vec::new();
+                for &idx in &info.indices {
+                    if let Some(m0) = ctx.get_transform(idx) {
+                        let local_xf = p_base_0.inverse() * m0;
+                        initial_transforms.push((idx, local_xf));
+                    }
+                }
+
                 self.enemies.push(Enemy {
                     scene_indices: info.indices,
                     position: ground_pos,
@@ -790,6 +802,7 @@ impl Xenofall {
                     _id: id,
                     blob_shadow: blob,
                     gltf_scale: info.applied_scale,
+                    initial_transforms,
                 });
                 self.total_enemies_alive += 1;
             }
@@ -802,9 +815,19 @@ impl Xenofall {
                         ground_pos,
                     );
                     ctx.set_transform(idx, cube_xf);
-                    println!("    🟥 Zombie #{} spawned (cube, {:.1}×{:.1}×{:.1}m) at ({:.1}, {:.1}, {:.1})",
+                    Log::game(&format!(
+                        "Zombie #{} spawn (cube fallback, {:.1}x{:.1}x{:.1}m) en ({:.1}, {:.1}, {:.1})",
                         id, ZOMBIE_CUBE_SCALE.x, ZOMBIE_CUBE_SCALE.y, ZOMBIE_CUBE_SCALE.z,
-                        ground_pos.x, ground_pos.y, ground_pos.z);
+                        ground_pos.x, ground_pos.y, ground_pos.z
+                    ));
+
+                    // Base parent for cube: position = ground_pos, rotation = IDENTITY
+                    let p_base_0 = Mat4::from_rotation_translation(
+                        Quat::IDENTITY,
+                        ground_pos,
+                    );
+                    let local_xf = p_base_0.inverse() * cube_xf; // which is just Mat4::from_scale(ZOMBIE_CUBE_SCALE)
+
                     self.enemies.push(Enemy {
                         scene_indices: vec![idx],
                         position: ground_pos,
@@ -818,6 +841,7 @@ impl Xenofall {
                         _id: id,
                         blob_shadow: blob,
                         gltf_scale: 1.0,
+                        initial_transforms: vec![(idx, local_xf)],
                     });
                     self.total_enemies_alive += 1;
                 } else if let Some(b) = blob {
@@ -1071,27 +1095,35 @@ impl Xenofall {
         self.card_select_seed = self.card_select_seed.wrapping_add(self.kills + self.score);
         self.card_options = pick_random_cards(self.card_select_seed, 3);
 
-        println!();
-        println!("╔═══════════════════════════════════════════════════╗");
-        println!("║          🃏 SELECCIONA UNA CARTA 🃏              ║");
-        println!("╠═══════════════════════════════════════════════════╣");
+        Log::header("🃏 SELECCIONA UNA CARTA 🃏");
+        let mut rows = Vec::new();
         for (i, card) in self.card_options.iter().enumerate() {
-            println!("║  [{}] {} — {}", i + 1, card.name(), card.description());
+            rows.push(vec![
+                format!("[{}]", i + 1),
+                card.name().to_string(),
+                card.description().to_string(),
+            ]);
         }
-        println!("╠═══════════════════════════════════════════════════╣");
-        println!("║  Presiona 1, 2 o 3 para elegir                  ║");
-        println!("╚═══════════════════════════════════════════════════╝");
+        Log::table(
+            &["Opción", "Carta", "Efecto / Descripción"],
+            &rows,
+            &[6, 18, 30],
+        );
+        Log::info("Presiona 1, 2 o 3 en tu teclado para seleccionar");
+        println!();
     }
 
     fn select_card(&mut self, index: usize, ctx: &mut ReactorContext) {
         if index < self.card_options.len() {
             let card = self.card_options[index];
             self.build.apply_card(card);
-            println!(
-                "  ✅ Carta seleccionada: {} — {}",
+            Log::success(&format!(
+                "Carta seleccionada: {}{} — {}{}",
+                color::BOLD,
                 card.name(),
+                color::RESET,
                 card.description()
-            );
+            ));
 
             // Play card select sound
             if let Some(clip) = self.audio.card_select {
@@ -1376,21 +1408,14 @@ impl Xenofall {
 
                         // Face toward the player
                         let facing = Quat::from_rotation_y((-move_dir.x).atan2(-move_dir.z));
-                        let (scale, pos_offset) = if enemy.is_gltf {
-                            (
-                                Vec3::splat(enemy.gltf_scale),
-                                Vec3::new(0.0, -ZOMBIE_GROUND_Y, 0.0),
-                            )
+                        let new_parent_pos = if enemy.is_gltf {
+                            Vec3::new(enemy.position.x, 0.0, enemy.position.z)
                         } else {
-                            (ZOMBIE_CUBE_SCALE, Vec3::ZERO)
+                            enemy.position
                         };
-                        let xf = Mat4::from_scale_rotation_translation(
-                            scale,
-                            facing,
-                            enemy.position + pos_offset,
-                        );
-                        for &idx in &enemy.scene_indices {
-                            ctx.set_transform(idx, xf);
+                        let p_base = Mat4::from_rotation_translation(facing, new_parent_pos);
+                        for &(idx, local_xf) in &enemy.initial_transforms {
+                            ctx.set_transform(idx, p_base * local_xf);
                         }
                     } else {
                         // Within attack range — deal damage periodically
@@ -1404,21 +1429,14 @@ impl Xenofall {
                         if dist > 0.1 {
                             let face_dir = to_player.normalize();
                             let facing = Quat::from_rotation_y((-face_dir.x).atan2(-face_dir.z));
-                            let (scale, pos_offset) = if enemy.is_gltf {
-                                (
-                                    Vec3::splat(enemy.gltf_scale),
-                                    Vec3::new(0.0, -ZOMBIE_GROUND_Y, 0.0),
-                                )
+                            let new_parent_pos = if enemy.is_gltf {
+                                Vec3::new(enemy.position.x, 0.0, enemy.position.z)
                             } else {
-                                (ZOMBIE_CUBE_SCALE, Vec3::ZERO)
+                                enemy.position
                             };
-                            let xf = Mat4::from_scale_rotation_translation(
-                                scale,
-                                facing,
-                                enemy.position + pos_offset,
-                            );
-                            for &idx in &enemy.scene_indices {
-                                ctx.set_transform(idx, xf);
+                            let p_base = Mat4::from_rotation_translation(facing, new_parent_pos);
+                            for &(idx, local_xf) in &enemy.initial_transforms {
+                                ctx.set_transform(idx, p_base * local_xf);
                             }
                         }
                     }
@@ -1430,22 +1448,23 @@ impl Xenofall {
 
                     let fall_angle = t * std::f32::consts::FRAC_PI_2;
                     let sink = t * 0.8;
-                    let base_pos = if enemy.is_gltf {
-                        enemy.position + Vec3::new(0.0, -ZOMBIE_GROUND_Y, 0.0)
+
+                    let to_player = Vec3::new(cam_pos.x, enemy.position.y, cam_pos.z) - enemy.position;
+                    let face_dir = if to_player.length_squared() > 1e-6 { to_player.normalize() } else { Vec3::new(0.0, 0.0, 1.0) };
+                    let facing_yaw = Quat::from_rotation_y((-face_dir.x).atan2(-face_dir.z));
+
+                    let new_parent_pos = if enemy.is_gltf {
+                        Vec3::new(enemy.position.x, 0.0, enemy.position.z)
                     } else {
                         enemy.position
                     };
-                    let scale = if enemy.is_gltf {
-                        Vec3::splat(enemy.gltf_scale)
-                    } else {
-                        ZOMBIE_CUBE_SCALE
-                    };
-                    let xf = Mat4::from_translation(base_pos + Vec3::new(0.0, -sink, 0.0))
-                        * Mat4::from_rotation_x(fall_angle)
-                        * Mat4::from_scale(scale);
 
-                    for &idx in &enemy.scene_indices {
-                        ctx.set_transform(idx, xf);
+                    let p_base = Mat4::from_translation(new_parent_pos + Vec3::new(0.0, -sink, 0.0))
+                        * Mat4::from_quat(facing_yaw)
+                        * Mat4::from_rotation_x(fall_angle);
+
+                    for &(idx, local_xf) in &enemy.initial_transforms {
+                        ctx.set_transform(idx, p_base * local_xf);
                     }
 
                     // 🌑 Encoge el blob shadow conforme el zombie cae (0.45 → 0).
@@ -1457,7 +1476,7 @@ impl Xenofall {
                     if enemy.death_timer >= ENEMY_DEATH_DURATION {
                         enemy.state = EnemyState::Dead;
                         deaths_this_frame += 1;
-                        for &idx in &enemy.scene_indices {
+                        for &(idx, _) in &enemy.initial_transforms {
                             ctx.set_transform(
                                 idx,
                                 Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)),
@@ -1739,7 +1758,7 @@ impl ReactorApp for Xenofall {
         print_banner();
 
         // ── Audio ──
-        println!("\n  🔊 Cargando audio...");
+        Log::audio("Cargando audio...");
         self.audio.load_all(&mut ctx.audio);
 
         // ── Cámara (human eye level 1.7m) ──
@@ -1774,75 +1793,35 @@ impl ReactorApp for Xenofall {
         self.build_pools(ctx);
 
         // ── Visuales de Interfaz (Crosshair y Overlays) ──
-        let (sphere_v, sphere_i) = reactor_vulkan::resources::primitives::Primitives::sphere(16, 8);
-        if let Ok(sphere_mesh) = ctx.create_mesh(&sphere_v, &sphere_i) {
-            let sphere_mesh_arc = std::sync::Arc::new(sphere_mesh);
-            if let Ok(red_tex) = ctx.create_solid_texture(255, 0, 0, 255) {
-                if let Ok(red_mat) = ctx.create_textured_material(
-                    &reactor_vulkan::builtin_shaders::vert_textured(),
-                    &reactor_vulkan::builtin_shaders::frag_textured(),
-                    &red_tex,
-                ) {
-                    let red_mat_arc = std::sync::Arc::new(red_mat);
-                    let idx = ctx.spawn(sphere_mesh_arc.clone(), red_mat_arc, Mat4::IDENTITY);
-                    self.crosshair_index = Some(idx);
-                }
-                self.keep_textures.push(red_tex);
-            }
+        if let Ok(idx) = ctx.spawn_colored_sphere(Vec3::ZERO, 0.02, 255, 0, 0, 255) {
+            self.crosshair_index = Some(idx);
         }
 
-        let (quad_v, quad_i) = reactor_vulkan::resources::primitives::Primitives::quad();
-        if let Ok(quad_mesh) = ctx.create_mesh(&quad_v, &quad_i) {
-            let quad_mesh_arc = std::sync::Arc::new(quad_mesh);
-
-            // Game Over Screen Overlay
-            if let Ok(go_tex) = ctx.load_texture("assets/textures/game_over.png") {
-                if let Ok(go_mat) = ctx.create_textured_material(
-                    &reactor_vulkan::builtin_shaders::vert_textured(),
-                    &reactor_vulkan::builtin_shaders::frag_textured(),
-                    &go_tex,
-                ) {
-                    let go_mat_arc = std::sync::Arc::new(go_mat);
-                    let idx = ctx.spawn(
-                        quad_mesh_arc.clone(),
-                        go_mat_arc,
-                        Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)),
-                    );
-                    self.game_over_index = Some(idx);
-                }
-                self.keep_textures.push(go_tex);
-            }
-
-            // Victory Screen Overlay
-            if let Ok(vic_tex) = ctx.load_texture("assets/textures/victory.png") {
-                if let Ok(vic_mat) = ctx.create_textured_material(
-                    &reactor_vulkan::builtin_shaders::vert_textured(),
-                    &reactor_vulkan::builtin_shaders::frag_textured(),
-                    &vic_tex,
-                ) {
-                    let vic_mat_arc = std::sync::Arc::new(vic_mat);
-                    let idx = ctx.spawn(
-                        quad_mesh_arc.clone(),
-                        vic_mat_arc,
-                        Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)),
-                    );
-                    self.victory_index = Some(idx);
-                }
-                self.keep_textures.push(vic_tex);
-            }
+        // Game Over Screen Overlay
+        if let Ok(idx) = ctx.spawn_textured_quad(
+            "assets/textures/game_over.png",
+            Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)),
+        ) {
+            self.game_over_index = Some(idx);
         }
 
-        println!();
-        println!("  📐 Corredor: {} segmentos", self.floor_indices.len());
-        println!(
-            "  🎱 Pools: {} trazadores, {} impactos",
+        // Victory Screen Overlay
+        if let Ok(idx) = ctx.spawn_textured_quad(
+            "assets/textures/victory.png",
+            Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)),
+        ) {
+            self.victory_index = Some(idx);
+        }
+
+        Log::asset(&format!("Corredor: {} segmentos cargados", self.floor_indices.len()));
+        Log::engine(&format!(
+            "Pools: {} trazadores, {} impactos listos",
             self.tracer_pool.len(),
             self.impact_pool.len()
-        );
-        println!("  ⚔️ {} oleadas cargadas", self.waves.len());
-        println!("  🃏 Sistema de cartas roguelite activo");
-        println!();
-        println!("  ¡Sobrevive al corredor, Contractor!");
+        ));
+        Log::game(&format!("{} oleadas cargadas", self.waves.len()));
+        Log::game("Sistema de cartas roguelite activo");
+        Log::section("¡Sobrevive al corredor, Contractor!");
         println!();
     }
 
@@ -1864,44 +1843,33 @@ impl ReactorApp for Xenofall {
     }
 
     fn on_exit(&mut self, _ctx: &mut ReactorContext) {
-        self.keep_textures.clear();
         println!();
-        println!("╔═══════════════════════════════════════════════════╗");
-        println!("║       ⚡ XENOFALL — After Action Report ⚡      ║");
-        println!("╠═══════════════════════════════════════════════════╣");
-        println!(
-            "║  Resultado:  {}",
-            match self.state {
-                GameState::Victory => "🏆 ¡VICTORIA!",
-                GameState::GameOver => "💀 GAME OVER",
-                _ => "🏁 Abandonado",
-            }
-        );
-        println!("║  Puntuación: {:>37}  ║", self.score);
-        println!("║  Kills:      {:>37}  ║", self.kills);
-        println!("║  Headshots:  {:>37}  ║", self.headshots);
-        println!("║  Disparos:   {:>37}  ║", self.shots_fired);
+        Log::header("⚡ XENOFALL — After Action Report ⚡");
+        let outcome = match self.state {
+            GameState::Victory => "🏆 ¡VICTORIA!",
+            GameState::GameOver => "💀 GAME OVER",
+            _ => "🏁 Abandonado",
+        };
+        Log::kv("Resultado", outcome);
+        Log::kv("Puntuación", &self.score.to_string());
+        Log::kv("Kills", &self.kills.to_string());
+        Log::kv("Headshots", &self.headshots.to_string());
+        Log::kv("Disparos", &self.shots_fired.to_string());
         let acc = if self.shots_fired > 0 {
             (self.shots_hit as f32 / self.shots_fired as f32 * 100.0) as u32
         } else {
             0
         };
-        println!("║  Precisión:  {:>36}% ║", acc);
-        println!(
-            "║  Oleadas:    {:>37}  ║",
-            format!("{}/{}", self.current_wave, self.waves.len())
-        );
+        Log::kv("Precisión", &format!("{}%", acc));
+        Log::kv("Oleadas", &format!("{}/{}", self.current_wave, self.waves.len()));
+
         if !self.build.cards_collected.is_empty() {
-            println!("╠═══════════════════════════════════════════════════╣");
-            println!(
-                "║  Build ({} cartas):                               ║",
-                self.build.cards_collected.len()
-            );
+            Log::section("Cartas Coleccionadas (Build)");
             for card in &self.build.cards_collected {
-                println!("║    {}  ║", card.name());
+                Log::info(&format!("• {}", card.name()));
             }
         }
-        println!("╚═══════════════════════════════════════════════════╝");
+        println!();
     }
 }
 

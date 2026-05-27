@@ -83,6 +83,7 @@ pub mod prelude {
     pub use crate::systems::audio::{
         AudioClipId, AudioListener, AudioSource, AudioSourceId, AudioSystem,
     };
+    pub use crate::systems::console::{color, GameBanner, Log, ReactorBanner};
     pub use crate::systems::event_bus::{EventBus, Observer};
     pub use crate::{
         quick,
