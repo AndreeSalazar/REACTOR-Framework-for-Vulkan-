@@ -813,7 +813,8 @@ impl ReactorContext {
                     &crate::builtin_shaders::frag_textured(),
                     &dark_tex,
                 )
-                .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))?;
+                .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))?
+                .with_kept_texture(dark_tex);
             self.blob_shadow_material = Some(std::sync::Arc::new(mat));
         }
 
@@ -1093,7 +1094,8 @@ impl ReactorContext {
                                     .create_textured_material(&vert, &frag, &texture)
                                     .map_err(|e| {
                                         crate::core::error::ReactorError::internal(e.to_string())
-                                    })?;
+                                    })?
+                                    .with_kept_texture(texture);
                                 std::sync::Arc::new(mat)
                             } else {
                                 std::sync::Arc::new(self.default_material()?)

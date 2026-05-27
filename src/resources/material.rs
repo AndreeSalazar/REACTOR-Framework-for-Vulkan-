@@ -11,6 +11,7 @@ pub struct Material {
     pub descriptor_set: Option<vk::DescriptorSet>,
     pub descriptor_pool: Option<vk::DescriptorPool>,
     pub descriptor_layout: Option<vk::DescriptorSetLayout>,
+    pub kept_textures: Vec<crate::resources::texture::Texture>,
     device: Option<ArcDevice>,
 }
 
@@ -71,6 +72,7 @@ impl Material {
             descriptor_set: None,
             descriptor_pool: None,
             descriptor_layout: None,
+            kept_textures: Vec::new(),
             device: None,
         })
     }
@@ -105,6 +107,7 @@ impl Material {
             descriptor_set: None,
             descriptor_pool: None,
             descriptor_layout: None,
+            kept_textures: Vec::new(),
             device: None,
         })
     }
@@ -200,8 +203,14 @@ impl Material {
             descriptor_set: Some(descriptor_set),
             descriptor_pool: Some(descriptor_pool),
             descriptor_layout: Some(descriptor_layout),
+            kept_textures: Vec::new(),
             device: Some(ctx.device.clone()),
         })
+    }
+
+    pub fn with_kept_texture(mut self, texture: crate::resources::texture::Texture) -> Self {
+        self.kept_textures.push(texture);
+        self
     }
 
     pub fn with_descriptor_set(mut self, descriptor_set: vk::DescriptorSet) -> Self {
