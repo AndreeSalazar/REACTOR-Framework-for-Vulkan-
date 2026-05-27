@@ -872,6 +872,104 @@ impl ReactorContext {
     }
 
     // =========================================================================
+    // 🎯 Template Helpers — Spawning de alto nivel (1 línea en el juego)
+    // =========================================================================
+
+    /// Crea una esfera con color sólido y la añade a la escena.
+    ///
+    /// Ideal para crosshairs, indicadores, debug markers, etc.
+    /// La textura se mantiene viva dentro del material (no requiere `keep_textures`).
+    ///
+    /// ```ignore
+    /// let crosshair = ctx.spawn_colored_sphere(pos, 0.02, 255, 0, 0, 255)?;
+    /// ```
+    pub fn spawn_colored_sphere(
+        &mut self,
+        position: glam::Vec3,
+        radius: f32,
+        r: u8,
+        g: u8,
+        b: u8,
+        a: u8,
+    ) -> crate::core::error::ReactorResult<usize> {
+        let (v, i) = crate::resources::primitives::Primitives::sphere(16, 8);
+        let mesh = std::sync::Arc::new(
+            self.reactor
+                .create_mesh(&v, &i)
+                .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))?,
+        );
+        let mat = self.create_colored_material(r, g, b, a)?;
+        let mat_arc = std::sync::Arc::new(mat);
+        let xf = glam::Mat4::from_scale_rotation_translation(
+            glam::Vec3::splat(radius.max(0.001)),
+            glam::Quat::IDENTITY,
+            position,
+        );
+        Ok(self.scene.add_object(mesh, mat_arc, xf))
+    }
+
+    /// Crea un quad (plano rectangular) con una textura de archivo y lo añade a la escena.
+    ///
+    /// Ideal para overlays (Game Over, Victoria), carteles, HUD, splash screens.
+    /// La textura se mantiene viva dentro del material.
+    ///
+    /// ```ignore
+    /// let go_idx = ctx.spawn_textured_quad("assets/textures/game_over.png", hidden_xf)?;
+    /// ```
+    pub fn spawn_textured_quad(
+        &mut self,
+        texture_path: &str,
+        transform: glam::Mat4,
+    ) -> crate::core::error::ReactorResult<usize> {
+        let (v, i) = crate::resources::primitives::Primitives::quad();
+        let mesh = std::sync::Arc::new(
+            self.reactor
+                .create_mesh(&v, &i)
+                .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))?,
+        );
+        let texture = self.load_texture(texture_path)?;
+        let mat = self
+            .reactor
+            .create_textured_material(
+                &crate::builtin_shaders::vert_textured(),
+                &crate::builtin_shaders::frag_textured(),
+                &texture,
+            )
+            .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))?
+            .with_kept_texture(texture);
+        let mat_arc = std::sync::Arc::new(mat);
+        Ok(self.scene.add_object(mesh, mat_arc, transform))
+    }
+
+    /// Crea un material con color sólido (textura 1×1 interna).
+    ///
+    /// La textura se mantiene viva dentro del material — no requiere
+    /// guardarla externamente en un `Vec<Texture>`.
+    ///
+    /// ```ignore
+    /// let red_mat = ctx.create_colored_material(255, 0, 0, 255)?;
+    /// ```
+    pub fn create_colored_material(
+        &self,
+        r: u8,
+        g: u8,
+        b: u8,
+        a: u8,
+    ) -> crate::core::error::ReactorResult<crate::resources::material::Material> {
+        let texture = self.create_solid_texture(r, g, b, a)?;
+        let mat = self
+            .reactor
+            .create_textured_material(
+                &crate::builtin_shaders::vert_textured(),
+                &crate::builtin_shaders::frag_textured(),
+                &texture,
+            )
+            .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))?
+            .with_kept_texture(texture);
+        Ok(mat)
+    }
+
+    // =========================================================================
     // 📦 Asset Pipeline (Fase 3) — Carga de modelos glTF y assets
     // =========================================================================
 
@@ -1204,19 +1302,16 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
             }
         };
 
-        println!("╔══════════════════════════════════════════════════════════════╗");
-        println!("║                 REACTOR Framework Initialized                ║");
-        println!("║  Title: {:52}                                                ║", config.title);
-        println!("║  Resolution: {}x{:<44}                                       ║", window.inner_size().width, format!("{}", window.inner_size().height));
-        println!("║  MSAA: {:?}{:<49} ║", reactor.msaa_samples, "");
-        println!("║  Ray Tracing: {:<47} ║",
-            if reactor.ray_tracing.is_some() {
-                "✅ Enabled"
-            } else {
-                "❌ Not available"
-            }
+        // Enable ANSI colors on Windows terminal
+        crate::systems::console::init();
+
+        crate::systems::console::ReactorBanner::print_init(
+            &config.title,
+            &format!("{}×{}", window.inner_size().width, window.inner_size().height),
+            &format!("{:?}", reactor.msaa_samples),
+            reactor.ray_tracing.is_some(),
+            &format!("{}", crate::systems::console::gpu_name_short(&reactor.context)),
         );
-        println!("╚══════════════════════════════════════════════════════════════╝");
 
         let aspect = window.inner_size().width as f32 / window.inner_size().height.max(1) as f32;
 

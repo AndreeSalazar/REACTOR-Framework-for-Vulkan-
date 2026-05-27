@@ -4,6 +4,7 @@
 
 pub mod animation;
 pub mod audio;
+pub mod console;
 pub mod event_bus;
 pub mod fps_controller;
 pub mod frustum;
@@ -17,6 +18,7 @@ pub use animation::{
     AnimationClip, AnimationPlayer, AnimationTrack, EasingFunction, Keyframe, LoopMode, Tween,
 };
 pub use audio::{AudioClipId, AudioListener, AudioSource, AudioSourceId, AudioSystem};
+pub use console::{color, GameBanner, Log, ReactorBanner};
 pub use event_bus::{EventBus, Observer};
 pub use frustum::{CullingSystem, Frustum, FrustumTestResult, Plane};
 pub use lighting::{Light, LightType, LightingSystem};
