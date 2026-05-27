@@ -1298,7 +1298,11 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
         };
 
         // Initialize Reactor
-        let reactor = match Reactor::init(&window, config.msaa_samples) {
+        let reactor = match Reactor::init(
+            &window,
+            config.msaa_samples,
+            config.renderer == RendererMode::RayTracing,
+        ) {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("Failed to initialize Reactor: {}", e);

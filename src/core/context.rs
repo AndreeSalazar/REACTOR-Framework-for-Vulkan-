@@ -147,7 +147,7 @@ impl VulkanContext {
     ///
     /// Returns `ReactorError` with appropriate `ErrorCode` if any step fails.
     /// Never panics.
-    pub fn new(window: &impl HasWindowHandle) -> ReactorResult<Self> {
+    pub fn new(window: &impl HasWindowHandle, enable_ray_tracing: bool) -> ReactorResult<Self> {
         // 1. Load Vulkan entry
         let entry = unsafe {
             Entry::load().map_err(|e| {
@@ -195,7 +195,7 @@ impl VulkanContext {
 
         // 5. Create logical device
         let (device, graphics_queue) =
-            Self::create_device(&arc_instance, pdevice, queue_family_index)?;
+            Self::create_device(&arc_instance, pdevice, queue_family_index, enable_ray_tracing)?;
         let arc_device = ArcDevice::new(device);
 
         Ok(Self {
@@ -343,24 +343,28 @@ impl VulkanContext {
         instance: &ArcInstance,
         physical_device: vk::PhysicalDevice,
         queue_family_index: u32,
+        enable_ray_tracing: bool,
     ) -> ReactorResult<(ash::Device, vk::Queue)> {
         // Device extensions
-        let device_extension_names = [
+        let mut device_extension_names = vec![
             ash::khr::swapchain::NAME.as_ptr(),
             ash::khr::dynamic_rendering::NAME.as_ptr(),
-            ash::khr::ray_tracing_pipeline::NAME.as_ptr(),
-            ash::khr::acceleration_structure::NAME.as_ptr(),
-            ash::khr::deferred_host_operations::NAME.as_ptr(),
-            CStr::from_bytes_with_nul(b"VK_KHR_spirv_1_4\0")
-                .unwrap()
-                .as_ptr(),
-            CStr::from_bytes_with_nul(b"VK_KHR_shader_float_controls\0")
-                .unwrap()
-                .as_ptr(),
-            CStr::from_bytes_with_nul(b"VK_KHR_buffer_device_address\0")
-                .unwrap()
-                .as_ptr(),
         ];
+
+        if enable_ray_tracing {
+            device_extension_names.push(ash::khr::ray_tracing_pipeline::NAME.as_ptr());
+            device_extension_names.push(ash::khr::acceleration_structure::NAME.as_ptr());
+            device_extension_names.push(ash::khr::deferred_host_operations::NAME.as_ptr());
+            device_extension_names.push(CStr::from_bytes_with_nul(b"VK_KHR_spirv_1_4\0")
+                .unwrap()
+                .as_ptr());
+            device_extension_names.push(CStr::from_bytes_with_nul(b"VK_KHR_shader_float_controls\0")
+                .unwrap()
+                .as_ptr());
+            device_extension_names.push(CStr::from_bytes_with_nul(b"VK_KHR_buffer_device_address\0")
+                .unwrap()
+                .as_ptr());
+        }
 
         // Queue
         let queue_priorities = [1.0f32];
@@ -369,6 +373,15 @@ impl VulkanContext {
             .queue_priorities(&queue_priorities);
 
         // Features
+        let mut dynamic_rendering_features =
+            vk::PhysicalDeviceDynamicRenderingFeatures::default().dynamic_rendering(true);
+
+        let mut device_create_info = vk::DeviceCreateInfo::default()
+            .queue_create_infos(std::slice::from_ref(&queue_info))
+            .enabled_extension_names(&device_extension_names)
+            .push_next(&mut dynamic_rendering_features);
+
+        // Ray tracing specific features (keep structures in scope during device creation)
         let mut buffer_device_address_features =
             vk::PhysicalDeviceBufferDeviceAddressFeatures::default().buffer_device_address(true);
         let mut ray_tracing_pipeline_features =
@@ -376,16 +389,13 @@ impl VulkanContext {
         let mut acceleration_structure_features =
             vk::PhysicalDeviceAccelerationStructureFeaturesKHR::default()
                 .acceleration_structure(true);
-        let mut dynamic_rendering_features =
-            vk::PhysicalDeviceDynamicRenderingFeatures::default().dynamic_rendering(true);
 
-        let device_create_info = vk::DeviceCreateInfo::default()
-            .queue_create_infos(std::slice::from_ref(&queue_info))
-            .enabled_extension_names(&device_extension_names)
-            .push_next(&mut buffer_device_address_features)
-            .push_next(&mut ray_tracing_pipeline_features)
-            .push_next(&mut acceleration_structure_features)
-            .push_next(&mut dynamic_rendering_features);
+        if enable_ray_tracing {
+            device_create_info = device_create_info
+                .push_next(&mut buffer_device_address_features)
+                .push_next(&mut ray_tracing_pipeline_features)
+                .push_next(&mut acceleration_structure_features);
+        }
 
         let device = unsafe {
             instance

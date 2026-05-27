@@ -21,12 +21,8 @@ use std::sync::{Arc, Mutex};
 use winit::window::Window;
 
 impl Reactor {
-    /// Inicializa Vulkan completo a partir de una ventana de `winit`.
-    ///
-    /// `requested_msaa` ∈ {1, 2, 4, 8}. Si el valor pedido no está soportado,
-    /// se reduce automáticamente al máximo disponible.
-    pub fn init(window: &Window, requested_msaa: u32) -> ReactorResult<Self> {
-        let context = VulkanContext::new(window)?;
+    pub fn init(window: &Window, requested_msaa: u32, enable_ray_tracing: bool) -> ReactorResult<Self> {
+        let context = VulkanContext::new(window, enable_ray_tracing)?;
 
         // ── GPU allocator ──
         let allocator = Allocator::new(&AllocatorCreateDesc {
@@ -34,7 +30,7 @@ impl Reactor {
             device: context.ash_device().clone(),
             physical_device: context.physical_device,
             debug_settings: Default::default(),
-            buffer_device_address: true, // habilitado para RT
+            buffer_device_address: enable_ray_tracing, // habilitado para RT
             allocation_sizes: Default::default(),
         })
         .map_err(|e| {
@@ -165,15 +161,19 @@ impl Reactor {
         }
 
         // ── Ray Tracing opcional ──
-        let ray_tracing = match RayTracingContext::new(&context) {
-            Ok(rt) => {
-                println!("Ray Tracing initialized successfully!");
-                Some(rt)
+        let ray_tracing = if enable_ray_tracing {
+            match RayTracingContext::new(&context) {
+                Ok(rt) => {
+                    println!("Ray Tracing initialized successfully!");
+                    Some(rt)
+                }
+                Err(e) => {
+                    println!("Ray Tracing not supported or failed to init: {}", e);
+                    None
+                }
             }
-            Err(e) => {
-                println!("Ray Tracing not supported or failed to init: {}", e);
-                None
-            }
+        } else {
+            None
         };
 
         Ok(Self {

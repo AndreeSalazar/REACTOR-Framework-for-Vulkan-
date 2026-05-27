@@ -38,7 +38,7 @@ impl Default for ReactorConfig {
             vsync: true,
             msaa: true,
             validation_layers: cfg!(debug_assertions),
-            ray_tracing: true,
+            ray_tracing: false,
             maximized: false,
             resizable: true,
             target_fps: 0,
@@ -89,6 +89,11 @@ impl ReactorConfig {
 
     pub fn with_physics_hz(mut self, hz: u32) -> Self {
         self.physics_hz = hz;
+        self
+    }
+
+    pub fn with_ray_tracing(mut self, ray_tracing: bool) -> Self {
+        self.ray_tracing = ray_tracing;
         self
     }
 
