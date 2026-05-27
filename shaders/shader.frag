@@ -33,6 +33,14 @@ void main() {
     float hemiW = N.y * 0.5 + 0.5;
     vec3 ambient = mix(groundAmbient, skyAmbient, hemiW);
 
+    // 2. Procedural Ambient Occlusion (Soft Contact Shadows in joints/corners)
+    // Darkens the joints where the walls meet the floor/ceiling (wall x=+-3.0, floor y=0.0, ceiling y=3.0)
+    float distToWall = min(abs(fragPos.x - 3.0), abs(fragPos.x + 3.0));
+    float distToFloorCeil = min(fragPos.y, abs(3.0 - fragPos.y));
+    float aoX = smoothstep(0.0, 0.6, distToWall);
+    float aoY = smoothstep(0.0, 0.6, distToFloorCeil);
+    float ao = mix(0.35, 1.0, aoX * aoY); // Soft contact shadow
+
     // Determine base color based on surface alignment (procedural detailing)
     vec3 baseColor;
     if (N.y > 0.7) {
@@ -49,7 +57,7 @@ void main() {
     vec3 totalDiffuse = vec3(0.0);
     vec3 totalSpecular = vec3(0.0);
 
-    // 2. Cyberpunk 2077 Spaced Corridor Point Lights (Spaced every 8 meters)
+    // 3. Cyberpunk 2077 Spaced Corridor Point Lights (Spaced every 8 meters)
     const float spacing = 8.0;
     float seg = round(fragPos.z / spacing);
 
@@ -97,7 +105,7 @@ void main() {
         totalSpecular += spec * lightColor * attenuation * 0.5;
     }
 
-    // 3. Tactical Flashlight (Attached to Player Camera)
+    // 4. Tactical Flashlight (Attached to Player Camera)
     vec3 flashlightPos = push.camera_pos.xyz;
     vec3 flashlightDir = vec3(0.0, 0.0, -1.0); // Facing straight down the corridor (-Z)
     vec3 L_flash = flashlightPos - fragPos;
@@ -122,26 +130,33 @@ void main() {
     float spec_flash = pow(max(dot(N, H_flash), 0.0), 64.0);
     vec3 flashSpecular = spec_flash * flashColor * att_flash * intensity * 0.6;
 
-    // 4. Stylized Rim Light (Backlight silhouette halo)
+    // 5. Stylized Rim Light (Backlight silhouette halo)
     float rimFactor = 1.0 - max(dot(N, V), 0.0);
     rimFactor = pow(rimFactor, 5.0); // Fine sharp rim
     vec3 rimColor = vec3(0.0, 0.9, 1.0) * 0.8; // Cyan rim light
     vec3 rimLight = rimFactor * rimColor;
 
-    // 5. Assemble all lighting contributions
-    vec3 diffuseAccum = ambient + totalDiffuse + flashDiffuse;
+    // 6. Assemble all lighting contributions (applying Ambient Occlusion to diffuse components)
+    vec3 diffuseAccum = (ambient + totalDiffuse + flashDiffuse) * ao;
     vec3 specularAccum = totalSpecular + flashSpecular;
     vec3 finalColor = baseColor * diffuseAccum + specularAccum + rimLight;
 
-    // 6. Cinematic Color Grading & Contrast
+    // 7. Atmospheric Volumetric-looking Depth Fog (Shrouds distant zombie spawns)
+    float depth = length(push.camera_pos.xyz - fragPos);
+    float fogDensity = 0.035;
+    float fogFactor = exp(-fogDensity * depth);
+    vec3 fogColor = vec3(0.015, 0.01, 0.025); // Deep midnight purple
+    finalColor = mix(fogColor, finalColor, fogFactor);
+
+    // 8. Cinematic Color Grading & Contrast
     finalColor = mix(finalColor, vec3(dot(finalColor, vec3(0.2126, 0.7152, 0.0722))), 0.12); // subtle desaturation
     finalColor.r *= 1.03; // organic touch
     finalColor.b *= 1.01;
 
-    // 7. ACES Filmic Tone Mapping (AAA standard)
+    // 9. ACES Filmic Tone Mapping (AAA standard)
     finalColor = aces_tonemap(finalColor);
 
-    // 8. Gamma Correction (sRGB space)
+    // 10. Gamma Correction (sRGB space)
     finalColor = pow(finalColor, vec3(1.0 / 2.2));
 
     outColor = vec4(finalColor, 1.0);
