@@ -16,6 +16,7 @@ use crate::resources::material::Material;
 use crate::resources::mesh::Mesh;
 use crate::systems::scene::Scene;
 use ash::vk;
+use ash::vk::Handle;
 
 impl Reactor {
     /// Dibuja una escena completa (todos los `SceneObject`) con MVP precomputado.
@@ -255,9 +256,65 @@ impl Reactor {
                 .device
                 .cmd_set_scissor(command_buffer, 0, &[scissor]);
 
+            let frustum = crate::systems::frustum::Frustum::from_view_projection(*view_projection);
+            let mut active_pipeline = vk::Pipeline::null();
+            let mut active_descriptor_set = vk::DescriptorSet::null();
+
             for object in &scene.objects {
-                // Bind pipeline + descriptor sets (texturas si las hay).
-                object.material.bind(&self.context.device, command_buffer);
+                if !object.visible {
+                    continue;
+                }
+
+                // ── Frustum Culling ──
+                let center = glam::Vec3::new(object.transform.w_axis.x, object.transform.w_axis.y, object.transform.w_axis.z);
+                let name = object.name.as_deref().unwrap_or("");
+                
+                // Conservatively estimate bounding radius based on object type/name
+                let radius = if name.contains("Floor") || name.contains("Wall") || name.contains("Techo") {
+                    12.0
+                } else if name.contains("Pillar") {
+                    4.0
+                } else if name.contains("zombie") || name.contains("Zombie") {
+                    2.2
+                } else if name.contains("Shadow") || name.contains("shadow") {
+                    1.8
+                } else if name.contains("Crosshair") || name.contains("GoScreen") || name.contains("VicScreen") {
+                    // Interface/Overlays must always render if active
+                    100.0
+                } else {
+                    1.5 // Tracers, impacts, muzzle flash, etc.
+                };
+
+                let sphere = crate::systems::physics::Sphere::new(center, radius);
+                if !frustum.intersects_sphere(&sphere) {
+                    continue;
+                }
+
+                // ── Bind Pipeline & Descriptor Sets (State Caching Optimization) ──
+                let pipeline_handle = object.material.pipeline.pipeline;
+                let descriptor_set_handle = object.material.descriptor_set.unwrap_or(vk::DescriptorSet::null());
+
+                if pipeline_handle != active_pipeline {
+                    self.context.device.cmd_bind_pipeline(
+                        command_buffer,
+                        vk::PipelineBindPoint::GRAPHICS,
+                        pipeline_handle,
+                    );
+                    active_pipeline = pipeline_handle;
+                    active_descriptor_set = vk::DescriptorSet::null(); // Reset active descriptor set on pipeline change
+                }
+
+                if descriptor_set_handle != active_descriptor_set && !descriptor_set_handle.is_null() {
+                    self.context.device.cmd_bind_descriptor_sets(
+                        command_buffer,
+                        vk::PipelineBindPoint::GRAPHICS,
+                        object.material.pipeline.layout,
+                        0,
+                        &[descriptor_set_handle],
+                        &[],
+                    );
+                    active_descriptor_set = descriptor_set_handle;
+                }
 
                 let mvp = *view_projection * object.transform;
 

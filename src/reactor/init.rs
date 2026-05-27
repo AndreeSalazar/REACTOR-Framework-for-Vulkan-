@@ -23,7 +23,7 @@ use std::sync::{Arc, Mutex};
 use winit::window::Window;
 
 impl Reactor {
-    pub fn init(window: &Window, requested_msaa: u32, enable_ray_tracing: bool) -> ReactorResult<Self> {
+    pub fn init(window: &Window, requested_msaa: u32, enable_ray_tracing: bool, vsync: bool) -> ReactorResult<Self> {
         let context = VulkanContext::new(window, enable_ray_tracing)?;
 
         // ── GPU allocator ──
@@ -46,7 +46,7 @@ impl Reactor {
 
         // ── Swapchain inicial ──
         let inner_size = window.inner_size();
-        let swapchain = Swapchain::new(&context, inner_size.width, inner_size.height)?;
+        let swapchain = Swapchain::new(&context, inner_size.width, inner_size.height, vsync)?;
 
         // Label swapchain
         context
@@ -259,6 +259,7 @@ impl Reactor {
             ray_tracing,
             resized: false,
             device_lost: false,
+            vsync,
             msaa_samples,
             msaa_image,
             msaa_image_view,

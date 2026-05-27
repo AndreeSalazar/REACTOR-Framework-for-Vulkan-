@@ -1302,6 +1302,7 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
             &window,
             config.msaa_samples,
             config.renderer == RendererMode::RayTracing,
+            config.vsync,
         ) {
             Ok(r) => r,
             Err(e) => {

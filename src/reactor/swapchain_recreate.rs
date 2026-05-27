@@ -64,6 +64,7 @@ impl Reactor {
             &self.context,
             capabilities.current_extent.width,
             capabilities.current_extent.height,
+            self.vsync,
         )?;
 
         // ── Recrear MSAA si estaba habilitado ──

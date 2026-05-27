@@ -14,7 +14,7 @@ pub struct Swapchain {
 }
 
 impl Swapchain {
-    pub fn new(ctx: &VulkanContext, width: u32, height: u32) -> ReactorResult<Self> {
+    pub fn new(ctx: &VulkanContext, width: u32, height: u32, vsync: bool) -> ReactorResult<Self> {
         let surface_loader = ctx.surface_loader();
         let surface = ctx.surface_khr();
         let device = ctx.ash_device();
@@ -63,10 +63,21 @@ impl Swapchain {
             })
             .unwrap_or(&surface_formats[0]);
 
-        let present_mode = present_modes
-            .iter()
-            .find(|&p| *p == vk::PresentModeKHR::MAILBOX)
-            .unwrap_or(&vk::PresentModeKHR::FIFO);
+        let present_mode = if vsync {
+            // VSync enabled: prefer FIFO (standard, locks to refresh rate), then MAILBOX
+            present_modes
+                .iter()
+                .find(|&&p| p == vk::PresentModeKHR::FIFO)
+                .or_else(|| present_modes.iter().find(|&&p| p == vk::PresentModeKHR::MAILBOX))
+                .unwrap_or(&vk::PresentModeKHR::FIFO)
+        } else {
+            // VSync disabled: prefer IMMEDIATE (absolute lowest latency, unlocked FPS), then MAILBOX (unlocked FPS, no tearing), then FIFO
+            present_modes
+                .iter()
+                .find(|&&p| p == vk::PresentModeKHR::IMMEDIATE)
+                .or_else(|| present_modes.iter().find(|&&p| p == vk::PresentModeKHR::MAILBOX))
+                .unwrap_or(&vk::PresentModeKHR::FIFO)
+        };
 
         let extent = if surface_capabilities.current_extent.width != u32::MAX {
             surface_capabilities.current_extent

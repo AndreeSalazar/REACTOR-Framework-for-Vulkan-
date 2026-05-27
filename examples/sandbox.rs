@@ -54,7 +54,7 @@ impl ApplicationHandler for App {
                 .expect("Failed to create window"),
         );
 
-        let reactor = Reactor::init(&window, 1).expect("Failed to initialize Reactor");
+        let reactor = Reactor::init(&window, 1, false, true).expect("Failed to initialize Reactor");
         println!("REACTOR initialized successfully with Vulkan!");
 
         // --- Create Meshes ---

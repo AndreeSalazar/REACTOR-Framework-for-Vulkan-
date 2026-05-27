@@ -1254,6 +1254,31 @@ impl Xenofall {
             };
         }
 
+        // VSync dynamic toggle (unlocked FPS showcase)
+        if ctx.input().is_key_just_pressed(KeyCode::KeyV) {
+            ctx.reactor.vsync = !ctx.reactor.vsync;
+            if let Err(e) = ctx.reactor.recreate_swapchain() {
+                Log::error(&format!("Failed to toggle VSync: {}", e));
+            } else {
+                Log::success(&format!(
+                    "VSync dynamically toggled to: {}",
+                    if ctx.reactor.vsync { "ON (Locked FPS)" } else { "OFF (Unlocked FPS!)" }
+                ));
+            }
+        }
+
+        // Fullscreen dynamic toggle (F11 or F)
+        if ctx.input().is_key_just_pressed(KeyCode::F11) || ctx.input().is_key_just_pressed(KeyCode::KeyF) {
+            let is_fullscreen = ctx.window.fullscreen().is_some();
+            if is_fullscreen {
+                ctx.window.set_fullscreen(None);
+                Log::success("Windowed mode activated");
+            } else {
+                ctx.window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+                Log::success("Fullscreen mode activated");
+            }
+        }
+
         // Restart on game over
         if (self.state == GameState::GameOver || self.state == GameState::Victory)
             && ctx.input().is_key_just_pressed(KeyCode::Space)
@@ -1747,8 +1772,8 @@ impl Xenofall {
 impl ReactorApp for Xenofall {
     fn config(&self) -> ReactorConfig {
         ReactorConfig::new("⚡ XENOFALL — Rail Shooter Roguelite")
-            .with_size(1920, 1080)
-            .with_vsync(true)
+            .with_size(3840, 2160)
+            .with_vsync(false)
             .with_msaa(4)
             .with_renderer(RendererMode::Forward)
             .with_physics_hz(60)
@@ -1903,6 +1928,8 @@ fn print_banner() {
     println!("║    Click Izquierdo → TAP rápido = x2 dmg / HOLD = x0.5 dmg       ║");
     println!("║    R               → Recargar                                    ║");
     println!("║    P               → Pausar                                      ║");
+    println!("║    V               → Alternar VSync (¡Desbloquear FPS!)          ║");
+    println!("║    F / F11         → Alternar Pantalla Completa                  ║");
     println!("║    1/2/3           → Seleccionar carta                           ║");
     println!("║    Esc             → Salir                                       ║");
     println!("║                                                                  ║");

@@ -70,6 +70,7 @@ pub struct Reactor {
     // ── Flags de estado del frame ──
     pub resized: bool,
     pub device_lost: bool,
+    pub vsync: bool,
 
     // ── Contexto Vulkan (al final: se libera al final por orden de Drop) ──
     pub context: VulkanContext,
