@@ -71,6 +71,38 @@ impl Pipeline {
         color_format: vk::Format,
         depth_format: Option<vk::Format>,
     ) -> ReactorResult<Self> {
+        Self::with_config_and_cache(
+            device,
+            render_pass,
+            vert_spv,
+            frag_spv,
+            width,
+            height,
+            config,
+            descriptor_layouts,
+            color_format,
+            depth_format,
+            vk::PipelineCache::null(),
+        )
+    }
+
+    /// Create a pipeline with an explicit VkPipelineCache for warm-up acceleration.
+    ///
+    /// When `pipeline_cache` is not null, the driver can skip recompilation of
+    /// previously seen shader/state combinations, eliminating first-frame stutter.
+    pub fn with_config_and_cache(
+        device: &ArcDevice,
+        render_pass: Option<vk::RenderPass>,
+        vert_spv: &[u32],
+        frag_spv: &[u32],
+        width: u32,
+        height: u32,
+        config: &PipelineConfig,
+        descriptor_layouts: &[vk::DescriptorSetLayout],
+        color_format: vk::Format,
+        depth_format: Option<vk::Format>,
+        pipeline_cache: vk::PipelineCache,
+    ) -> ReactorResult<Self> {
         let vert_shader_module = unsafe {
             let create_info = vk::ShaderModuleCreateInfo::default().code(vert_spv);
             device
@@ -228,7 +260,7 @@ impl Pipeline {
 
         let pipelines = unsafe {
             device
-                .create_graphics_pipelines(vk::PipelineCache::null(), &[create_info], None)
+                .create_graphics_pipelines(pipeline_cache, &[create_info], None)
                 .map_err(|(_, e)| {
                     ReactorError::with_source(
                         ErrorCode::VulkanPipelineCreation,

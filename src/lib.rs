@@ -56,7 +56,9 @@ pub use app::run;
 pub use app::app::{quick, quick_with, ReactorApp};
 pub use app::config::{ReactorConfig, RendererMode};
 pub use core::context::VulkanContext;
+pub use core::debug_utils::DebugNamer;
 pub use core::error::{ErrorCode, ReactorError, ReactorResult};
+pub use core::memory_budget::{GpuMemoryBudget, HeapBudget};
 pub use reactor::Reactor;
 pub use resources::font::FontAsset;
 pub use resources::material::Material;
@@ -117,6 +119,9 @@ pub mod prelude {
         // App
         ReactorConfig,
         // Core
+        DebugNamer,
+        GpuMemoryBudget,
+        HeapBudget,
         ReactorError,
         ReactorResult,
         RendererMode,

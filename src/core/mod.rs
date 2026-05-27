@@ -7,7 +7,9 @@ pub mod allocator;
 pub mod arc_handle;
 pub mod command;
 pub mod context;
+pub mod debug_utils;
 pub mod device;
+pub mod memory_budget;
 pub mod surface;
 
 // Deterministic render graph
@@ -44,8 +46,10 @@ pub use allocator::MemoryAllocator;
 pub use arc_handle::{ArcDevice, ArcInstance, ArcSurface};
 pub use command::CommandManager;
 pub use context::VulkanContext;
+pub use debug_utils::DebugNamer;
 pub use device::DeviceInfo;
 pub use error::{ErrorCode, ReactorError, ReactorResult};
+pub use memory_budget::{GpuMemoryBudget, HeapBudget};
 pub use frame_graph::{
     Barrier, FrameGraph, FrameGraphStats, PassDesc, PassId, ResourceFormat, ResourceId,
     ResourceType,

@@ -1,12 +1,14 @@
 //! `Reactor::init` — construcción del runtime Vulkan a partir de una ventana.
 //!
 //! Responsable de:
-//! 1. Crear el `VulkanContext` (instance, device, surface, queues).
+//! 1. Crear el `VulkanContext` (instance, device, surface, queues + debug utils).
 //! 2. Crear el `gpu-allocator`.
 //! 3. Crear el swapchain inicial.
 //! 4. Negociar MSAA y depth.
 //! 5. Crear command pool + buffers + sync (triple buffering).
-//! 6. Intentar inicializar Ray Tracing si la GPU lo soporta.
+//! 6. Etiquetar todos los recursos con debug names.
+//! 7. Intentar inicializar Ray Tracing si la GPU lo soporta.
+//! 8. Pipeline warm-up (pre-compilar variantes comunes).
 
 use super::{depth, msaa, Reactor, MAX_FRAMES_IN_FLIGHT};
 use crate::core::error::{ErrorCode, ReactorError, ReactorResult};
@@ -46,6 +48,18 @@ impl Reactor {
         let inner_size = window.inner_size();
         let swapchain = Swapchain::new(&context, inner_size.width, inner_size.height)?;
 
+        // Label swapchain
+        context
+            .debug_namer()
+            .name_swapchain(swapchain.handle, "Swapchain: Main Window");
+
+        // Label swapchain image views
+        for (i, view) in swapchain.image_views.iter().enumerate() {
+            context
+                .debug_namer()
+                .name_image_view(*view, &format!("ImageView: Swapchain[{}]", i));
+        }
+
         // ── MSAA ──
         let msaa_samples = msaa::msaa_from_u32(requested_msaa, &context);
         if msaa_samples == vk::SampleCountFlags::TYPE_1 {
@@ -63,6 +77,10 @@ impl Reactor {
                     swapchain.format,
                     msaa_samples,
                 )?;
+                // Label MSAA resources
+                context.debug_namer().name_image(img, "Image: MSAA Color Resolve");
+                context.debug_namer().name_image_view(view, "ImageView: MSAA Color");
+                context.debug_namer().name_device_memory(mem, "Memory: MSAA Color");
                 (Some(img), Some(view), Some(mem))
             } else {
                 (None, None, None)
@@ -78,6 +96,11 @@ impl Reactor {
             msaa_samples,
         )?;
         println!("🔹 Depth buffer created: {:?}", depth_format);
+
+        // Label depth resources
+        context.debug_namer().name_image(depth_image, "Image: Depth Buffer");
+        context.debug_namer().name_image_view(depth_image_view, "ImageView: Depth Buffer");
+        context.debug_namer().name_device_memory(depth_memory, "Memory: Depth Buffer");
 
         // ── Command Pool ──
         let pool_create_info = vk::CommandPoolCreateInfo::default()
@@ -95,6 +118,7 @@ impl Reactor {
                     )
                 })?
         };
+        context.debug_namer().name_command_pool(command_pool, "CommandPool: Graphics (Main)");
 
         // ── Command Buffers (uno por frame en vuelo) ──
         let alloc_info = vk::CommandBufferAllocateInfo::default()
@@ -114,6 +138,13 @@ impl Reactor {
                 })?
         };
 
+        // Label command buffers
+        for (i, cmd) in command_buffers.iter().enumerate() {
+            context
+                .debug_namer()
+                .name_command_buffer(*cmd, &format!("CmdBuf: Frame[{}]", i));
+        }
+
         // ── Sincronización (semáforos + fences por frame) ──
         let semaphore_info = vk::SemaphoreCreateInfo::default();
         let fence_info = vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED);
@@ -122,33 +153,39 @@ impl Reactor {
         let mut render_finished_semaphores = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
         let mut in_flight_fences = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
 
-        for _ in 0..MAX_FRAMES_IN_FLIGHT {
+        for i in 0..MAX_FRAMES_IN_FLIGHT {
             unsafe {
-                image_available_semaphores.push(
-                    context
-                        .device
-                        .create_semaphore(&semaphore_info, None)
-                        .map_err(|e| {
-                            ReactorError::with_source(
-                                ErrorCode::VulkanSynchronization,
-                                "Failed to create semaphore",
-                                e,
-                            )
-                        })?,
-                );
-                render_finished_semaphores.push(
-                    context
-                        .device
-                        .create_semaphore(&semaphore_info, None)
-                        .map_err(|e| {
-                            ReactorError::with_source(
-                                ErrorCode::VulkanSynchronization,
-                                "Failed to create semaphore",
-                                e,
-                            )
-                        })?,
-                );
-                in_flight_fences.push(context.device.create_fence(&fence_info, None).map_err(
+                let img_sem = context
+                    .device
+                    .create_semaphore(&semaphore_info, None)
+                    .map_err(|e| {
+                        ReactorError::with_source(
+                            ErrorCode::VulkanSynchronization,
+                            "Failed to create semaphore",
+                            e,
+                        )
+                    })?;
+                context
+                    .debug_namer()
+                    .name_semaphore(img_sem, &format!("Semaphore: ImageAvailable[{}]", i));
+                image_available_semaphores.push(img_sem);
+
+                let render_sem = context
+                    .device
+                    .create_semaphore(&semaphore_info, None)
+                    .map_err(|e| {
+                        ReactorError::with_source(
+                            ErrorCode::VulkanSynchronization,
+                            "Failed to create semaphore",
+                            e,
+                        )
+                    })?;
+                context
+                    .debug_namer()
+                    .name_semaphore(render_sem, &format!("Semaphore: RenderFinished[{}]", i));
+                render_finished_semaphores.push(render_sem);
+
+                let fence = context.device.create_fence(&fence_info, None).map_err(
                     |e| {
                         ReactorError::with_source(
                             ErrorCode::VulkanSynchronization,
@@ -156,7 +193,11 @@ impl Reactor {
                             e,
                         )
                     },
-                )?);
+                )?;
+                context
+                    .debug_namer()
+                    .name_fence(fence, &format!("Fence: InFlight[{}]", i));
+                in_flight_fences.push(fence);
             }
         }
 
@@ -175,6 +216,33 @@ impl Reactor {
         } else {
             None
         };
+
+        // ── Log VRAM budget at startup ──
+        let budget = context.get_vram_budget();
+        log::info!(
+            "💾 VRAM Budget: {}/{} MB ({})",
+            budget.total_vram_usage_mb(),
+            budget.total_vram_budget_mb(),
+            if budget.has_dynamic_budget { "dynamic" } else { "static" }
+        );
+
+        // ── Log Async Queue status ──
+        if context.has_async_compute() {
+            log::info!(
+                "⚡ Async Compute: family {} ready",
+                context.compute_family()
+            );
+        } else {
+            log::info!("⚡ Async Compute: not available (using graphics queue)");
+        }
+        if context.has_async_transfer() {
+            log::info!(
+                "📦 Async Transfer: family {} ready",
+                context.transfer_family()
+            );
+        } else {
+            log::info!("📦 Async Transfer: not available (using graphics queue)");
+        }
 
         Ok(Self {
             context,

@@ -184,9 +184,35 @@ impl PsoCache {
             ReactorError::with_source(ErrorCode::IoError, "PSO cache init failed", e)
         })?;
 
-        // Crear Vulkan PipelineCache
-        // TODO: cargar blob nativo de disco si existe (vkGetPipelineCacheData)
-        let cache_info = vk::PipelineCacheCreateInfo::default();
+        // ── Load Vulkan native pipeline cache from disk (warm-up) ──
+        // The driver uses this blob to skip recompilation of previously seen
+        // pipeline states, eliminating first-frame stutter.
+        let vkcache_path = manager.cache_file().with_extension("vkcache");
+        let initial_data = if vkcache_path.exists() {
+            match fs::read(&vkcache_path) {
+                Ok(data) => {
+                    log::info!(
+                        "⚡ Pipeline cache loaded from disk ({} KB)",
+                        data.len() / 1024
+                    );
+                    data
+                }
+                Err(e) => {
+                    log::warn!("⚠ Failed to read pipeline cache from disk: {}", e);
+                    Vec::new()
+                }
+            }
+        } else {
+            Vec::new()
+        };
+
+        let cache_info = if initial_data.is_empty() {
+            vk::PipelineCacheCreateInfo::default()
+        } else {
+            vk::PipelineCacheCreateInfo::default()
+                .initial_data(&initial_data)
+        };
+
         let vk_pipeline_cache = unsafe {
             device
                 .create_pipeline_cache(&cache_info, None)
@@ -198,6 +224,10 @@ impl PsoCache {
                     )
                 })?
         };
+
+        if !initial_data.is_empty() {
+            log::info!("⚡ Pipeline warm-up: driver cache pre-seeded");
+        }
 
         Ok(Self {
             manager,

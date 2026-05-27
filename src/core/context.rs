@@ -9,6 +9,11 @@
 // - Drop order is enforced: device → surface → instance (reverse creation).
 // - All APIs return ReactorResult<T>, never panic or Box<dyn std::error::Error + Send + Sync>.
 // - Validation layers are enabled by default in debug builds.
+//
+// Vulkan Coverage:
+// - Debug Utils (VK_EXT_debug_utils) for resource labeling in RenderDoc/NSight.
+// - Memory Budget (VK_EXT_memory_budget) for VRAM monitoring.
+// - Async Queues: dedicated compute and transfer queues when available.
 // =============================================================================
 
 use ash::vk;
@@ -17,7 +22,9 @@ use raw_window_handle::HasWindowHandle;
 use std::ffi::{c_void, CStr};
 
 use crate::core::arc_handle::{ArcDevice, ArcInstance, ArcSurface};
+use crate::core::debug_utils::DebugNamer;
 use crate::core::error::{ErrorCode, ReactorError, ReactorResult};
+use crate::core::memory_budget::{self, GpuMemoryBudget};
 use crate::utils::gpu_detector::GPUDetector;
 
 // =============================================================================
@@ -79,6 +86,12 @@ pub struct VulkanContext {
 
     /// Transfer queue family index (if separate from graphics/compute).
     pub transfer_queue_family_index: Option<u32>,
+
+    /// Debug namer for labeling Vulkan resources in profiling tools.
+    pub debug_namer: DebugNamer,
+
+    /// Whether VK_EXT_memory_budget is available on this device.
+    pub has_memory_budget: bool,
 }
 
 // =============================================================================
@@ -128,6 +141,94 @@ unsafe extern "system" fn vulkan_debug_callback(
 }
 
 // =============================================================================
+// Queue family discovery helpers
+// =============================================================================
+
+/// Info about discovered queue families on the physical device.
+struct QueueFamilyInfo {
+    /// Graphics + present queue family index (mandatory).
+    graphics_index: u32,
+    /// Dedicated compute queue family index (None if not found).
+    compute_index: Option<u32>,
+    /// Dedicated transfer queue family index (None if not found).
+    transfer_index: Option<u32>,
+}
+
+/// Discover queue families on the physical device.
+/// Prefers dedicated queues (not sharing flags with the graphics family).
+fn discover_queue_families(
+    instance: &ash::Instance,
+    physical_device: vk::PhysicalDevice,
+    graphics_family: u32,
+) -> QueueFamilyInfo {
+    let families = unsafe { instance.get_physical_device_queue_family_properties(physical_device) };
+
+    // Look for a dedicated compute queue (has COMPUTE but NOT GRAPHICS)
+    let compute_index = families
+        .iter()
+        .enumerate()
+        .find(|(i, props)| {
+            let idx = *i as u32;
+            idx != graphics_family
+                && props.queue_flags.contains(vk::QueueFlags::COMPUTE)
+                && !props.queue_flags.contains(vk::QueueFlags::GRAPHICS)
+        })
+        .map(|(i, _)| i as u32);
+
+    // Look for a dedicated transfer queue (has TRANSFER but NOT GRAPHICS and NOT COMPUTE)
+    let transfer_index = families
+        .iter()
+        .enumerate()
+        .find(|(i, props)| {
+            let idx = *i as u32;
+            idx != graphics_family
+                && Some(idx) != compute_index
+                && props.queue_flags.contains(vk::QueueFlags::TRANSFER)
+                && !props.queue_flags.contains(vk::QueueFlags::GRAPHICS)
+                && !props.queue_flags.contains(vk::QueueFlags::COMPUTE)
+        })
+        .map(|(i, _)| i as u32)
+        .or_else(|| {
+            // Fallback: any transfer-capable family that isn't the graphics family
+            families
+                .iter()
+                .enumerate()
+                .find(|(i, props)| {
+                    let idx = *i as u32;
+                    idx != graphics_family
+                        && Some(idx) != compute_index
+                        && props.queue_flags.contains(vk::QueueFlags::TRANSFER)
+                })
+                .map(|(i, _)| i as u32)
+        });
+
+    QueueFamilyInfo {
+        graphics_index: graphics_family,
+        compute_index,
+        transfer_index,
+    }
+}
+
+// =============================================================================
+// Check if a device extension is available
+// =============================================================================
+
+fn device_extension_supported(
+    instance: &ash::Instance,
+    physical_device: vk::PhysicalDevice,
+    ext_name: &CStr,
+) -> bool {
+    let exts = unsafe { instance.enumerate_device_extension_properties(physical_device) };
+    exts.map(|exts| {
+        exts.iter().any(|ext| {
+            let name = unsafe { CStr::from_ptr(ext.extension_name.as_ptr()) };
+            name == ext_name
+        })
+    })
+    .unwrap_or(false)
+}
+
+// =============================================================================
 // Construction
 // =============================================================================
 
@@ -140,8 +241,11 @@ impl VulkanContext {
     /// 3. Set up debug messenger (debug builds only)
     /// 4. Create VkSurfaceKHR for the window
     /// 5. Select best physical device (via GPUDetector)
-    /// 6. Create VkDevice with requested features
-    /// 7. Retrieve queues
+    /// 6. Discover async queue families (compute, transfer)
+    /// 7. Create VkDevice with requested features + extensions
+    /// 8. Retrieve queues
+    /// 9. Initialize debug namer for resource labeling
+    /// 10. Query memory budget capabilities
     ///
     /// # Errors
     ///
@@ -193,10 +297,61 @@ impl VulkanContext {
             queue_family_index
         );
 
-        // 5. Create logical device
-        let (device, graphics_queue) =
-            Self::create_device(&arc_instance, pdevice, queue_family_index, enable_ray_tracing)?;
+        // 5. Discover async queue families
+        let queue_info =
+            discover_queue_families(arc_instance.get(), pdevice, queue_family_index);
+
+        if queue_info.compute_index.is_some() {
+            log::info!(
+                "⚡ Async Compute queue family: {}",
+                queue_info.compute_index.unwrap()
+            );
+        }
+        if queue_info.transfer_index.is_some() {
+            log::info!(
+                "📦 Async Transfer queue family: {}",
+                queue_info.transfer_index.unwrap()
+            );
+        }
+
+        // 6. Check for VK_EXT_memory_budget support
+        let memory_budget_ext_name =
+            CStr::from_bytes_with_nul(b"VK_EXT_memory_budget\0").unwrap();
+        let has_memory_budget =
+            device_extension_supported(arc_instance.get(), pdevice, memory_budget_ext_name);
+
+        // 7. Create logical device with all queues + extensions
+        let (device, graphics_queue, compute_queue, transfer_queue) = Self::create_device(
+            &arc_instance,
+            pdevice,
+            &queue_info,
+            enable_ray_tracing,
+            has_memory_budget,
+        )?;
         let arc_device = ArcDevice::new(device);
+
+        // 8. Initialize debug namer
+        let debug_namer = DebugNamer::new(
+            arc_instance.debug_utils(),
+            arc_instance.get(),
+            arc_device.get(),
+        );
+
+        // Label the graphics queue
+        debug_namer.name_queue(graphics_queue, "Queue: Graphics (Main)");
+        if let Some(cq) = compute_queue {
+            debug_namer.name_queue(cq, "Queue: Async Compute");
+        }
+        if let Some(tq) = transfer_queue {
+            debug_namer.name_queue(tq, "Queue: Async Transfer");
+        }
+
+        if debug_namer.is_active() {
+            log::info!("🏷️  Debug resource labeling active (VK_EXT_debug_utils)");
+        }
+        if has_memory_budget {
+            log::info!("📊 VRAM budget monitoring active (VK_EXT_memory_budget)");
+        }
 
         Ok(Self {
             instance: arc_instance,
@@ -204,11 +359,13 @@ impl VulkanContext {
             surface: arc_surface,
             physical_device: pdevice,
             graphics_queue,
-            compute_queue: None,
-            transfer_queue: None,
+            compute_queue,
+            transfer_queue,
             queue_family_index,
-            compute_queue_family_index: None,
-            transfer_queue_family_index: None,
+            compute_queue_family_index: queue_info.compute_index,
+            transfer_queue_family_index: queue_info.transfer_index,
+            debug_namer,
+            has_memory_budget,
         })
     }
 
@@ -229,16 +386,12 @@ impl VulkanContext {
         let layer_names = [CStr::from_bytes_with_nul(b"VK_LAYER_KHRONOS_validation\0").unwrap()];
         let layers_ptr: Vec<*const i8> = layer_names.iter().map(|r| r.as_ptr()).collect();
 
-        // Extensions
-        let mut extension_names = vec![
+        // Extensions — always include debug_utils for resource labeling
+        let extension_names = vec![
             ash::khr::surface::NAME.as_ptr(),
             ash::khr::win32_surface::NAME.as_ptr(),
+            ash::ext::debug_utils::NAME.as_ptr(),
         ];
-
-        #[cfg(debug_assertions)]
-        {
-            extension_names.push(ash::ext::debug_utils::NAME.as_ptr());
-        }
 
         let app_info = vk::ApplicationInfo::default().api_version(vk::API_VERSION_1_3);
 
@@ -278,10 +431,12 @@ impl VulkanContext {
         };
 
         #[cfg(not(debug_assertions))]
-        let (debug_utils, debug_messenger): (
-            Option<ash::ext::debug_utils::Instance>,
-            Option<vk::DebugUtilsMessengerEXT>,
-        ) = (None, None);
+        let (debug_utils, debug_messenger) = {
+            // In release: still create the Instance loader for debug naming,
+            // but don't create a validation messenger.
+            let debug_utils = ash::ext::debug_utils::Instance::new(entry, &instance);
+            (Some(debug_utils), None)
+        };
 
         Ok((instance, debug_utils, debug_messenger))
     }
@@ -337,19 +492,29 @@ impl VulkanContext {
     }
 
     // -------------------------------------------------------------------------
-    // Internal: device creation
+    // Internal: device creation (with async queues + extensions)
     // -------------------------------------------------------------------------
     fn create_device(
         instance: &ArcInstance,
         physical_device: vk::PhysicalDevice,
-        queue_family_index: u32,
+        queue_info: &QueueFamilyInfo,
         enable_ray_tracing: bool,
-    ) -> ReactorResult<(ash::Device, vk::Queue)> {
+        has_memory_budget: bool,
+    ) -> ReactorResult<(ash::Device, vk::Queue, Option<vk::Queue>, Option<vk::Queue>)> {
         // Device extensions
-        let mut device_extension_names = vec![
+        let mut device_extension_names: Vec<*const i8> = vec![
             ash::khr::swapchain::NAME.as_ptr(),
             ash::khr::dynamic_rendering::NAME.as_ptr(),
         ];
+
+        // VK_EXT_memory_budget (device extension)
+        if has_memory_budget {
+            device_extension_names.push(
+                CStr::from_bytes_with_nul(b"VK_EXT_memory_budget\0")
+                    .unwrap()
+                    .as_ptr(),
+            );
+        }
 
         if enable_ray_tracing {
             device_extension_names.push(ash::khr::ray_tracing_pipeline::NAME.as_ptr());
@@ -366,18 +531,41 @@ impl VulkanContext {
                 .as_ptr());
         }
 
-        // Queue
+        // ── Build queue create infos for all discovered families ──
         let queue_priorities = [1.0f32];
-        let queue_info = vk::DeviceQueueCreateInfo::default()
-            .queue_family_index(queue_family_index)
-            .queue_priorities(&queue_priorities);
+        let mut queue_create_infos = vec![
+            vk::DeviceQueueCreateInfo::default()
+                .queue_family_index(queue_info.graphics_index)
+                .queue_priorities(&queue_priorities),
+        ];
+
+        // Add compute queue if on a different family
+        if let Some(compute_idx) = queue_info.compute_index {
+            queue_create_infos.push(
+                vk::DeviceQueueCreateInfo::default()
+                    .queue_family_index(compute_idx)
+                    .queue_priorities(&queue_priorities),
+            );
+        }
+
+        // Add transfer queue if on a different family
+        if let Some(transfer_idx) = queue_info.transfer_index {
+            // Avoid duplicate if transfer == compute (already added)
+            if Some(transfer_idx) != queue_info.compute_index {
+                queue_create_infos.push(
+                    vk::DeviceQueueCreateInfo::default()
+                        .queue_family_index(transfer_idx)
+                        .queue_priorities(&queue_priorities),
+                );
+            }
+        }
 
         // Features
         let mut dynamic_rendering_features =
             vk::PhysicalDeviceDynamicRenderingFeatures::default().dynamic_rendering(true);
 
         let mut device_create_info = vk::DeviceCreateInfo::default()
-            .queue_create_infos(std::slice::from_ref(&queue_info))
+            .queue_create_infos(&queue_create_infos)
             .enabled_extension_names(&device_extension_names)
             .push_next(&mut dynamic_rendering_features);
 
@@ -410,9 +598,19 @@ impl VulkanContext {
                 })?
         };
 
-        let graphics_queue = unsafe { device.get_device_queue(queue_family_index, 0) };
+        // Retrieve queues
+        let graphics_queue =
+            unsafe { device.get_device_queue(queue_info.graphics_index, 0) };
 
-        Ok((device, graphics_queue))
+        let compute_queue = queue_info
+            .compute_index
+            .map(|idx| unsafe { device.get_device_queue(idx, 0) });
+
+        let transfer_queue = queue_info
+            .transfer_index
+            .map(|idx| unsafe { device.get_device_queue(idx, 0) });
+
+        Ok((device, graphics_queue, compute_queue, transfer_queue))
     }
 
     // =========================================================================
@@ -470,6 +668,119 @@ impl VulkanContext {
             self.device.ref_count(),
             self.surface.ref_count(),
         )
+    }
+
+    // ─── Debug Utils API ────────────────────────────────────────────────
+
+    /// Access the debug namer for labeling Vulkan resources.
+    ///
+    /// Usage in engine subsystems:
+    /// ```ignore
+    /// ctx.debug_namer().name_buffer(my_buffer, "Buffer: PlayerVertices");
+    /// ctx.debug_namer().name_image(my_image, "Image: ZombieAlbedoTexture");
+    /// ```
+    #[inline]
+    pub fn debug_namer(&self) -> &DebugNamer {
+        &self.debug_namer
+    }
+
+    // ─── Memory Budget API ──────────────────────────────────────────────
+
+    /// Query the current GPU memory budget (VRAM usage + available).
+    ///
+    /// If `VK_EXT_memory_budget` is available, returns real-time data from the
+    /// driver. Otherwise, returns static heap sizes with usage = 0.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let budget = ctx.get_vram_budget();
+    /// println!("VRAM: {}/{} MB used", budget.total_vram_usage_mb(), budget.total_vram_budget_mb());
+    /// if budget.is_vram_pressure_high() {
+    ///     // Reduce texture quality or unload distant models
+    /// }
+    /// ```
+    pub fn get_vram_budget(&self) -> GpuMemoryBudget {
+        memory_budget::query_memory_budget(
+            self.ash_instance(),
+            self.physical_device,
+            self.has_memory_budget,
+        )
+    }
+
+    // ─── Async Queue API ────────────────────────────────────────────────
+
+    /// Returns `true` if a dedicated compute queue is available.
+    #[inline]
+    pub fn has_async_compute(&self) -> bool {
+        self.compute_queue.is_some()
+    }
+
+    /// Returns `true` if a dedicated transfer queue is available.
+    #[inline]
+    pub fn has_async_transfer(&self) -> bool {
+        self.transfer_queue.is_some()
+    }
+
+    /// Submit a command buffer to the compute queue.
+    ///
+    /// Falls back to the graphics queue if no dedicated compute queue exists.
+    pub fn submit_compute(
+        &self,
+        submit_info: &[vk::SubmitInfo],
+        fence: vk::Fence,
+    ) -> ReactorResult<()> {
+        let queue = self.compute_queue.unwrap_or(self.graphics_queue);
+        unsafe {
+            self.device
+                .get()
+                .queue_submit(queue, submit_info, fence)
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanSynchronization,
+                        "Compute queue submit failed",
+                        e,
+                    )
+                })
+        }
+    }
+
+    /// Submit a command buffer to the transfer queue.
+    ///
+    /// Falls back to the graphics queue if no dedicated transfer queue exists.
+    pub fn submit_transfer(
+        &self,
+        submit_info: &[vk::SubmitInfo],
+        fence: vk::Fence,
+    ) -> ReactorResult<()> {
+        let queue = self.transfer_queue.unwrap_or(self.graphics_queue);
+        unsafe {
+            self.device
+                .get()
+                .queue_submit(queue, submit_info, fence)
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanSynchronization,
+                        "Transfer queue submit failed",
+                        e,
+                    )
+                })
+        }
+    }
+
+    /// Get the queue family index for compute operations.
+    /// Falls back to the graphics queue family if no dedicated compute queue.
+    #[inline]
+    pub fn compute_family(&self) -> u32 {
+        self.compute_queue_family_index
+            .unwrap_or(self.queue_family_index)
+    }
+
+    /// Get the queue family index for transfer operations.
+    /// Falls back to the graphics queue family if no dedicated transfer queue.
+    #[inline]
+    pub fn transfer_family(&self) -> u32 {
+        self.transfer_queue_family_index
+            .unwrap_or(self.queue_family_index)
     }
 }
 
