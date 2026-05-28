@@ -1267,34 +1267,27 @@ impl Xenofall {
             }
         }
 
-        // Pause/config toggle
+        // Pause/config toggle (P/Esc).
+        // El toggle real ocurre en `on_event` (única fuente de verdad), aquí
+        // sólo detectamos si la pausa se acaba de abrir/cerrar este frame para
+        // que `pause_config.update()` no consuma la MISMA pulsación como
+        // "resume" y cierre la pausa en el mismo frame.
         let mut pause_opened_this_frame = false;
-        let pause_already_handled = self.pause_event_consumed;
-        self.pause_event_consumed = false;
-        if !pause_already_handled
-            && (ctx.input().is_key_just_pressed(KeyCode::KeyP)
-                || ctx.input().is_key_just_pressed(KeyCode::Escape))
+        if self.pause_event_consumed {
+            self.pause_event_consumed = false;
+            // El on_event toggleó este frame: si el resultado es Paused,
+            // significa que se acaba de abrir → bloquear update() del overlay
+            // este frame para no ver la tecla como "resume".
+            if self.state == GameState::Paused {
+                pause_opened_this_frame = true;
+            }
+        } else if ctx.input().is_key_just_pressed(KeyCode::KeyP)
+            || ctx.input().is_key_just_pressed(KeyCode::Escape)
         {
+            // Fallback: el evento no llegó por on_event (p.ej. focus perdido).
             let was_playing = self.state == GameState::Playing;
             self.toggle_pause_config(ctx);
             pause_opened_this_frame = was_playing && self.state == GameState::Paused;
-        }
-        if false && ctx.input().is_key_just_pressed(KeyCode::KeyP)
-            || ctx.input().is_key_just_pressed(KeyCode::Escape)
-        {
-            self.state = match self.state {
-                GameState::Playing => {
-                    self.pause_config.show(ctx);
-                    pause_opened_this_frame = true;
-                    GameState::Paused
-                }
-                GameState::Paused => {
-                    println!("\n  \x1b[38;2;180;0;0m▓▓▓ RESUMING — BLOOD PROTOCOL DEACTIVATED ▓▓▓\x1b[0m\n");
-                    self.pause_config.hide(ctx);
-                    GameState::Playing
-                }
-                other => other,
-            };
         }
 
         // VSync dynamic toggle (unlocked FPS showcase)
