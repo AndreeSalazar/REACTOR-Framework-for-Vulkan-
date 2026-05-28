@@ -37,6 +37,7 @@
 use reactor_vulkan::prelude::*;
 use winit::event::MouseButton;
 use winit::keyboard::KeyCode;
+use reactor_vulkan::graphics::post_process::PostProcessEffect;
 
 // =============================================================================
 // CONSTANTES DE GAMEPLAY
@@ -508,6 +509,7 @@ struct Xenofall {
     crosshair_index: Option<usize>,
     game_over_index: Option<usize>,
     victory_index: Option<usize>,
+    config_pause_printed: bool,
 }
 
 impl Xenofall {
@@ -557,6 +559,7 @@ impl Xenofall {
             crosshair_index: None,
             game_over_index: None,
             victory_index: None,
+            config_pause_printed: false,
         }
     }
 
@@ -1248,8 +1251,14 @@ impl Xenofall {
         // Pause toggle
         if ctx.input().is_key_just_pressed(KeyCode::KeyP) {
             self.state = match self.state {
-                GameState::Playing => GameState::Paused,
-                GameState::Paused => GameState::Playing,
+                GameState::Playing => {
+                    self.config_pause_printed = false;
+                    GameState::Paused
+                }
+                GameState::Paused => {
+                    println!("\n  \x1b[38;2;180;0;0m▓▓▓ RESUMING — BLOOD PROTOCOL DEACTIVATED ▓▓▓\x1b[0m\n");
+                    GameState::Playing
+                }
                 other => other,
             };
         }
@@ -1301,6 +1310,100 @@ impl Xenofall {
                 self.select_card(2, ctx);
             }
             return;
+        }
+
+        // If paused, handle config hotkeys
+        if self.state == GameState::Paused {
+            let k4 = ctx.input().is_key_just_pressed(KeyCode::Digit4);
+            let k5 = ctx.input().is_key_just_pressed(KeyCode::Digit5);
+            let k6 = ctx.input().is_key_just_pressed(KeyCode::Digit6);
+            let k7 = ctx.input().is_key_just_pressed(KeyCode::Digit7);
+            let k8 = ctx.input().is_key_just_pressed(KeyCode::Digit8);
+            let k9 = ctx.input().is_key_just_pressed(KeyCode::Digit9);
+            let k0 = ctx.input().is_key_just_pressed(KeyCode::Digit0);
+            let kg = ctx.input().is_key_just_pressed(KeyCode::KeyG);
+            let kb = ctx.input().is_key_just_pressed(KeyCode::KeyB);
+            let kn = ctx.input().is_key_just_pressed(KeyCode::KeyN);
+
+            if k4 || k5 || k6 || k7 || k8 || k9 || k0 || kg || kb || kn {
+                let settings = &mut ctx.reactor.post_process.settings;
+                if k4 {
+                    if settings.is_effect_enabled(PostProcessEffect::Vignette) {
+                        settings.disable_effect(PostProcessEffect::Vignette);
+                    } else {
+                        settings.enable_effect(PostProcessEffect::Vignette);
+                    }
+                }
+                if k5 {
+                    if settings.is_effect_enabled(PostProcessEffect::Bloom) {
+                        settings.disable_effect(PostProcessEffect::Bloom);
+                    } else {
+                        settings.enable_effect(PostProcessEffect::Bloom);
+                    }
+                }
+                if k6 {
+                    if settings.is_effect_enabled(PostProcessEffect::FilmGrain) {
+                        settings.disable_effect(PostProcessEffect::FilmGrain);
+                    } else {
+                        settings.enable_effect(PostProcessEffect::FilmGrain);
+                    }
+                }
+                if k7 {
+                    if settings.is_effect_enabled(PostProcessEffect::ChromaticAberration) {
+                        settings.disable_effect(PostProcessEffect::ChromaticAberration);
+                    } else {
+                        settings.enable_effect(PostProcessEffect::ChromaticAberration);
+                    }
+                }
+                if k8 {
+                    if settings.is_effect_enabled(PostProcessEffect::FXAA) {
+                        settings.disable_effect(PostProcessEffect::FXAA);
+                    } else {
+                        settings.enable_effect(PostProcessEffect::FXAA);
+                    }
+                }
+                if k9 {
+                    if settings.is_effect_enabled(PostProcessEffect::Sharpen) {
+                        settings.disable_effect(PostProcessEffect::Sharpen);
+                    } else {
+                        settings.enable_effect(PostProcessEffect::Sharpen);
+                    }
+                }
+                if k0 {
+                    if settings.is_effect_enabled(PostProcessEffect::ToneMapping) {
+                        settings.disable_effect(PostProcessEffect::ToneMapping);
+                    } else {
+                        settings.enable_effect(PostProcessEffect::ToneMapping);
+                    }
+                }
+                if kg {
+                    settings.exposure = match settings.exposure {
+                        exp if (exp - 0.8).abs() < 0.01 => 1.0,
+                        exp if (exp - 1.0).abs() < 0.01 => 1.15,
+                        exp if (exp - 1.15).abs() < 0.01 => 1.5,
+                        exp if (exp - 1.5).abs() < 0.01 => 2.0,
+                        _ => 0.8,
+                    };
+                }
+                if kb {
+                    settings.bloom_intensity = match settings.bloom_intensity {
+                        val if (val - 0.1).abs() < 0.01 => 0.2,
+                        val if (val - 0.2).abs() < 0.01 => 0.35,
+                        val if (val - 0.35).abs() < 0.01 => 0.5,
+                        val if (val - 0.5).abs() < 0.01 => 0.8,
+                        _ => 0.1,
+                    };
+                }
+                if kn {
+                    settings.grain_intensity = match settings.grain_intensity {
+                        val if (val - 0.01).abs() < 0.001 => 0.02,
+                        val if (val - 0.02).abs() < 0.001 => 0.05,
+                        val if (val - 0.05).abs() < 0.001 => 0.1,
+                        _ => 0.01,
+                    };
+                }
+                self.config_pause_printed = false;
+            }
         }
 
         if self.state != GameState::Playing {
@@ -1774,6 +1877,124 @@ impl Xenofall {
             }
         }
     }
+
+    fn print_config_pause(&self, ctx: &ReactorContext) {
+        let settings = &ctx.reactor.post_process.settings;
+        let is_vignette = settings.is_effect_enabled(PostProcessEffect::Vignette);
+        let is_bloom = settings.is_effect_enabled(PostProcessEffect::Bloom);
+        let is_grain = settings.is_effect_enabled(PostProcessEffect::FilmGrain);
+        let is_chromatic = settings.is_effect_enabled(PostProcessEffect::ChromaticAberration);
+        let is_fxaa = settings.is_effect_enabled(PostProcessEffect::FXAA);
+        let is_sharpen = settings.is_effect_enabled(PostProcessEffect::Sharpen);
+        let is_tonemap = settings.is_effect_enabled(PostProcessEffect::ToneMapping);
+
+        let exposure = settings.exposure;
+        let bloom_intensity = settings.bloom_intensity;
+        let grain_intensity = settings.grain_intensity;
+
+        let acc = if self.shots_fired > 0 {
+            (self.shots_hit as f32 / self.shots_fired as f32 * 100.0) as u32
+        } else {
+            0
+        };
+
+        let msaa_str = format!("{:?}", ctx.reactor.msaa_samples);
+        let msaa_display = if msaa_str.contains("TYPE_4") {
+            "4x"
+        } else if msaa_str.contains("TYPE_8") {
+            "8x"
+        } else if msaa_str.contains("TYPE_2") {
+            "2x"
+        } else if msaa_str.contains("TYPE_16") {
+            "16x"
+        } else if msaa_str.contains("TYPE_1") {
+            "1x"
+        } else {
+            &msaa_str
+        };
+
+        let vsync_display = if ctx.reactor.vsync { "ON (Locked)" } else { "OFF (Unlocked)" };
+        let fps_display = format!("{:.1}", ctx.fps());
+
+        println!();
+        println!("  \x1b[38;2;180;0;0m╔══════════════════════════════════════════════════════════════════════════╗\x1b[0m");
+        println!("  \x1b[38;2;220;0;0m║                                                                          ║\x1b[0m");
+        println!("  \x1b[38;2;255;20;20m║   ██╗  ██╗███████╗███╗   ██╗ ██████╗ ███████╗ █████╗ ██╗     ██╗         ║\x1b[0m");
+        println!("  \x1b[38;2;255;0;0m║   ╚██╗██╔╝██╔════╝████╗  ██║██╔═══██╗██╔════╝██╔══██╗██║     ██║         ║\x1b[0m");
+        println!("  \x1b[38;2;220;0;0m║    ╚███╔╝ █████╗  ██╔██╗ ██║██║   ██║█████╗  ███████║██║     ██║         ║\x1b[0m");
+        println!("  \x1b[38;2;180;0;0m║    ██╔██╗ ██╔══╝  ██║╚██╗██║██║   ██║██╔══╝  ██╔══██║██║     ██║         ║\x1b[0m");
+        println!("  \x1b[38;2;140;0;0m║   ██╔╝ ██╗███████╗██║ ╚████║╚██████╔╝██║     ██║  ██║███████╗███████╗   ║\x1b[0m");
+        println!("  \x1b[38;2;100;0;0m║   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝     ╚═╝  ╚═╝╚══════╝╚══════╝   ║\x1b[0m");
+        println!("  \x1b[38;2;140;0;0m║                                                                          ║\x1b[0m");
+        println!("  \x1b[38;2;255;0;0m║        🩸 ░▒▓ TACTICAL PAUSE CONFIGURATION — BLOOD PROTOCOL ▓▒░ 🩸       ║\x1b[0m");
+        println!("  \x1b[38;2;180;0;0m╠══════════════════════════════════════════════════════════════════════════╣\x1b[0m");
+        println!("  \x1b[38;2;180;0;0m║\x1b[97m\x1b[1m  ■ COMBAT STATUS\x1b[0m                                                         \x1b[38;2;180;0;0m║\x1b[0m");
+        println!("  \x1b[38;2;180;0;0m║\x1b[0m    HP: \x1b[91m{:<3}\x1b[0m/{:<3}   | Score: \x1b[93m{:<8}\x1b[0m   | Kills: \x1b[91m{:<4}\x1b[0m                       \x1b[38;2;180;0;0m║\x1b[0m", self.hp, self.build.max_hp, self.score, self.kills);
+        println!("  \x1b[38;2;180;0;0m║\x1b[0m    Headshots: \x1b[93m{:<4}\x1b[0m  | Accuracy: \x1b[92m{:>3}%\x1b[0m  | Wave: \x1b[96m{:<2}\x1b[0m/{:<2}                        \x1b[38;2;180;0;0m║\x1b[0m", self.headshots, acc, self.current_wave, self.waves.len());
+        println!("  \x1b[38;2;180;0;0m║\x1b[0m    Combo: x\x1b[95m{:<2}\x1b[0m      | Cards: \x1b[94m{:<2}\x1b[0m        | Ammo: \x1b[97m{:<2}\x1b[0m/{:<2}                      \x1b[38;2;180;0;0m║\x1b[0m", self.combo, self.build.cards_collected.len(), self.ammo, self.build.effective_mag_size());
+        println!("  \x1b[38;2;180;0;0m╠══════════════════════════════════════════════════════════════════════════╣\x1b[0m");
+        println!("  \x1b[38;2;180;0;0m║\x1b[97m\x1b[1m  ■ POST-PROCESSING EFFECT TOGGLES\x1b[0m                                        \x1b[38;2;180;0;0m║\x1b[0m");
+
+        let print_toggle = |key: &str, name: &str, enabled: bool| -> String {
+            let status = if enabled {
+                "\x1b[92m██ ON \x1b[0m"
+            } else {
+                "\x1b[90m░░ OFF\x1b[0m"
+            };
+            format!("[{}] {:.<18} {}", key, name, status)
+        };
+
+        let t_vignette = print_toggle("4", "Vignette", is_vignette);
+        let t_bloom = print_toggle("5", "Bloom", is_bloom);
+        let t_grain = print_toggle("6", "Film Grain", is_grain);
+        let t_chromatic = print_toggle("7", "Chromatic Ab.", is_chromatic);
+        let t_fxaa = print_toggle("8", "FXAA", is_fxaa);
+        let t_sharpen = print_toggle("9", "Sharpen", is_sharpen);
+        let t_tonemap = print_toggle("0", "Tone Mapping", is_tonemap);
+
+        println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m", t_vignette, t_bloom);
+        println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m", t_grain, t_chromatic);
+        println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m", t_fxaa, t_sharpen);
+        println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}                                          \x1b[38;2;180;0;0m║\x1b[0m", t_tonemap);
+        println!("  \x1b[38;2;180;0;0m║                                                                          ║\x1b[0m");
+        println!("  \x1b[38;2;180;0;0m║\x1b[0m   \x1b[1m■ VALUE ADJUSTMENTS\x1b[0m                                                    \x1b[38;2;180;0;0m║\x1b[0m");
+        println!("  \x1b[38;2;180;0;0m║\x1b[0m    [G] Exposure: \x1b[93m{:<4}\x1b[0m   [B] Bloom Int: \x1b[92m{:<4}\x1b[0m   [N] Grain Int: \x1b[95m{:<4}\x1b[0m        \x1b[38;2;180;0;0m║\x1b[0m", exposure, bloom_intensity, grain_intensity);
+        println!("  \x1b[38;2;180;0;0m╠══════════════════════════════════════════════════════════════════════════╣\x1b[0m");
+        println!("  \x1b[38;2;180;0;0m║\x1b[97m\x1b[1m  ■ VULKAN RENDERING SYSTEM\x1b[0m                                              \x1b[38;2;180;0;0m║\x1b[0m");
+        println!("  \x1b[38;2;180;0;0m║\x1b[0m    VSync: \x1b[96m{:<14}\x1b[0m | MSAA: \x1b[95m{:<3}\x1b[0m | Performance: \x1b[92m{:>6} FPS\x1b[0m           \x1b[38;2;180;0;0m║\x1b[0m", vsync_display, msaa_display, fps_display);
+        println!("  \x1b[38;2;180;0;0m╠══════════════════════════════════════════════════════════════════════════╣\x1b[0m");
+        println!("  \x1b[38;2;180;0;0m║\x1b[97m\x1b[1m  ■ ACTIVE BUILD CARDS\x1b[0m                                                    \x1b[38;2;180;0;0m║\x1b[0m");
+
+        if self.build.cards_collected.is_empty() {
+            println!("  \x1b[38;2;180;0;0m║\x1b[0m    \x1b[90mNo active cards. Survive a wave to choose a card!\x1b[0m                     \x1b[38;2;180;0;0m║\x1b[0m");
+        } else {
+            for card in &self.build.cards_collected {
+                let clean_name = match card {
+                    CardType::DoubleTap => "DOBLE TAP",
+                    CardType::PiercingRounds => "RONDAS PERFORANTES",
+                    CardType::ExplosiveShot => "DISPARO EXPLOSIVO",
+                    CardType::ArmorPlating => "BLINDAJE",
+                    CardType::Regeneration => "REGENERACION",
+                    CardType::QuickReload => "RECARGA RAPIDA",
+                    CardType::ExtendedMag => "CARGADOR EXTENDIDO",
+                    CardType::ComboMaster => "MAESTRO DEL COMBO",
+                    CardType::ScoreBonus => "BONUS DE PUNTOS",
+                };
+                let card_line = format!("    • {}: {}", clean_name, card.description());
+                let spaces_needed = 74 - card_line.chars().count();
+                let pad = " ".repeat(spaces_needed);
+                println!("  \x1b[38;2;180;0;0m║\x1b[0m{}{}\x1b[38;2;180;0;0m║\x1b[0m", card_line, pad);
+            }
+        }
+
+        println!("  \x1b[38;2;180;0;0m╠══════════════════════════════════════════════════════════════════════════╣\x1b[0m");
+        println!("  \x1b[38;2;180;0;0m║\x1b[97m\x1b[1m  ■ CONTROLS\x1b[0m                                                               \x1b[38;2;180;0;0m║\x1b[0m");
+        println!("  \x1b[38;2;180;0;0m║\x1b[0m    P \x1b[91m→\x1b[0m Resume Game  |  V \x1b[91m→\x1b[0m Toggle VSync  |  F \x1b[91m→\x1b[0m Toggle Fullscreen       \x1b[38;2;180;0;0m║\x1b[0m");
+        println!("  \x1b[38;2;180;0;0m║\x1b[0m    Esc \x1b[91m→\x1b[0m Quit Game  |  4-0 \x1b[91m→\x1b[0m Toggle Post-Process Effects                   \x1b[38;2;180;0;0m║\x1b[0m");
+        println!("  \x1b[38;2;180;0;0m║\x1b[0m    G/B/N \x1b[91m→\x1b[0m Cycle Exposure / Bloom / Grain Intensities                    \x1b[38;2;180;0;0m║\x1b[0m");
+        println!("  \x1b[38;2;180;0;0m╚══════════════════════════════════════════════════════════════════════════╝\x1b[0m");
+        println!();
+    }
 }
 
 // =============================================================================
@@ -1861,6 +2082,11 @@ impl ReactorApp for Xenofall {
     }
 
     fn update(&mut self, ctx: &mut ReactorContext) {
+        if self.state == GameState::Paused && !self.config_pause_printed {
+            self.print_config_pause(ctx);
+            self.config_pause_printed = true;
+        }
+
         let dt = ctx.delta();
         self.t += dt;
 
