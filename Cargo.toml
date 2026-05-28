@@ -1,17 +1,16 @@
 # =============================================================================
 # REACTOR Framework for Vulkan — Workspace Root
 # =============================================================================
-# This is a Cargo workspace with two members:
-#   1. `reactor-vulkan` (the engine crate, defined below)
-#   2. `Editor-REACTOR` (the visual editor, in ./Editor-REACTOR/)
+# This workspace currently builds the engine crate.
+# Add `Editor-REACTOR` back to `members` only when ./Editor-REACTOR/ exists.
 #
-# Build everything:  cargo build --workspace
+# Build engine:      cargo build
 # Run an example:    cargo run --example xenofall
-# Run the editor:    cargo run --bin reactor-editor
+# Run the editor:    cargo run --bin reactor-editor  (requires ./Editor-REACTOR/)
 # =============================================================================
 
 [workspace]
-members = [".", "Editor-REACTOR"]
+members = ["."]
 resolver = "2"
 
 # Shared dependency versions — all workspace members should use these.
@@ -152,5 +151,4 @@ strip = "symbols"
 
 [profile.dev.package."*"]
 opt-level = 2  # Compile dependencies with optimizations even in dev mode
-
 

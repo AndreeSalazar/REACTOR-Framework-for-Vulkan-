@@ -12,6 +12,7 @@
 
 use super::{Reactor, MAX_FRAMES_IN_FLIGHT};
 use crate::core::error::{ErrorCode, ReactorError, ReactorResult};
+use crate::core::VrsRate;
 use crate::resources::material::Material;
 use crate::resources::mesh::Mesh;
 use crate::systems::scene::Scene;
@@ -19,6 +20,30 @@ use ash::vk;
 use ash::vk::Handle;
 
 impl Reactor {
+    fn apply_pixel_intelligent_vrs(
+        &mut self,
+        command_buffer: vk::CommandBuffer,
+        visible_objects: usize,
+    ) {
+        let desired = self
+            .pixel_intelligent
+            .desired_rate(self.swapchain.extent, visible_objects);
+
+        let Some(vrs) = self.context.fragment_shading_rate.as_ref() else {
+            self.pixel_intelligent.current_rate = VrsRate::NATIVE;
+            return;
+        };
+
+        let rate = vrs
+            .capabilities
+            .best_supported_rate(desired, self.msaa_samples);
+        self.pixel_intelligent.current_rate = rate;
+
+        unsafe {
+            vrs.cmd_set_rate(command_buffer, rate);
+        }
+    }
+
     /// Dibuja una escena completa (todos los `SceneObject`) con MVP precomputado.
     pub fn draw_scene(&mut self, scene: &Scene, view_projection: &glam::Mat4) -> ReactorResult<()> {
         if self.device_lost {
@@ -269,6 +294,9 @@ impl Reactor {
             self.context
                 .device
                 .cmd_set_scissor(command_buffer, 0, &[scissor]);
+
+            let visible_objects = scene.objects.iter().filter(|object| object.visible).count();
+            self.apply_pixel_intelligent_vrs(command_buffer, visible_objects);
 
             let frustum = crate::systems::frustum::Frustum::from_view_projection(*view_projection);
             let mut active_pipeline = vk::Pipeline::null();
@@ -825,6 +853,8 @@ impl Reactor {
             self.context
                 .device
                 .cmd_set_scissor(command_buffer, 0, &[scissor]);
+
+            self.apply_pixel_intelligent_vrs(command_buffer, 1);
 
             let constants_array = std::slice::from_raw_parts(
                 transform as *const glam::Mat4 as *const u8,

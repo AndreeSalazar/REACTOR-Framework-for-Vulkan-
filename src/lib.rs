@@ -59,6 +59,10 @@ pub use core::context::VulkanContext;
 pub use core::debug_utils::DebugNamer;
 pub use core::error::{ErrorCode, ReactorError, ReactorResult};
 pub use core::memory_budget::{GpuMemoryBudget, HeapBudget};
+pub use core::vrs::{
+    PixelIntelligent, PixelIntelligentProfile, VrsCapabilities, VrsContext, VrsRate,
+    VrsSupportedRate,
+};
 pub use reactor::Reactor;
 pub use resources::font::FontAsset;
 pub use resources::material::Material;
@@ -122,6 +126,8 @@ pub mod prelude {
         DebugNamer,
         GpuMemoryBudget,
         HeapBudget,
+        PixelIntelligent,
+        PixelIntelligentProfile,
         ReactorError,
         ReactorResult,
         RendererMode,
@@ -131,6 +137,9 @@ pub mod prelude {
         Scene,
         Sphere,
         Transform,
+        VrsCapabilities,
+        VrsRate,
+        VrsSupportedRate,
         // Math
         Vec2,
         Vec3,

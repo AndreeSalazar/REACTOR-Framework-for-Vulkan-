@@ -1324,8 +1324,9 @@ impl Xenofall {
             let kg = ctx.input().is_key_just_pressed(KeyCode::KeyG);
             let kb = ctx.input().is_key_just_pressed(KeyCode::KeyB);
             let kn = ctx.input().is_key_just_pressed(KeyCode::KeyN);
+            let ki = ctx.input().is_key_just_pressed(KeyCode::KeyI);
 
-            if k4 || k5 || k6 || k7 || k8 || k9 || k0 || kg || kb || kn {
+            if k4 || k5 || k6 || k7 || k8 || k9 || k0 || kg || kb || kn || ki {
                 let settings = &mut ctx.reactor.post_process.settings;
                 if k4 {
                     if settings.is_effect_enabled(PostProcessEffect::Vignette) {
@@ -1401,6 +1402,17 @@ impl Xenofall {
                         val if (val - 0.05).abs() < 0.001 => 0.1,
                         _ => 0.01,
                     };
+                }
+                if ki {
+                    let next = match ctx.reactor.pixel_intelligent.profile {
+                        PixelIntelligentProfile::Off => PixelIntelligentProfile::Quality,
+                        PixelIntelligentProfile::Quality => PixelIntelligentProfile::Balanced,
+                        PixelIntelligentProfile::Balanced => PixelIntelligentProfile::Performance,
+                        PixelIntelligentProfile::Performance => PixelIntelligentProfile::UltraPerformance,
+                        PixelIntelligentProfile::UltraPerformance => PixelIntelligentProfile::Off,
+                    };
+                    ctx.reactor.set_pixel_intelligent_profile(next);
+                    Log::engine(&format!("Pixel Inteligente profile: {:?}", next));
                 }
                 self.config_pause_printed = false;
             }
@@ -1793,6 +1805,14 @@ impl Xenofall {
             String::new()
         };
 
+        let vrs_rate = ctx.reactor.pixel_intelligent_rate();
+        let pixel_str = if ctx.reactor.pixel_intelligent_enabled() {
+            format!(" PI {}x{}", vrs_rate.width, vrs_rate.height)
+        } else {
+            String::new()
+        };
+        let hud_status = format!("{}{}", cards_str, pixel_str);
+
         ctx.set_title(&format!(
             "{}{} XENOFALL · {} HP · {} balas{} · {:>7} pts{} · {} kills · {}%{} · Ola {}/{} · {:.0} FPS",
             flash,
@@ -1804,7 +1824,7 @@ impl Xenofall {
             combo_str,
             self.kills,
             accuracy,
-            cards_str,
+            hud_status,
             self.current_wave,
             self.waves.len(),
             ctx.fps(),
@@ -1915,6 +1935,17 @@ impl Xenofall {
 
         let vsync_display = if ctx.reactor.vsync { "ON (Locked)" } else { "OFF (Unlocked)" };
         let fps_display = format!("{:.1}", ctx.fps());
+        let vrs_rate = ctx.reactor.pixel_intelligent_rate();
+        let pixel_display = if ctx.reactor.pixel_intelligent_enabled() {
+            format!(
+                "{:?} {}x{}",
+                ctx.reactor.pixel_intelligent.profile, vrs_rate.width, vrs_rate.height
+            )
+        } else if ctx.reactor.context.supports_fragment_shading_rate() {
+            "OFF".to_string()
+        } else {
+            "No HW".to_string()
+        };
 
         println!();
         println!("  \x1b[38;2;180;0;0m╔══════════════════════════════════════════════════════════════════════════╗\x1b[0m");
@@ -1962,6 +1993,7 @@ impl Xenofall {
         println!("  \x1b[38;2;180;0;0m╠══════════════════════════════════════════════════════════════════════════╣\x1b[0m");
         println!("  \x1b[38;2;180;0;0m║\x1b[97m\x1b[1m  ■ VULKAN RENDERING SYSTEM\x1b[0m                                              \x1b[38;2;180;0;0m║\x1b[0m");
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    VSync: \x1b[96m{:<14}\x1b[0m | MSAA: \x1b[95m{:<3}\x1b[0m | Performance: \x1b[92m{:>6} FPS\x1b[0m           \x1b[38;2;180;0;0m║\x1b[0m", vsync_display, msaa_display, fps_display);
+        println!("  \x1b[38;2;180;0;0m║\x1b[0m    Pixel Inteligente: \x1b[92m{:<48}\x1b[0m   \x1b[38;2;180;0;0m║\x1b[0m", pixel_display);
         println!("  \x1b[38;2;180;0;0m╠══════════════════════════════════════════════════════════════════════════╣\x1b[0m");
         println!("  \x1b[38;2;180;0;0m║\x1b[97m\x1b[1m  ■ ACTIVE BUILD CARDS\x1b[0m                                                    \x1b[38;2;180;0;0m║\x1b[0m");
 
@@ -1991,7 +2023,7 @@ impl Xenofall {
         println!("  \x1b[38;2;180;0;0m║\x1b[97m\x1b[1m  ■ CONTROLS\x1b[0m                                                               \x1b[38;2;180;0;0m║\x1b[0m");
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    P \x1b[91m→\x1b[0m Resume Game  |  V \x1b[91m→\x1b[0m Toggle VSync  |  F \x1b[91m→\x1b[0m Toggle Fullscreen       \x1b[38;2;180;0;0m║\x1b[0m");
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    Esc \x1b[91m→\x1b[0m Quit Game  |  4-0 \x1b[91m→\x1b[0m Toggle Post-Process Effects                   \x1b[38;2;180;0;0m║\x1b[0m");
-        println!("  \x1b[38;2;180;0;0m║\x1b[0m    G/B/N \x1b[91m→\x1b[0m Cycle Exposure / Bloom / Grain Intensities                    \x1b[38;2;180;0;0m║\x1b[0m");
+        println!("  \x1b[38;2;180;0;0m║\x1b[0m    G/B/N \x1b[91m→\x1b[0m Cycle Exposure/Bloom/Grain  |  I \x1b[91m→\x1b[0m Pixel Inteligente              \x1b[38;2;180;0;0m║\x1b[0m");
         println!("  \x1b[38;2;180;0;0m╚══════════════════════════════════════════════════════════════════════════╝\x1b[0m");
         println!();
     }
@@ -2012,6 +2044,14 @@ impl ReactorApp for Xenofall {
 
     fn init(&mut self, ctx: &mut ReactorContext) {
         print_banner();
+
+        ctx.reactor
+            .set_pixel_intelligent_profile(PixelIntelligentProfile::Performance);
+        if ctx.reactor.pixel_intelligent_enabled() {
+            Log::engine("Pixel Inteligente VRS activo para Xenofall");
+        } else {
+            Log::engine("Pixel Inteligente preparado; esta GPU usara shading nativo 1x1");
+        }
 
         // ── Audio ──
         Log::audio("Cargando audio...");

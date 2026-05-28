@@ -21,7 +21,7 @@
 //! El usuario sigue viendo **un solo tipo `Reactor`** (monolito en la API),
 //! pero internamente cada responsabilidad vive en su archivo (modular).
 
-use crate::core::VulkanContext;
+use crate::core::{PixelIntelligent, PixelIntelligentProfile, VulkanContext, VrsRate};
 use crate::graphics::swapchain::Swapchain;
 use crate::platform::input::Input;
 use crate::raytracing::RayTracingContext;
@@ -73,6 +73,7 @@ pub struct Reactor {
     pub vsync: bool,
     pub camera_pos: glam::Vec3,
     pub post_process: crate::graphics::post_process::PostProcessPipeline,
+    pub pixel_intelligent: PixelIntelligent,
 
     // ── Contexto Vulkan (al final: se libera al final por orden de Drop) ──
     pub context: VulkanContext,
@@ -88,6 +89,20 @@ pub struct Reactor {
     pub depth_image_view: Option<vk::ImageView>,
     pub depth_memory: Option<vk::DeviceMemory>,
     pub depth_format: vk::Format,
+}
+
+impl Reactor {
+    pub fn set_pixel_intelligent_profile(&mut self, profile: PixelIntelligentProfile) {
+        self.pixel_intelligent.set_profile(profile);
+    }
+
+    pub fn pixel_intelligent_rate(&self) -> VrsRate {
+        self.pixel_intelligent.current_rate
+    }
+
+    pub fn pixel_intelligent_enabled(&self) -> bool {
+        self.pixel_intelligent.enabled && self.context.supports_fragment_shading_rate()
+    }
 }
 
 impl Drop for Reactor {

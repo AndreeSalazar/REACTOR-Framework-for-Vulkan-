@@ -18,6 +18,7 @@ pub struct PipelineConfig {
     pub depth_write: bool,
     pub blend_enable: bool,
     pub samples: vk::SampleCountFlags,
+    pub fragment_shading_rate: bool,
 }
 
 impl Default for PipelineConfig {
@@ -30,6 +31,7 @@ impl Default for PipelineConfig {
             depth_write: true,
             blend_enable: false,
             samples: vk::SampleCountFlags::TYPE_1,
+            fragment_shading_rate: false,
         }
     }
 }
@@ -172,7 +174,10 @@ impl Pipeline {
             .viewports(&viewports)
             .scissors(&scissors);
 
-        let dynamic_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
+        let mut dynamic_states = vec![vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
+        if config.fragment_shading_rate {
+            dynamic_states.push(vk::DynamicState::FRAGMENT_SHADING_RATE_KHR);
+        }
         let dynamic_state_info =
             vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
 

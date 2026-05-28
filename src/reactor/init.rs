@@ -244,6 +244,10 @@ impl Reactor {
             log::info!("📦 Async Transfer: not available (using graphics queue)");
         }
 
+        if context.supports_fragment_shading_rate() {
+            log::info!("Pixel Inteligente: Vulkan VRS active (pipeline mode)");
+        }
+
         let mut post_process = crate::graphics::post_process::PostProcessPipeline::new();
         post_process.init(
             &context,
@@ -272,6 +276,7 @@ impl Reactor {
             vsync,
             camera_pos: glam::Vec3::ZERO,
             post_process,
+            pixel_intelligent: crate::core::PixelIntelligent::default(),
             msaa_samples,
             msaa_image,
             msaa_image_view,

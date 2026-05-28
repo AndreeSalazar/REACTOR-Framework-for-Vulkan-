@@ -25,6 +25,7 @@ use crate::core::arc_handle::{ArcDevice, ArcInstance, ArcSurface};
 use crate::core::debug_utils::DebugNamer;
 use crate::core::error::{ErrorCode, ReactorError, ReactorResult};
 use crate::core::memory_budget::{self, GpuMemoryBudget};
+use crate::core::vrs::{self, VrsCapabilities, VrsContext};
 use crate::utils::gpu_detector::GPUDetector;
 
 // =============================================================================
@@ -92,6 +93,12 @@ pub struct VulkanContext {
 
     /// Whether VK_EXT_memory_budget is available on this device.
     pub has_memory_budget: bool,
+
+    /// Vulkan Variable Rate Shading context (`VK_KHR_fragment_shading_rate`).
+    pub fragment_shading_rate: Option<VrsContext>,
+
+    /// Queried VRS support, retained even when the device cannot enable it.
+    pub vrs_capabilities: VrsCapabilities,
 }
 
 // =============================================================================
@@ -320,6 +327,19 @@ impl VulkanContext {
         let has_memory_budget =
             device_extension_supported(arc_instance.get(), pdevice, memory_budget_ext_name);
 
+        let vrs_capabilities =
+            vrs::query_capabilities(arc_instance.entry(), arc_instance.get(), pdevice);
+        let enable_fragment_shading_rate = vrs_capabilities.is_pipeline_ready();
+
+        if enable_fragment_shading_rate {
+            log::info!(
+                "Pixel Inteligente VRS ready ({} supported rates)",
+                vrs_capabilities.rates.len()
+            );
+        } else {
+            log::info!("Pixel Inteligente VRS unavailable; using native 1x1 shading");
+        }
+
         // 7. Create logical device with all queues + extensions
         let (device, graphics_queue, compute_queue, transfer_queue) = Self::create_device(
             &arc_instance,
@@ -327,8 +347,13 @@ impl VulkanContext {
             &queue_info,
             enable_ray_tracing,
             has_memory_budget,
+            enable_fragment_shading_rate,
         )?;
         let arc_device = ArcDevice::new(device);
+
+        let fragment_shading_rate = enable_fragment_shading_rate.then(|| {
+            VrsContext::new(arc_instance.get(), arc_device.get(), vrs_capabilities.clone())
+        });
 
         // 8. Initialize debug namer
         let debug_namer = DebugNamer::new(
@@ -366,6 +391,8 @@ impl VulkanContext {
             transfer_queue_family_index: queue_info.transfer_index,
             debug_namer,
             has_memory_budget,
+            fragment_shading_rate,
+            vrs_capabilities,
         })
     }
 
@@ -500,6 +527,7 @@ impl VulkanContext {
         queue_info: &QueueFamilyInfo,
         enable_ray_tracing: bool,
         has_memory_budget: bool,
+        enable_fragment_shading_rate: bool,
     ) -> ReactorResult<(ash::Device, vk::Queue, Option<vk::Queue>, Option<vk::Queue>)> {
         // Device extensions
         let mut device_extension_names: Vec<*const i8> = vec![
@@ -529,6 +557,10 @@ impl VulkanContext {
             device_extension_names.push(CStr::from_bytes_with_nul(b"VK_KHR_buffer_device_address\0")
                 .unwrap()
                 .as_ptr());
+        }
+
+        if enable_fragment_shading_rate {
+            device_extension_names.push(ash::khr::fragment_shading_rate::NAME.as_ptr());
         }
 
         // ── Build queue create infos for all discovered families ──
@@ -563,6 +595,9 @@ impl VulkanContext {
         // Features
         let mut dynamic_rendering_features =
             vk::PhysicalDeviceDynamicRenderingFeatures::default().dynamic_rendering(true);
+        let mut fragment_shading_rate_features =
+            vk::PhysicalDeviceFragmentShadingRateFeaturesKHR::default()
+                .pipeline_fragment_shading_rate(true);
 
         let mut device_create_info = vk::DeviceCreateInfo::default()
             .queue_create_infos(&queue_create_infos)
@@ -583,6 +618,11 @@ impl VulkanContext {
                 .push_next(&mut buffer_device_address_features)
                 .push_next(&mut ray_tracing_pipeline_features)
                 .push_next(&mut acceleration_structure_features);
+        }
+
+        if enable_fragment_shading_rate {
+            device_create_info =
+                device_create_info.push_next(&mut fragment_shading_rate_features);
         }
 
         let device = unsafe {
@@ -705,6 +745,21 @@ impl VulkanContext {
             self.physical_device,
             self.has_memory_budget,
         )
+    }
+
+    // ─── Pixel Inteligente / VRS API ────────────────────────────────────
+
+    /// Returns `true` when `VK_KHR_fragment_shading_rate` is enabled in
+    /// pipeline mode and REACTOR can issue VRS commands.
+    #[inline]
+    pub fn supports_fragment_shading_rate(&self) -> bool {
+        self.fragment_shading_rate.is_some()
+    }
+
+    /// Returns the negotiated VRS capabilities for diagnostics and tooling.
+    #[inline]
+    pub fn vrs_capabilities(&self) -> &VrsCapabilities {
+        &self.vrs_capabilities
     }
 
     // ─── Async Queue API ────────────────────────────────────────────────

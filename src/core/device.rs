@@ -10,6 +10,7 @@ pub struct DeviceInfo {
     pub vram_size: u64,
     pub supports_ray_tracing: bool,
     pub supports_mesh_shaders: bool,
+    pub supports_vrs: bool,
     pub max_compute_work_group_count: [u32; 3],
     pub max_compute_work_group_size: [u32; 3],
 }
@@ -46,6 +47,7 @@ impl DeviceInfo {
             vram_size,
             supports_ray_tracing: false, // Will be checked separately
             supports_mesh_shaders: false,
+            supports_vrs: false,
             max_compute_work_group_count: props.limits.max_compute_work_group_count,
             max_compute_work_group_size: props.limits.max_compute_work_group_size,
         }

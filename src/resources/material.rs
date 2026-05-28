@@ -30,6 +30,7 @@ impl Material {
     ) -> ReactorResult<Self> {
         let config = PipelineConfig {
             samples: msaa_samples,
+            fragment_shading_rate: ctx.supports_fragment_shading_rate(),
             ..PipelineConfig::default()
         };
         Self::with_config(
@@ -182,6 +183,7 @@ impl Material {
         // Create pipeline with descriptor layout
         let config = PipelineConfig {
             samples: msaa_samples,
+            fragment_shading_rate: ctx.supports_fragment_shading_rate(),
             ..PipelineConfig::default()
         };
 
@@ -301,6 +303,11 @@ impl MaterialBuilder {
 
     pub fn msaa(mut self, samples: vk::SampleCountFlags) -> Self {
         self.config.samples = samples;
+        self
+    }
+
+    pub fn fragment_shading_rate(mut self, enabled: bool) -> Self {
+        self.config.fragment_shading_rate = enabled;
         self
     }
 
