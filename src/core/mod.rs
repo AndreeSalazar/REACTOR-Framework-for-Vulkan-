@@ -50,17 +50,17 @@ pub use context::VulkanContext;
 pub use debug_utils::DebugNamer;
 pub use device::DeviceInfo;
 pub use error::{ErrorCode, ReactorError, ReactorResult};
-pub use memory_budget::{GpuMemoryBudget, HeapBudget};
-pub use vrs::{
-    PixelIntelligent, PixelIntelligentProfile, VrsCapabilities, VrsContext, VrsRate,
-    VrsSupportedRate,
-};
 pub use frame_graph::{
     Barrier, FrameGraph, FrameGraphStats, PassDesc, PassId, ResourceFormat, ResourceId,
     ResourceType,
 };
 pub use importance_map::{
     ImportanceMap, ImportanceMapConfig, ImportanceMapStats, ImportanceTileData, ImportanceType,
+};
+pub use memory_budget::{GpuMemoryBudget, HeapBudget};
+pub use vrs::{
+    PixelIntelligent, PixelIntelligentProfile, VrsCapabilities, VrsContext, VrsRate,
+    VrsSupportedRate,
 };
 
 // Profiler

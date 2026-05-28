@@ -305,8 +305,7 @@ impl VulkanContext {
         );
 
         // 5. Discover async queue families
-        let queue_info =
-            discover_queue_families(arc_instance.get(), pdevice, queue_family_index);
+        let queue_info = discover_queue_families(arc_instance.get(), pdevice, queue_family_index);
 
         if queue_info.compute_index.is_some() {
             log::info!(
@@ -322,8 +321,7 @@ impl VulkanContext {
         }
 
         // 6. Check for VK_EXT_memory_budget support
-        let memory_budget_ext_name =
-            CStr::from_bytes_with_nul(b"VK_EXT_memory_budget\0").unwrap();
+        let memory_budget_ext_name = CStr::from_bytes_with_nul(b"VK_EXT_memory_budget\0").unwrap();
         let has_memory_budget =
             device_extension_supported(arc_instance.get(), pdevice, memory_budget_ext_name);
 
@@ -352,7 +350,11 @@ impl VulkanContext {
         let arc_device = ArcDevice::new(device);
 
         let fragment_shading_rate = enable_fragment_shading_rate.then(|| {
-            VrsContext::new(arc_instance.get(), arc_device.get(), vrs_capabilities.clone())
+            VrsContext::new(
+                arc_instance.get(),
+                arc_device.get(),
+                vrs_capabilities.clone(),
+            )
         });
 
         // 8. Initialize debug namer
@@ -548,15 +550,21 @@ impl VulkanContext {
             device_extension_names.push(ash::khr::ray_tracing_pipeline::NAME.as_ptr());
             device_extension_names.push(ash::khr::acceleration_structure::NAME.as_ptr());
             device_extension_names.push(ash::khr::deferred_host_operations::NAME.as_ptr());
-            device_extension_names.push(CStr::from_bytes_with_nul(b"VK_KHR_spirv_1_4\0")
-                .unwrap()
-                .as_ptr());
-            device_extension_names.push(CStr::from_bytes_with_nul(b"VK_KHR_shader_float_controls\0")
-                .unwrap()
-                .as_ptr());
-            device_extension_names.push(CStr::from_bytes_with_nul(b"VK_KHR_buffer_device_address\0")
-                .unwrap()
-                .as_ptr());
+            device_extension_names.push(
+                CStr::from_bytes_with_nul(b"VK_KHR_spirv_1_4\0")
+                    .unwrap()
+                    .as_ptr(),
+            );
+            device_extension_names.push(
+                CStr::from_bytes_with_nul(b"VK_KHR_shader_float_controls\0")
+                    .unwrap()
+                    .as_ptr(),
+            );
+            device_extension_names.push(
+                CStr::from_bytes_with_nul(b"VK_KHR_buffer_device_address\0")
+                    .unwrap()
+                    .as_ptr(),
+            );
         }
 
         if enable_fragment_shading_rate {
@@ -565,11 +573,9 @@ impl VulkanContext {
 
         // ── Build queue create infos for all discovered families ──
         let queue_priorities = [1.0f32];
-        let mut queue_create_infos = vec![
-            vk::DeviceQueueCreateInfo::default()
-                .queue_family_index(queue_info.graphics_index)
-                .queue_priorities(&queue_priorities),
-        ];
+        let mut queue_create_infos = vec![vk::DeviceQueueCreateInfo::default()
+            .queue_family_index(queue_info.graphics_index)
+            .queue_priorities(&queue_priorities)];
 
         // Add compute queue if on a different family
         if let Some(compute_idx) = queue_info.compute_index {
@@ -621,8 +627,7 @@ impl VulkanContext {
         }
 
         if enable_fragment_shading_rate {
-            device_create_info =
-                device_create_info.push_next(&mut fragment_shading_rate_features);
+            device_create_info = device_create_info.push_next(&mut fragment_shading_rate_features);
         }
 
         let device = unsafe {
@@ -639,8 +644,7 @@ impl VulkanContext {
         };
 
         // Retrieve queues
-        let graphics_queue =
-            unsafe { device.get_device_queue(queue_info.graphics_index, 0) };
+        let graphics_queue = unsafe { device.get_device_queue(queue_info.graphics_index, 0) };
 
         let compute_queue = queue_info
             .compute_index

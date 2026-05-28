@@ -148,7 +148,8 @@ impl Reactor {
                 })?;
 
             // Determine if we should render to offscreen target for post-processing
-            let use_post_process = self.post_process.enabled && !self.post_process.offscreen_images.is_empty();
+            let use_post_process =
+                self.post_process.enabled && !self.post_process.offscreen_images.is_empty();
 
             let swapchain_view = self.swapchain.image_views[image_index as usize];
             let swapchain_image = self.swapchain.images[image_index as usize];
@@ -308,24 +309,32 @@ impl Reactor {
                 }
 
                 // ── Frustum Culling ──
-                let center = glam::Vec3::new(object.transform.w_axis.x, object.transform.w_axis.y, object.transform.w_axis.z);
+                let center = glam::Vec3::new(
+                    object.transform.w_axis.x,
+                    object.transform.w_axis.y,
+                    object.transform.w_axis.z,
+                );
                 let name = object.name.as_deref().unwrap_or("");
-                
+
                 // Conservatively estimate bounding radius based on object type/name
-                let radius = if name.contains("Floor") || name.contains("Wall") || name.contains("Techo") {
-                    12.0
-                } else if name.contains("Pillar") {
-                    4.0
-                } else if name.contains("zombie") || name.contains("Zombie") {
-                    2.2
-                } else if name.contains("Shadow") || name.contains("shadow") {
-                    1.8
-                } else if name.contains("Crosshair") || name.contains("GoScreen") || name.contains("VicScreen") {
-                    // Interface/Overlays must always render if active
-                    100.0
-                } else {
-                    1.5 // Tracers, impacts, muzzle flash, etc.
-                };
+                let radius =
+                    if name.contains("Floor") || name.contains("Wall") || name.contains("Techo") {
+                        12.0
+                    } else if name.contains("Pillar") {
+                        4.0
+                    } else if name.contains("zombie") || name.contains("Zombie") {
+                        2.2
+                    } else if name.contains("Shadow") || name.contains("shadow") {
+                        1.8
+                    } else if name.contains("Crosshair")
+                        || name.contains("GoScreen")
+                        || name.contains("VicScreen")
+                    {
+                        // Interface/Overlays must always render if active
+                        100.0
+                    } else {
+                        1.5 // Tracers, impacts, muzzle flash, etc.
+                    };
 
                 let sphere = crate::systems::physics::Sphere::new(center, radius);
                 if !frustum.intersects_sphere(&sphere) {
@@ -334,7 +343,10 @@ impl Reactor {
 
                 // ── Bind Pipeline & Descriptor Sets (State Caching Optimization) ──
                 let pipeline_handle = object.material.pipeline.pipeline;
-                let descriptor_set_handle = object.material.descriptor_set.unwrap_or(vk::DescriptorSet::null());
+                let descriptor_set_handle = object
+                    .material
+                    .descriptor_set
+                    .unwrap_or(vk::DescriptorSet::null());
 
                 if pipeline_handle != active_pipeline {
                     self.context.device.cmd_bind_pipeline(
@@ -346,7 +358,9 @@ impl Reactor {
                     active_descriptor_set = vk::DescriptorSet::null(); // Reset active descriptor set on pipeline change
                 }
 
-                if descriptor_set_handle != active_descriptor_set && !descriptor_set_handle.is_null() {
+                if descriptor_set_handle != active_descriptor_set
+                    && !descriptor_set_handle.is_null()
+                {
                     self.context.device.cmd_bind_descriptor_sets(
                         command_buffer,
                         vk::PipelineBindPoint::GRAPHICS,
@@ -369,7 +383,12 @@ impl Reactor {
                 let push = PushConstants {
                     mvp,
                     model: object.transform,
-                    camera_pos: glam::Vec4::new(self.camera_pos.x, self.camera_pos.y, self.camera_pos.z, 1.0),
+                    camera_pos: glam::Vec4::new(
+                        self.camera_pos.x,
+                        self.camera_pos.y,
+                        self.camera_pos.z,
+                        1.0,
+                    ),
                 };
                 let constants_array = std::slice::from_raw_parts(
                     &push as *const PushConstants as *const u8,
@@ -458,7 +477,9 @@ impl Reactor {
                     .layer_count(1)
                     .color_attachments(std::slice::from_ref(&post_color_attachment));
 
-                self.context.device.cmd_begin_rendering(command_buffer, &post_rendering_info);
+                self.context
+                    .device
+                    .cmd_begin_rendering(command_buffer, &post_rendering_info);
 
                 // Bind post-processing pipeline
                 self.context.device.cmd_bind_pipeline(
@@ -500,8 +521,12 @@ impl Reactor {
                     offset: vk::Offset2D { x: 0, y: 0 },
                     extent: self.swapchain.extent,
                 };
-                self.context.device.cmd_set_viewport(command_buffer, 0, &[viewport]);
-                self.context.device.cmd_set_scissor(command_buffer, 0, &[scissor]);
+                self.context
+                    .device
+                    .cmd_set_viewport(command_buffer, 0, &[viewport]);
+                self.context
+                    .device
+                    .cmd_set_scissor(command_buffer, 0, &[scissor]);
 
                 // Draw fullscreen triangle
                 self.context.device.cmd_draw(command_buffer, 3, 1, 0, 0);

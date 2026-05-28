@@ -23,7 +23,12 @@ use std::sync::{Arc, Mutex};
 use winit::window::Window;
 
 impl Reactor {
-    pub fn init(window: &Window, requested_msaa: u32, enable_ray_tracing: bool, vsync: bool) -> ReactorResult<Self> {
+    pub fn init(
+        window: &Window,
+        requested_msaa: u32,
+        enable_ray_tracing: bool,
+        vsync: bool,
+    ) -> ReactorResult<Self> {
         let context = VulkanContext::new(window, enable_ray_tracing)?;
 
         // ── GPU allocator ──
@@ -78,9 +83,15 @@ impl Reactor {
                     msaa_samples,
                 )?;
                 // Label MSAA resources
-                context.debug_namer().name_image(img, "Image: MSAA Color Resolve");
-                context.debug_namer().name_image_view(view, "ImageView: MSAA Color");
-                context.debug_namer().name_device_memory(mem, "Memory: MSAA Color");
+                context
+                    .debug_namer()
+                    .name_image(img, "Image: MSAA Color Resolve");
+                context
+                    .debug_namer()
+                    .name_image_view(view, "ImageView: MSAA Color");
+                context
+                    .debug_namer()
+                    .name_device_memory(mem, "Memory: MSAA Color");
                 (Some(img), Some(view), Some(mem))
             } else {
                 (None, None, None)
@@ -98,9 +109,15 @@ impl Reactor {
         println!("🔹 Depth buffer created: {:?}", depth_format);
 
         // Label depth resources
-        context.debug_namer().name_image(depth_image, "Image: Depth Buffer");
-        context.debug_namer().name_image_view(depth_image_view, "ImageView: Depth Buffer");
-        context.debug_namer().name_device_memory(depth_memory, "Memory: Depth Buffer");
+        context
+            .debug_namer()
+            .name_image(depth_image, "Image: Depth Buffer");
+        context
+            .debug_namer()
+            .name_image_view(depth_image_view, "ImageView: Depth Buffer");
+        context
+            .debug_namer()
+            .name_device_memory(depth_memory, "Memory: Depth Buffer");
 
         // ── Command Pool ──
         let pool_create_info = vk::CommandPoolCreateInfo::default()
@@ -118,7 +135,9 @@ impl Reactor {
                     )
                 })?
         };
-        context.debug_namer().name_command_pool(command_pool, "CommandPool: Graphics (Main)");
+        context
+            .debug_namer()
+            .name_command_pool(command_pool, "CommandPool: Graphics (Main)");
 
         // ── Command Buffers (uno por frame en vuelo) ──
         let alloc_info = vk::CommandBufferAllocateInfo::default()
@@ -185,15 +204,16 @@ impl Reactor {
                     .name_semaphore(render_sem, &format!("Semaphore: RenderFinished[{}]", i));
                 render_finished_semaphores.push(render_sem);
 
-                let fence = context.device.create_fence(&fence_info, None).map_err(
-                    |e| {
+                let fence = context
+                    .device
+                    .create_fence(&fence_info, None)
+                    .map_err(|e| {
                         ReactorError::with_source(
                             ErrorCode::VulkanSynchronization,
                             "Failed to create fence",
                             e,
                         )
-                    },
-                )?;
+                    })?;
                 context
                     .debug_namer()
                     .name_fence(fence, &format!("Fence: InFlight[{}]", i));
@@ -223,7 +243,11 @@ impl Reactor {
             "💾 VRAM Budget: {}/{} MB ({})",
             budget.total_vram_usage_mb(),
             budget.total_vram_budget_mb(),
-            if budget.has_dynamic_budget { "dynamic" } else { "static" }
+            if budget.has_dynamic_budget {
+                "dynamic"
+            } else {
+                "static"
+            }
         );
 
         // ── Log Async Queue status ──

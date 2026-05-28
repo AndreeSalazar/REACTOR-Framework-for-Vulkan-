@@ -21,7 +21,7 @@
 //! El usuario sigue viendo **un solo tipo `Reactor`** (monolito en la API),
 //! pero internamente cada responsabilidad vive en su archivo (modular).
 
-use crate::core::{PixelIntelligent, PixelIntelligentProfile, VulkanContext, VrsRate};
+use crate::core::{PixelIntelligent, PixelIntelligentProfile, VrsRate, VulkanContext};
 use crate::graphics::swapchain::Swapchain;
 use crate::platform::input::Input;
 use crate::raytracing::RayTracingContext;

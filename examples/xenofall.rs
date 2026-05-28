@@ -35,9 +35,9 @@
 // =============================================================================
 
 use reactor_vulkan::prelude::*;
+use reactor_vulkan::graphics::post_process::PostProcessEffect;
 use winit::event::MouseButton;
 use winit::keyboard::KeyCode;
-use reactor_vulkan::graphics::post_process::PostProcessEffect;
 
 // =============================================================================
 // CONSTANTES DE GAMEPLAY
@@ -511,7 +511,7 @@ struct Xenofall {
     crosshair_index: Option<usize>,
     game_over_index: Option<usize>,
     victory_index: Option<usize>,
-    config_pause_printed: bool,
+    pause_config: PauseConfig,
 }
 
 impl Xenofall {
@@ -561,7 +561,7 @@ impl Xenofall {
             crosshair_index: None,
             game_over_index: None,
             victory_index: None,
-            config_pause_printed: false,
+            pause_config: PauseConfig::new().with_title("XENOFALL - REACTOR TOTAL CONFIG"),
         }
     }
 
@@ -1254,7 +1254,7 @@ impl Xenofall {
         if ctx.input().is_key_just_pressed(KeyCode::KeyP) {
             self.state = match self.state {
                 GameState::Playing => {
-                    self.config_pause_printed = false;
+                    self.pause_config.mark_dirty();
                     GameState::Paused
                 }
                 GameState::Paused => {
@@ -1266,7 +1266,7 @@ impl Xenofall {
         }
 
         // VSync dynamic toggle (unlocked FPS showcase)
-        if ctx.input().is_key_just_pressed(KeyCode::KeyV) {
+        if self.state != GameState::Paused && ctx.input().is_key_just_pressed(KeyCode::KeyV) {
             ctx.reactor.vsync = !ctx.reactor.vsync;
             if let Err(e) = ctx.reactor.recreate_swapchain() {
                 Log::error(&format!("Failed to toggle VSync: {}", e));
@@ -1279,7 +1279,10 @@ impl Xenofall {
         }
 
         // Fullscreen dynamic toggle (F11 or F)
-        if ctx.input().is_key_just_pressed(KeyCode::F11) || ctx.input().is_key_just_pressed(KeyCode::KeyF) {
+        if self.state != GameState::Paused
+            && (ctx.input().is_key_just_pressed(KeyCode::F11)
+                || ctx.input().is_key_just_pressed(KeyCode::KeyF))
+        {
             let is_fullscreen = ctx.window.fullscreen().is_some();
             if is_fullscreen {
                 ctx.window.set_fullscreen(None);
@@ -1314,157 +1317,14 @@ impl Xenofall {
             return;
         }
 
-        // If paused, handle config hotkeys
         if self.state == GameState::Paused {
-            let k4 = ctx.input().is_key_just_pressed(KeyCode::Digit4);
-            let k5 = ctx.input().is_key_just_pressed(KeyCode::Digit5);
-            let k6 = ctx.input().is_key_just_pressed(KeyCode::Digit6);
-            let k7 = ctx.input().is_key_just_pressed(KeyCode::Digit7);
-            let k8 = ctx.input().is_key_just_pressed(KeyCode::Digit8);
-            let k9 = ctx.input().is_key_just_pressed(KeyCode::Digit9);
-            let k0 = ctx.input().is_key_just_pressed(KeyCode::Digit0);
-            let kg = ctx.input().is_key_just_pressed(KeyCode::KeyG);
-            let kb = ctx.input().is_key_just_pressed(KeyCode::KeyB);
-            let kn = ctx.input().is_key_just_pressed(KeyCode::KeyN);
-            let ki = ctx.input().is_key_just_pressed(KeyCode::KeyI);
-            let kz = ctx.input().is_key_just_pressed(KeyCode::KeyZ);
-            let kx = ctx.input().is_key_just_pressed(KeyCode::KeyX);
-            let kc = ctx.input().is_key_just_pressed(KeyCode::KeyC);
-            let kt = ctx.input().is_key_just_pressed(KeyCode::KeyT);
-            let ky = ctx.input().is_key_just_pressed(KeyCode::KeyY);
-            let ku = ctx.input().is_key_just_pressed(KeyCode::KeyU);
-
-            if k4 || k5 || k6 || k7 || k8 || k9 || k0 || kg || kb || kn || ki || kz || kx || kc || kt || ky || ku {
-                let settings = &mut ctx.reactor.post_process.settings;
-                if k4 {
-                    if settings.is_effect_enabled(PostProcessEffect::Vignette) {
-                        settings.disable_effect(PostProcessEffect::Vignette);
-                    } else {
-                        settings.enable_effect(PostProcessEffect::Vignette);
-                    }
-                }
-                if k5 {
-                    if settings.is_effect_enabled(PostProcessEffect::Bloom) {
-                        settings.disable_effect(PostProcessEffect::Bloom);
-                    } else {
-                        settings.enable_effect(PostProcessEffect::Bloom);
-                    }
-                }
-                if k6 {
-                    if settings.is_effect_enabled(PostProcessEffect::FilmGrain) {
-                        settings.disable_effect(PostProcessEffect::FilmGrain);
-                    } else {
-                        settings.enable_effect(PostProcessEffect::FilmGrain);
-                    }
-                }
-                if k7 {
-                    if settings.is_effect_enabled(PostProcessEffect::ChromaticAberration) {
-                        settings.disable_effect(PostProcessEffect::ChromaticAberration);
-                    } else {
-                        settings.enable_effect(PostProcessEffect::ChromaticAberration);
-                    }
-                }
-                if k8 {
-                    if settings.is_effect_enabled(PostProcessEffect::FXAA) {
-                        settings.disable_effect(PostProcessEffect::FXAA);
-                    } else {
-                        settings.enable_effect(PostProcessEffect::FXAA);
-                    }
-                }
-                if k9 {
-                    if settings.is_effect_enabled(PostProcessEffect::Sharpen) {
-                        settings.disable_effect(PostProcessEffect::Sharpen);
-                    } else {
-                        settings.enable_effect(PostProcessEffect::Sharpen);
-                    }
-                }
-                if k0 {
-                    if settings.is_effect_enabled(PostProcessEffect::ToneMapping) {
-                        settings.disable_effect(PostProcessEffect::ToneMapping);
-                    } else {
-                        settings.enable_effect(PostProcessEffect::ToneMapping);
-                    }
-                }
-                if kz {
-                    if settings.is_effect_enabled(PostProcessEffect::SSGI) {
-                        settings.disable_effect(PostProcessEffect::SSGI);
-                    } else {
-                        settings.enable_effect(PostProcessEffect::SSGI);
-                    }
-                }
-                if kx {
-                    if settings.is_effect_enabled(PostProcessEffect::VolumetricFog) {
-                        settings.disable_effect(PostProcessEffect::VolumetricFog);
-                    } else {
-                        settings.enable_effect(PostProcessEffect::VolumetricFog);
-                    }
-                }
-                if kc {
-                    if settings.is_effect_enabled(PostProcessEffect::LutColorGrading) {
-                        settings.disable_effect(PostProcessEffect::LutColorGrading);
-                    } else {
-                        settings.enable_effect(PostProcessEffect::LutColorGrading);
-                    }
-                }
-                if kt {
-                    if settings.is_effect_enabled(PostProcessEffect::SSR) {
-                        settings.disable_effect(PostProcessEffect::SSR);
-                    } else {
-                        settings.enable_effect(PostProcessEffect::SSR);
-                    }
-                }
-                if ky {
-                    if settings.is_effect_enabled(PostProcessEffect::PathTracedLighting) {
-                        settings.disable_effect(PostProcessEffect::PathTracedLighting);
-                    } else {
-                        settings.enable_effect(PostProcessEffect::PathTracedLighting);
-                    }
-                }
-                if ku {
-                    if settings.is_effect_enabled(PostProcessEffect::AnamorphicFlares) {
-                        settings.disable_effect(PostProcessEffect::AnamorphicFlares);
-                    } else {
-                        settings.enable_effect(PostProcessEffect::AnamorphicFlares);
-                    }
-                }
-                if kg {
-                    settings.exposure = match settings.exposure {
-                        exp if (exp - 0.8).abs() < 0.01 => 1.0,
-                        exp if (exp - 1.0).abs() < 0.01 => 1.15,
-                        exp if (exp - 1.15).abs() < 0.01 => 1.5,
-                        exp if (exp - 1.5).abs() < 0.01 => 2.0,
-                        _ => 0.8,
-                    };
-                }
-                if kb {
-                    settings.bloom_intensity = match settings.bloom_intensity {
-                        val if (val - 0.1).abs() < 0.01 => 0.2,
-                        val if (val - 0.2).abs() < 0.01 => 0.35,
-                        val if (val - 0.35).abs() < 0.01 => 0.5,
-                        val if (val - 0.5).abs() < 0.01 => 0.8,
-                        _ => 0.1,
-                    };
-                }
-                if kn {
-                    settings.grain_intensity = match settings.grain_intensity {
-                        val if val < 0.001 => 0.003,
-                        val if (val - 0.003).abs() < 0.001 => 0.006,
-                        val if (val - 0.006).abs() < 0.001 => 0.012,
-                        _ => 0.0,
-                    };
-                }
-                if ki {
-                    let next = match ctx.reactor.pixel_intelligent.profile {
-                        PixelIntelligentProfile::Off => PixelIntelligentProfile::Quality,
-                        PixelIntelligentProfile::Quality => PixelIntelligentProfile::Balanced,
-                        PixelIntelligentProfile::Balanced => PixelIntelligentProfile::Performance,
-                        PixelIntelligentProfile::Performance => PixelIntelligentProfile::UltraPerformance,
-                        PixelIntelligentProfile::UltraPerformance => PixelIntelligentProfile::Off,
-                    };
-                    ctx.reactor.set_pixel_intelligent_profile(next);
-                    Log::engine(&format!("Pixel Inteligente profile: {:?}", next));
-                }
-                self.config_pause_printed = false;
+            let pause_result = self.pause_config.update(ctx);
+            if pause_result.requested_resume {
+                println!("\n  \x1b[38;2;180;0;0m▓▓▓ RESUMING — BLOOD PROTOCOL DEACTIVATED ▓▓▓\x1b[0m\n");
+                self.state = GameState::Playing;
+            }
+            if pause_result.requested_quit {
+                std::process::exit(0);
             }
         }
 
@@ -1948,6 +1808,7 @@ impl Xenofall {
         }
     }
 
+    #[allow(dead_code)]
     fn print_config_pause(&self, ctx: &ReactorContext) {
         let settings = &ctx.reactor.post_process.settings;
         let is_vignette = settings.is_effect_enabled(PostProcessEffect::Vignette);
@@ -2189,11 +2050,6 @@ impl ReactorApp for Xenofall {
     }
 
     fn update(&mut self, ctx: &mut ReactorContext) {
-        if self.state == GameState::Paused && !self.config_pause_printed {
-            self.print_config_pause(ctx);
-            self.config_pause_printed = true;
-        }
-
         let dt = ctx.delta();
         self.t += dt;
 

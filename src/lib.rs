@@ -55,6 +55,9 @@ pub use app::run;
 // Re-export commonly used types at the crate root
 pub use app::app::{quick, quick_with, ReactorApp};
 pub use app::config::{ReactorConfig, RendererMode};
+pub use app::pause_config::{
+    PauseConfig, PauseConfigPage, PauseConfigResult, PauseConfiguracion, PauseConfiguration,
+};
 pub use core::context::VulkanContext;
 pub use core::debug_utils::DebugNamer;
 pub use core::error::{ErrorCode, ReactorError, ReactorResult};
@@ -103,9 +106,13 @@ pub mod prelude {
         CPUDetector,
         // Scene / Systems
         Camera,
+        // Core
+        DebugNamer,
         ErrorCode,
         FontAsset,
 
+        GpuMemoryBudget,
+        HeapBudget,
         Light,
         LightType,
         LightingSystem,
@@ -114,7 +121,14 @@ pub mod prelude {
         Material,
         // Resources
         Mesh,
+        PauseConfig,
+        PauseConfigPage,
+        PauseConfigResult,
+        PauseConfiguracion,
+        PauseConfiguration,
         PhysicsWorld,
+        PixelIntelligent,
+        PixelIntelligentProfile,
         Quat,
         Ray,
         Reactor,
@@ -122,12 +136,6 @@ pub mod prelude {
         ReactorApp,
         // App
         ReactorConfig,
-        // Core
-        DebugNamer,
-        GpuMemoryBudget,
-        HeapBudget,
-        PixelIntelligent,
-        PixelIntelligentProfile,
         ReactorError,
         ReactorResult,
         RendererMode,
@@ -137,13 +145,13 @@ pub mod prelude {
         Scene,
         Sphere,
         Transform,
-        VrsCapabilities,
-        VrsRate,
-        VrsSupportedRate,
         // Math
         Vec2,
         Vec3,
         Vec4,
+        VrsCapabilities,
+        VrsRate,
+        VrsSupportedRate,
         VulkanContext,
         AABB,
     };

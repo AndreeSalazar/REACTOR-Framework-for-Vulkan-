@@ -1,9 +1,9 @@
-use bytemuck::{Pod, Zeroable};
 use crate::core::VulkanContext;
 use crate::graphics::Image;
 use ash::vk;
-use std::sync::{Arc, Mutex};
+use bytemuck::{Pod, Zeroable};
 use gpu_allocator::vulkan::Allocator;
+use std::sync::{Arc, Mutex};
 
 /// Post-processing effect types
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -363,7 +363,8 @@ impl PostProcessPipeline {
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
             .descriptor_count(1)
             .stage_flags(vk::ShaderStageFlags::FRAGMENT);
-        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(std::slice::from_ref(&binding));
+        let layout_info =
+            vk::DescriptorSetLayoutCreateInfo::default().bindings(std::slice::from_ref(&binding));
         let descriptor_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
 
         // 2. Create Pipeline Layout
@@ -375,14 +376,31 @@ impl PostProcessPipeline {
         let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default()
             .set_layouts(std::slice::from_ref(&descriptor_layout))
             .push_constant_ranges(std::slice::from_ref(&push_range));
-        let pipeline_layout = unsafe { device.create_pipeline_layout(&pipeline_layout_info, None)? };
+        let pipeline_layout =
+            unsafe { device.create_pipeline_layout(&pipeline_layout_info, None)? };
 
         // 3. Create Pipeline
-        let vert_spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!("../../shaders/post_process_vert.spv"))).unwrap();
-        let frag_spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!("../../shaders/post_process_frag.spv"))).unwrap();
+        let vert_spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
+            "../../shaders/post_process_vert.spv"
+        )))
+        .unwrap();
+        let frag_spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
+            "../../shaders/post_process_frag.spv"
+        )))
+        .unwrap();
 
-        let vert_module = unsafe { device.create_shader_module(&vk::ShaderModuleCreateInfo::default().code(&vert_spv), None)? };
-        let frag_module = unsafe { device.create_shader_module(&vk::ShaderModuleCreateInfo::default().code(&frag_spv), None)? };
+        let vert_module = unsafe {
+            device.create_shader_module(
+                &vk::ShaderModuleCreateInfo::default().code(&vert_spv),
+                None,
+            )?
+        };
+        let frag_module = unsafe {
+            device.create_shader_module(
+                &vk::ShaderModuleCreateInfo::default().code(&frag_spv),
+                None,
+            )?
+        };
 
         let entry_point = std::ffi::CStr::from_bytes_with_nul(b"main\0").unwrap();
         let shader_stages = [
@@ -436,8 +454,8 @@ impl PostProcessPipeline {
             .attachments(std::slice::from_ref(&blend_attachment));
 
         let dynamic_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
-        let dynamic_state_info = vk::PipelineDynamicStateCreateInfo::default()
-            .dynamic_states(&dynamic_states);
+        let dynamic_state_info =
+            vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
 
         let mut rendering_info = vk::PipelineRenderingCreateInfo::default()
             .color_attachment_formats(std::slice::from_ref(&swapchain_format));
@@ -456,7 +474,8 @@ impl PostProcessPipeline {
             .push_next(&mut rendering_info);
 
         let pipelines = unsafe {
-            device.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
+            device
+                .create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
                 .map_err(|(_, e)| e)?
         };
         let pipeline = pipelines[0];
@@ -489,7 +508,14 @@ impl PostProcessPipeline {
         self.descriptor_sets = descriptor_sets;
 
         // 6. Create Offscreen Color Images
-        self.recreate_offscreen_images(ctx, allocator, width, height, image_count, swapchain_format)?;
+        self.recreate_offscreen_images(
+            ctx,
+            allocator,
+            width,
+            height,
+            image_count,
+            swapchain_format,
+        )?;
 
         Ok(())
     }
@@ -504,7 +530,7 @@ impl PostProcessPipeline {
         format: vk::Format,
     ) -> crate::core::error::ReactorResult<()> {
         let device = ctx.ash_device();
-        
+
         // Clean old resources
         self.offscreen_images.clear();
         if let Some(sampler) = self.sampler.take() {
