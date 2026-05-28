@@ -29,6 +29,14 @@ layout(push_constant) uniform PostProcessSettings {
     // Sharpen
     float sharpen_intensity;
 
+    // Screen-space lighting
+    float ssgi_intensity;
+    float ssgi_radius;
+    float fog_density;
+    float fog_scatter;
+    float lut_strength;
+    float ssr_strength;
+
     // General
     float time;
     uint effect_mask;
@@ -46,6 +54,10 @@ layout(push_constant) uniform PostProcessSettings {
 #define EFFECT_BLOOM              (1u << 9)
 #define EFFECT_TONEMAP            (1u << 10)
 #define EFFECT_FXAA               (1u << 11)
+#define EFFECT_SSGI               (1u << 14)
+#define EFFECT_VOLUMETRIC_FOG     (1u << 15)
+#define EFFECT_LUT_COLOR_GRADING  (1u << 16)
+#define EFFECT_SSR                (1u << 17)
 
 float luminance(vec3 color) {
     return dot(color, vec3(0.2126, 0.7152, 0.0722));
@@ -56,6 +68,11 @@ float rand(vec2 co) {
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
+float interleaved_gradient_noise(vec2 pixel, float frame) {
+    pixel += frame * vec2(5.588238, 5.588238);
+    return fract(52.9829189 * fract(0.06711056 * pixel.x + 0.00583715 * pixel.y));
+}
+
 // ACES Filmic Tone Mapping curve
 vec3 aces_tonemap(vec3 color) {
     float a = 2.51;
@@ -64,6 +81,125 @@ vec3 aces_tonemap(vec3 color) {
     float d = 0.59;
     float e = 0.14;
     return clamp((color * (a * color + b)) / (color * (c * color + d) + e), 0.0, 1.0);
+}
+
+vec3 sample_screen(vec2 uv) {
+    return texture(screenTexture, clamp(uv, vec2(0.001), vec2(0.999))).rgb;
+}
+
+vec3 estimate_screen_normal(vec2 uv, vec2 texelSize) {
+    float l = luminance(sample_screen(uv - vec2(texelSize.x, 0.0)));
+    float r = luminance(sample_screen(uv + vec2(texelSize.x, 0.0)));
+    float u = luminance(sample_screen(uv - vec2(0.0, texelSize.y)));
+    float d = luminance(sample_screen(uv + vec2(0.0, texelSize.y)));
+    vec2 g = vec2(r - l, d - u);
+    return normalize(vec3(-g * 2.4, 1.0));
+}
+
+vec3 screen_space_gi(vec2 uv, vec2 texelSize, vec3 baseColor) {
+    vec3 normal = estimate_screen_normal(uv, texelSize);
+    float baseLum = luminance(baseColor);
+    vec3 diffuseBounce = vec3(0.0);
+    vec3 directionalOcclusion = vec3(0.0);
+    float totalWeight = 0.0;
+
+    const int RINGS = 3;
+    const int DIRS = 8;
+    float jitter = interleaved_gradient_noise(gl_FragCoord.xy, settings.time);
+
+    for (int ring = 1; ring <= RINGS; ++ring) {
+        float ringRadius = settings.ssgi_radius * float(ring) / float(RINGS);
+        for (int i = 0; i < DIRS; ++i) {
+            float a = (float(i) + jitter) * 6.2831853 / float(DIRS);
+            vec2 dir = vec2(cos(a), sin(a));
+            vec2 suv = uv + dir * texelSize * ringRadius;
+            vec3 s = sample_screen(suv);
+            float sLum = luminance(s);
+
+            float edge = abs(sLum - baseLum);
+            float edgeWeight = exp(-edge * 5.0);
+            float hemisphere = max(dot(normal, normalize(vec3(dir, 0.55))), 0.0);
+            float distanceWeight = 1.0 / (1.0 + float(ring) * float(ring));
+            float w = edgeWeight * hemisphere * distanceWeight;
+
+            diffuseBounce += s * w;
+            directionalOcclusion += vec3(sLum < baseLum ? w : 0.0);
+            totalWeight += w;
+        }
+    }
+
+    vec3 bounce = diffuseBounce / max(totalWeight, 0.0001);
+    float ao = 1.0 - clamp(dot(directionalOcclusion, vec3(0.333)) / max(totalWeight, 0.0001), 0.0, 0.75);
+    vec3 gi = mix(baseColor * ao, baseColor + bounce * 0.28, settings.ssgi_intensity);
+    return max(gi, 0.0);
+}
+
+vec3 screen_space_reflection(vec2 uv, vec2 texelSize, vec3 color) {
+    vec3 normal = estimate_screen_normal(uv, texelSize);
+    float floorMask = smoothstep(0.42, 0.96, uv.y);
+    float wetMask = smoothstep(0.18, 0.62, luminance(color)) * floorMask;
+
+    vec2 view = normalize(uv - vec2(0.5, 1.15));
+    vec2 refl = reflect(view, normalize(normal.xy + vec2(0.0, 0.35)));
+    refl.y = -abs(refl.y);
+
+    vec3 hit = vec3(0.0);
+    float hitWeight = 0.0;
+    for (int i = 1; i <= 14; ++i) {
+        float t = float(i) / 14.0;
+        vec2 suv = uv + refl * texelSize * mix(6.0, 90.0, t);
+        if (any(lessThan(suv, vec2(0.0))) || any(greaterThan(suv, vec2(1.0)))) {
+            break;
+        }
+
+        vec3 s = sample_screen(suv);
+        float candidate = smoothstep(0.35, 1.2, luminance(s));
+        float fade = (1.0 - t) * smoothstep(1.0, 0.45, abs(suv.y - uv.y));
+        hit += s * candidate * fade;
+        hitWeight += candidate * fade;
+    }
+
+    vec3 reflection = hit / max(hitWeight, 0.0001);
+    reflection *= vec3(0.75, 0.9, 1.08);
+    float strength = wetMask * settings.ssr_strength;
+    return mix(color, color + reflection * 0.55, strength);
+}
+
+vec3 volumetric_fog(vec2 uv, vec3 color) {
+    vec2 p = uv - 0.5;
+    float radialDepth = smoothstep(0.1, 0.92, length(p));
+    float horizon = smoothstep(0.20, 1.0, uv.y);
+    float noise = rand(floor(gl_FragCoord.xy * 0.5) + settings.time * 19.0);
+
+    vec2 lightUvA = vec2(0.18, 0.22);
+    vec2 lightUvB = vec2(0.82, 0.24);
+    float shaftA = pow(max(0.0, 1.0 - length((uv - lightUvA) * vec2(1.0, 1.6))), 4.0);
+    float shaftB = pow(max(0.0, 1.0 - length((uv - lightUvB) * vec2(1.0, 1.6))), 4.0);
+    vec3 shaftColor = vec3(0.55, 0.08, 0.35) * shaftA + vec3(0.03, 0.45, 0.65) * shaftB;
+
+    float density = settings.fog_density * (0.45 + horizon * 0.95 + radialDepth * 0.55);
+    density *= 0.9 + noise * 0.2;
+
+    vec3 fogColor = vec3(0.018, 0.016, 0.032) + shaftColor * settings.fog_scatter;
+    float fogAmount = 1.0 - exp(-density);
+    return mix(color, fogColor + color * 0.12, clamp(fogAmount, 0.0, 0.82));
+}
+
+vec3 lut_color_grade(vec3 color) {
+    float luma = luminance(color);
+    vec3 shadows = vec3(0.78, 0.88, 1.12);
+    vec3 mids = vec3(0.96, 1.02, 1.03);
+    vec3 highs = vec3(1.14, 1.02, 0.88);
+
+    vec3 grade = mix(shadows, mids, smoothstep(0.05, 0.45, luma));
+    grade = mix(grade, highs, smoothstep(0.45, 0.95, luma));
+
+    vec3 graded = color * grade;
+    float gradedLuma = luminance(graded);
+    graded = mix(vec3(gradedLuma), graded, 1.10);
+    graded = (graded - 0.5) * 1.08 + 0.5;
+    graded += vec3(0.012, -0.004, 0.006);
+    return mix(color, max(graded, 0.0), settings.lut_strength);
 }
 
 void main() {
@@ -191,14 +327,34 @@ void main() {
         color *= vignette;
     }
 
-    // 7. Film Grain
+    // 7. Screen-Space Global Illumination / GTAO
+    if ((settings.effect_mask & EFFECT_SSGI) != 0) {
+        color = screen_space_gi(uv, texelSize, color);
+    }
+
+    // 8. Screen-Space Reflection for wet/highlighted surfaces
+    if ((settings.effect_mask & EFFECT_SSR) != 0) {
+        color = screen_space_reflection(uv, texelSize, color);
+    }
+
+    // 9. Volumetric Fog and light shafts
+    if ((settings.effect_mask & EFFECT_VOLUMETRIC_FOG) != 0) {
+        color = volumetric_fog(uv, color);
+    }
+
+    // 10. Film Grain
     if ((settings.effect_mask & EFFECT_GRAIN) != 0) {
         float noise = rand(uv + settings.time * settings.grain_speed);
         color += (noise - 0.5) * settings.grain_intensity;
         color = max(color, 0.0);
     }
 
-    // 8. Grayscale / Sepia Color Grading
+    // 11. LUT-style Color Grading
+    if ((settings.effect_mask & EFFECT_LUT_COLOR_GRADING) != 0) {
+        color = lut_color_grade(color);
+    }
+
+    // 12. Grayscale / Sepia Color Grading
     if ((settings.effect_mask & EFFECT_GRAYSCALE) != 0) {
         float luma = luminance(color);
         color = vec3(luma);
@@ -209,18 +365,18 @@ void main() {
         color = vec3(r, g, b);
     }
 
-    // 9. Invert Color
+    // 13. Invert Color
     if ((settings.effect_mask & EFFECT_INVERT) != 0) {
         color = 1.0 - color;
     }
 
-    // 10. Tone Mapping & Exposure
+    // 14. Tone Mapping & Exposure
     if ((settings.effect_mask & EFFECT_TONEMAP) != 0) {
         color *= settings.exposure;
         color = aces_tonemap(color);
     }
 
-    // 11. Gamma Correction
+    // 15. Gamma Correction
     color = pow(color, vec3(1.0 / settings.gamma));
 
     outColor = vec4(color, 1.0);

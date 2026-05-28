@@ -1325,8 +1325,12 @@ impl Xenofall {
             let kb = ctx.input().is_key_just_pressed(KeyCode::KeyB);
             let kn = ctx.input().is_key_just_pressed(KeyCode::KeyN);
             let ki = ctx.input().is_key_just_pressed(KeyCode::KeyI);
+            let kz = ctx.input().is_key_just_pressed(KeyCode::KeyZ);
+            let kx = ctx.input().is_key_just_pressed(KeyCode::KeyX);
+            let kc = ctx.input().is_key_just_pressed(KeyCode::KeyC);
+            let kt = ctx.input().is_key_just_pressed(KeyCode::KeyT);
 
-            if k4 || k5 || k6 || k7 || k8 || k9 || k0 || kg || kb || kn || ki {
+            if k4 || k5 || k6 || k7 || k8 || k9 || k0 || kg || kb || kn || ki || kz || kx || kc || kt {
                 let settings = &mut ctx.reactor.post_process.settings;
                 if k4 {
                     if settings.is_effect_enabled(PostProcessEffect::Vignette) {
@@ -1375,6 +1379,34 @@ impl Xenofall {
                         settings.disable_effect(PostProcessEffect::ToneMapping);
                     } else {
                         settings.enable_effect(PostProcessEffect::ToneMapping);
+                    }
+                }
+                if kz {
+                    if settings.is_effect_enabled(PostProcessEffect::SSGI) {
+                        settings.disable_effect(PostProcessEffect::SSGI);
+                    } else {
+                        settings.enable_effect(PostProcessEffect::SSGI);
+                    }
+                }
+                if kx {
+                    if settings.is_effect_enabled(PostProcessEffect::VolumetricFog) {
+                        settings.disable_effect(PostProcessEffect::VolumetricFog);
+                    } else {
+                        settings.enable_effect(PostProcessEffect::VolumetricFog);
+                    }
+                }
+                if kc {
+                    if settings.is_effect_enabled(PostProcessEffect::LutColorGrading) {
+                        settings.disable_effect(PostProcessEffect::LutColorGrading);
+                    } else {
+                        settings.enable_effect(PostProcessEffect::LutColorGrading);
+                    }
+                }
+                if kt {
+                    if settings.is_effect_enabled(PostProcessEffect::SSR) {
+                        settings.disable_effect(PostProcessEffect::SSR);
+                    } else {
+                        settings.enable_effect(PostProcessEffect::SSR);
                     }
                 }
                 if kg {
@@ -1907,6 +1939,10 @@ impl Xenofall {
         let is_fxaa = settings.is_effect_enabled(PostProcessEffect::FXAA);
         let is_sharpen = settings.is_effect_enabled(PostProcessEffect::Sharpen);
         let is_tonemap = settings.is_effect_enabled(PostProcessEffect::ToneMapping);
+        let is_ssgi = settings.is_effect_enabled(PostProcessEffect::SSGI);
+        let is_fog = settings.is_effect_enabled(PostProcessEffect::VolumetricFog);
+        let is_lut = settings.is_effect_enabled(PostProcessEffect::LutColorGrading);
+        let is_ssr = settings.is_effect_enabled(PostProcessEffect::SSR);
 
         let exposure = settings.exposure;
         let bloom_intensity = settings.bloom_intensity;
@@ -1982,11 +2018,17 @@ impl Xenofall {
         let t_fxaa = print_toggle("8", "FXAA", is_fxaa);
         let t_sharpen = print_toggle("9", "Sharpen", is_sharpen);
         let t_tonemap = print_toggle("0", "Tone Mapping", is_tonemap);
+        let t_ssgi = print_toggle("Z", "SSGI", is_ssgi);
+        let t_fog = print_toggle("X", "Vol. Fog", is_fog);
+        let t_lut = print_toggle("C", "LUT Grade", is_lut);
+        let t_ssr = print_toggle("T", "SSR", is_ssr);
 
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m", t_vignette, t_bloom);
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m", t_grain, t_chromatic);
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m", t_fxaa, t_sharpen);
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}                                          \x1b[38;2;180;0;0m║\x1b[0m", t_tonemap);
+        println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m", t_ssgi, t_fog);
+        println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m", t_lut, t_ssr);
         println!("  \x1b[38;2;180;0;0m║                                                                          ║\x1b[0m");
         println!("  \x1b[38;2;180;0;0m║\x1b[0m   \x1b[1m■ VALUE ADJUSTMENTS\x1b[0m                                                    \x1b[38;2;180;0;0m║\x1b[0m");
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    [G] Exposure: \x1b[93m{:<4}\x1b[0m   [B] Bloom Int: \x1b[92m{:<4}\x1b[0m   [N] Grain Int: \x1b[95m{:<4}\x1b[0m        \x1b[38;2;180;0;0m║\x1b[0m", exposure, bloom_intensity, grain_intensity);
@@ -2024,6 +2066,7 @@ impl Xenofall {
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    P \x1b[91m→\x1b[0m Resume Game  |  V \x1b[91m→\x1b[0m Toggle VSync  |  F \x1b[91m→\x1b[0m Toggle Fullscreen       \x1b[38;2;180;0;0m║\x1b[0m");
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    Esc \x1b[91m→\x1b[0m Quit Game  |  4-0 \x1b[91m→\x1b[0m Toggle Post-Process Effects                   \x1b[38;2;180;0;0m║\x1b[0m");
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    G/B/N \x1b[91m→\x1b[0m Cycle Exposure/Bloom/Grain  |  I \x1b[91m→\x1b[0m Pixel Inteligente              \x1b[38;2;180;0;0m║\x1b[0m");
+        println!("  \x1b[38;2;180;0;0m║\x1b[0m    Z/X/C/T \x1b[91m→\x1b[0m Toggle SSGI/Fog/LUT/SSR                                      \x1b[38;2;180;0;0m║\x1b[0m");
         println!("  \x1b[38;2;180;0;0m╚══════════════════════════════════════════════════════════════════════════╝\x1b[0m");
         println!();
     }

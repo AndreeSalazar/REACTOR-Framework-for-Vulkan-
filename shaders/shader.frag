@@ -168,6 +168,53 @@ vec3 subsurfaceScatter(vec3 lightDir, vec3 viewDir, vec3 normal, vec3 lightColor
     return lightColor * VdotS * thickness * 0.3;
 }
 
+vec3 sceneSpaceGlobalIllumination(vec3 fPos, vec3 normal, vec3 baseColor, float ao, float puddleFactor) {
+    const float spacing = 8.0;
+    float seg = round(fPos.z / spacing);
+    vec3 bounce = vec3(0.0);
+
+    for (int i = -3; i <= 3; ++i) {
+        float zPos = (seg + float(i)) * spacing;
+        bool isEven = (int(abs(seg + float(i))) % 2 == 0);
+        vec3 lightPos = isEven ? vec3(-2.8, 1.8, zPos) : vec3(2.8, 1.8, zPos);
+        vec3 lightColor = isEven ? vec3(1.0, 0.05, 0.5) : vec3(0.0, 0.75, 1.0);
+
+        vec3 toLight = lightPos - fPos;
+        float dist = length(toLight);
+        vec3 L = toLight / max(dist, 0.0001);
+        float visibility = getPillarShadow(fPos + normal * 0.04, lightPos);
+        float hemi = max(dot(normal, L) * 0.5 + 0.5, 0.0);
+        float attenuation = 1.0 / (1.0 + 0.10 * dist + 0.12 * dist * dist);
+
+        float floorBounce = smoothstep(0.0, 1.6, fPos.y) * max(1.0 - normal.y, 0.0);
+        float wallBounce = 1.0 - smoothstep(0.2, 2.8, min(abs(fPos.x - 3.5), abs(fPos.x + 3.5)));
+        float weight = (hemi * 0.20 + floorBounce * 0.10 + wallBounce * 0.12) * attenuation * visibility;
+
+        bounce += lightColor * weight;
+    }
+
+    float contactDarkening = mix(0.62, 1.0, ao);
+    vec3 ambientBounce = vec3(0.018, 0.012, 0.030) * contactDarkening;
+    vec3 colorBleed = bounce;
+    colorBleed *= mix(0.18, 0.32, puddleFactor);
+    return baseColor * (ambientBounce + colorBleed);
+}
+
+vec3 cinematicLutGrade(vec3 color) {
+    float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+    vec3 shadowGrade = vec3(0.78, 0.88, 1.16);
+    vec3 midGrade = vec3(0.98, 1.02, 1.04);
+    vec3 highlightGrade = vec3(1.14, 1.02, 0.88);
+    vec3 grade = mix(shadowGrade, midGrade, smoothstep(0.04, 0.45, luma));
+    grade = mix(grade, highlightGrade, smoothstep(0.48, 1.0, luma));
+
+    vec3 graded = color * grade;
+    float gradedLuma = dot(graded, vec3(0.2126, 0.7152, 0.0722));
+    graded = mix(vec3(gradedLuma), graded, 1.08);
+    graded = mix(vec3(0.5), graded, 1.09);
+    return max(graded, vec3(0.0));
+}
+
 void main() {
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(push.camera_pos.xyz - fragPos);
@@ -351,9 +398,10 @@ void main() {
     }
 
     // ─── 9. ASSEMBLE LIGHTING ──────────────────────────────────────────
+    vec3 ssgiBounce = sceneSpaceGlobalIllumination(fragPos, N, baseColor, ao, puddleFactor);
     vec3 diffuseAccum = (ambient + totalDiffuse + flashDiffuse) * ao;
     vec3 specularAccum = totalSpecular + flashSpecular;
-    vec3 finalColor = baseColor * diffuseAccum + specularAccum + rimLight + totalSSS + envReflection;
+    vec3 finalColor = baseColor * diffuseAccum + ssgiBounce + specularAccum + rimLight + totalSSS + envReflection;
     
     // Metallic surfaces reflect more of the light color directly
     finalColor = mix(finalColor, (specularAccum + envReflection) * baseColor * 2.0, metallic * 0.5);
@@ -362,11 +410,14 @@ void main() {
     float depth = length(push.camera_pos.xyz - fragPos);
     
     // Volumetric light scattering (Mie-like) in the flashlight beam
-    float scatter = intensity * att_flash * 0.3;
+    float viewDotBeam = max(dot(normalize(fragPos - push.camera_pos.xyz), flashlightDir), 0.0);
+    float phase = 0.35 + pow(viewDotBeam, 8.0) * 0.65;
+    float scatter = intensity * att_flash * phase * 0.42;
     
     // Height-based fog density (thicker near floor — mist pooling)
     float heightFog = exp(-fragPos.y * 0.8) * 0.5 + 0.5;
-    float fogDensity = 0.032 * heightFog;
+    float fogNoise = fbm(fragPos.xz * 0.18 + vec2(fragPos.y * 0.11, depth * 0.015));
+    float fogDensity = 0.032 * heightFog * mix(0.78, 1.22, fogNoise);
     float fogFactor = exp(-fogDensity * depth);
     
     // Fog color: dark purple ambient + flashlight scattering
@@ -384,18 +435,7 @@ void main() {
     finalColor = mix(fogColor, finalColor, fogFactor);
 
     // ─── 11. CINEMATIC COLOR GRADING ───────────────────────────────────
-    // Split-toning: cool shadows, warm highlights
-    float luma = dot(finalColor, vec3(0.2126, 0.7152, 0.0722));
-    vec3 coolShadows = vec3(0.85, 0.9, 1.1);
-    vec3 warmHighlights = vec3(1.05, 1.0, 0.95);
-    vec3 gradingMult = mix(coolShadows, warmHighlights, smoothstep(0.0, 0.5, luma));
-    finalColor *= gradingMult;
-    
-    // Slight desaturation for cinematic look
-    finalColor = mix(finalColor, vec3(luma), 0.10);
-    
-    // Subtle contrast boost
-    finalColor = mix(vec3(0.5), finalColor, 1.08);
+    finalColor = cinematicLutGrade(finalColor);
 
     // ─── 12. ACES FILMIC TONE MAPPING ──────────────────────────────────
     finalColor = aces_tonemap(finalColor);

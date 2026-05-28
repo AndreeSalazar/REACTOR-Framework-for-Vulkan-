@@ -22,6 +22,10 @@ pub enum PostProcessEffect {
     FXAA,
     SMAA,
     TAA,
+    SSGI,
+    VolumetricFog,
+    LutColorGrading,
+    SSR,
 }
 
 /// Anti-Aliasing quality presets
@@ -168,11 +172,19 @@ pub struct PostProcessSettings {
     // Sharpen
     pub sharpen_intensity: f32,
 
+    // Screen-space lighting
+    pub ssgi_intensity: f32,
+    pub ssgi_radius: f32,
+    pub fog_density: f32,
+    pub fog_scatter: f32,
+    pub lut_strength: f32,
+    pub ssr_strength: f32,
+
     // General
     pub time: f32,
     pub effect_mask: u32, // Bitflags for enabled effects
 
-    pub _padding: [f32; 2],
+    pub _padding: [f32; 4],
 }
 
 impl Default for PostProcessSettings {
@@ -189,15 +201,25 @@ impl Default for PostProcessSettings {
             exposure: 1.15,
             gamma: 2.2,
             sharpen_intensity: 0.25,
+            ssgi_intensity: 0.32,
+            ssgi_radius: 10.0,
+            fog_density: 0.18,
+            fog_scatter: 0.45,
+            lut_strength: 0.72,
+            ssr_strength: 0.35,
             time: 0.0,
             effect_mask: 0,
-            _padding: [0.0, 0.0],
+            _padding: [0.0, 0.0, 0.0, 0.0],
         };
         settings.enable_effect(PostProcessEffect::ToneMapping);
         settings.enable_effect(PostProcessEffect::Vignette);
         settings.enable_effect(PostProcessEffect::FilmGrain);
         settings.enable_effect(PostProcessEffect::ChromaticAberration);
         settings.enable_effect(PostProcessEffect::FXAA);
+        settings.enable_effect(PostProcessEffect::SSGI);
+        settings.enable_effect(PostProcessEffect::VolumetricFog);
+        settings.enable_effect(PostProcessEffect::LutColorGrading);
+        settings.enable_effect(PostProcessEffect::SSR);
         settings
     }
 }
@@ -220,8 +242,14 @@ impl PostProcessSettings {
         settings.enable_effect(PostProcessEffect::Vignette);
         settings.enable_effect(PostProcessEffect::ToneMapping);
         settings.enable_effect(PostProcessEffect::FilmGrain);
+        settings.enable_effect(PostProcessEffect::SSGI);
+        settings.enable_effect(PostProcessEffect::VolumetricFog);
+        settings.enable_effect(PostProcessEffect::LutColorGrading);
+        settings.enable_effect(PostProcessEffect::SSR);
         settings.vignette_intensity = 0.4;
         settings.grain_intensity = 0.03;
+        settings.fog_density = 0.22;
+        settings.lut_strength = 0.82;
         settings
     }
 

@@ -24,6 +24,34 @@ vec3 aces_tonemap(vec3 color) {
     return clamp((color * (a * color + b)) / (color * (c * color + d) + e), 0.0, 1.0);
 }
 
+float hash(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(i);
+    float b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0));
+    float d = hash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float fbm(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 4; ++i) {
+        v += a * noise(p);
+        p = p * 2.0 + vec2(37.0, 17.0);
+        a *= 0.5;
+    }
+    return v;
+}
+
 // Analytical PCSS-style Shadow Casting for Corridor Pillars
 // Spacing: x = +-2.8, z = -(i * 10.0 + 7.0) for i = 0..9, radius = 0.24, height = 3.5
 float getPillarShadow(vec3 fPos, vec3 lPos) {
@@ -73,6 +101,51 @@ float getPillarShadow(vec3 fPos, vec3 lPos) {
         }
     }
     return shadow;
+}
+
+vec3 sceneSpaceGlobalIllumination(vec3 fPos, vec3 normal, vec3 baseColor, float ao, float puddleFactor) {
+    const float spacing = 8.0;
+    float seg = round(fPos.z / spacing);
+    vec3 bounce = vec3(0.0);
+
+    for (int i = -2; i <= 2; ++i) {
+        float zPos = (seg + float(i)) * spacing;
+        bool isEven = (int(abs(seg + float(i))) % 2 == 0);
+        vec3 lightPos = isEven ? vec3(-2.8, 1.8, zPos) : vec3(2.8, 1.8, zPos);
+        vec3 lightColor = isEven ? vec3(1.0, 0.05, 0.5) : vec3(0.0, 0.75, 1.0);
+
+        vec3 toLight = lightPos - fPos;
+        float dist = length(toLight);
+        vec3 L = toLight / max(dist, 0.0001);
+        float visibility = getPillarShadow(fPos + normal * 0.04, lightPos);
+        float attenuation = 1.0 / (1.0 + 0.12 * dist + 0.16 * dist * dist);
+        float hemi = max(dot(normal, L) * 0.5 + 0.5, 0.0);
+        float floorBounce = smoothstep(0.0, 1.5, fPos.y) * max(1.0 - normal.y, 0.0);
+        float wallBounce = 1.0 - smoothstep(0.2, 2.8, min(abs(fPos.x - 3.5), abs(fPos.x + 3.5)));
+        float weight = (hemi * 0.18 + floorBounce * 0.10 + wallBounce * 0.10) * attenuation * visibility;
+
+        bounce += lightColor * weight;
+    }
+
+    vec3 ambientBounce = vec3(0.014, 0.011, 0.026) * mix(0.62, 1.0, ao);
+    vec3 colorBleed = bounce;
+    colorBleed *= mix(0.14, 0.28, puddleFactor);
+    return baseColor * (ambientBounce + colorBleed);
+}
+
+vec3 cinematicLutGrade(vec3 color) {
+    float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+    vec3 shadowGrade = vec3(0.78, 0.88, 1.16);
+    vec3 midGrade = vec3(0.98, 1.02, 1.04);
+    vec3 highlightGrade = vec3(1.14, 1.02, 0.88);
+    vec3 grade = mix(shadowGrade, midGrade, smoothstep(0.04, 0.45, luma));
+    grade = mix(grade, highlightGrade, smoothstep(0.48, 1.0, luma));
+
+    vec3 graded = color * grade;
+    float gradedLuma = dot(graded, vec3(0.2126, 0.7152, 0.0722));
+    graded = mix(vec3(gradedLuma), graded, 1.08);
+    graded = mix(vec3(0.5), graded, 1.08);
+    return max(graded, vec3(0.0));
 }
 
 void main() {
@@ -206,22 +279,33 @@ void main() {
         vec3 rimLight = rimFactor * rimColor;
 
         // 6. Assemble all lighting contributions (AO applied to diffuse components)
+        vec3 ssgiBounce = sceneSpaceGlobalIllumination(fragPos, N, baseAlbedo, ao, puddleFactor);
+        vec3 envReflection = vec3(0.0);
+        if (isFloor && puddleFactor > 0.1) {
+            vec3 R = reflect(-V, N);
+            float refSeg = round((fragPos.z + R.z * 3.0) / spacing);
+            bool refEven = (int(abs(refSeg)) % 2 == 0);
+            vec3 refColor = refEven ? vec3(1.0, 0.05, 0.5) : vec3(0.0, 0.75, 1.0);
+            envReflection = refColor * max(R.y, 0.0) * puddleFactor * 0.35;
+        }
+
         vec3 diffuseAccum = (ambient + totalDiffuse + flashDiffuse) * ao;
         vec3 specularAccum = totalSpecular + flashSpecular;
-        finalColor = baseAlbedo * diffuseAccum + specularAccum + rimLight;
+        finalColor = baseAlbedo * diffuseAccum + ssgiBounce + specularAccum + rimLight + envReflection;
 
         // 7. Atmospheric Volumetric Depth Fog (Fog gets denser/scattered based on camera flashlight)
         float depth = length(push.camera_pos.xyz - fragPos);
-        float scatter = intensity * att_flash * 0.25;
-        float fogDensity = 0.035;
+        float viewDotBeam = max(dot(normalize(fragPos - push.camera_pos.xyz), flashlightDir), 0.0);
+        float phase = 0.35 + pow(viewDotBeam, 8.0) * 0.65;
+        float scatter = intensity * att_flash * phase * 0.38;
+        float fogNoise = fbm(fragPos.xz * 0.18 + vec2(fragPos.y * 0.11, depth * 0.015));
+        float fogDensity = 0.035 * mix(0.78, 1.22, fogNoise);
         float fogFactor = exp(-fogDensity * depth);
         vec3 fogColor = vec3(0.015, 0.01, 0.025) + vec3(0.9, 0.95, 1.0) * scatter;
         finalColor = mix(fogColor, finalColor, fogFactor);
 
         // 8. Cinematic Color Grading & Contrast (Cyberpunk LUT simulation)
-        finalColor = mix(finalColor, vec3(dot(finalColor, vec3(0.2126, 0.7152, 0.0722))), 0.12);
-        finalColor.r *= 1.03;
-        finalColor.b *= 1.01;
+        finalColor = cinematicLutGrade(finalColor);
 
         // 9. ACES Filmic Tone Mapping
         finalColor = aces_tonemap(finalColor);
