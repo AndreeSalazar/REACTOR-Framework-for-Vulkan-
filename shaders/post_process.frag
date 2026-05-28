@@ -36,6 +36,9 @@ layout(push_constant) uniform PostProcessSettings {
     float fog_scatter;
     float lut_strength;
     float ssr_strength;
+    float pathtrace_intensity;
+    float flare_intensity;
+    float highlight_recovery;
 
     // General
     float time;
@@ -58,6 +61,8 @@ layout(push_constant) uniform PostProcessSettings {
 #define EFFECT_VOLUMETRIC_FOG     (1u << 15)
 #define EFFECT_LUT_COLOR_GRADING  (1u << 16)
 #define EFFECT_SSR                (1u << 17)
+#define EFFECT_PATH_TRACED_LIGHT  (1u << 18)
+#define EFFECT_ANAMORPHIC_FLARES  (1u << 19)
 
 float luminance(vec3 color) {
     return dot(color, vec3(0.2126, 0.7152, 0.0722));
@@ -105,7 +110,7 @@ vec3 screen_space_gi(vec2 uv, vec2 texelSize, vec3 baseColor) {
 
     const int RINGS = 3;
     const int DIRS = 8;
-    float jitter = interleaved_gradient_noise(gl_FragCoord.xy, settings.time);
+    float jitter = interleaved_gradient_noise(gl_FragCoord.xy, 0.0) * 0.35;
 
     for (int ring = 1; ring <= RINGS; ++ring) {
         float ringRadius = settings.ssgi_radius * float(ring) / float(RINGS);
@@ -200,6 +205,73 @@ vec3 lut_color_grade(vec3 color) {
     graded = (graded - 0.5) * 1.08 + 0.5;
     graded += vec3(0.012, -0.004, 0.006);
     return mix(color, max(graded, 0.0), settings.lut_strength);
+}
+
+vec3 path_traced_lighting_resolve(vec2 uv, vec2 texelSize, vec3 color) {
+    vec3 normal = estimate_screen_normal(uv, texelSize);
+    float centerLum = luminance(color);
+    vec3 diffuseTransport = vec3(0.0);
+    vec3 specularTransport = vec3(0.0);
+    float occlusion = 0.0;
+    float totalWeight = 0.0001;
+
+    const int DIRS = 12;
+    for (int i = 0; i < DIRS; ++i) {
+        float a = (float(i) + 0.5) * 6.2831853 / float(DIRS);
+        vec2 dir = vec2(cos(a), sin(a));
+        float hemi = max(dot(normal, normalize(vec3(dir, 0.7))), 0.0);
+
+        for (int stepId = 1; stepId <= 3; ++stepId) {
+            float travel = float(stepId * stepId) * 9.0;
+            vec2 suv = uv + dir * texelSize * travel;
+            vec3 s = sample_screen(suv);
+            float sLum = luminance(s);
+            float edgeAware = exp(-abs(sLum - centerLum) * 3.5);
+            float distanceWeight = 1.0 / float(stepId * stepId + 1);
+            float w = hemi * edgeAware * distanceWeight;
+
+            diffuseTransport += s * w;
+            specularTransport += max(s - vec3(settings.bloom_threshold), vec3(0.0)) * w;
+            occlusion += (sLum < centerLum ? w : 0.0);
+            totalWeight += w;
+        }
+    }
+
+    vec3 bouncedLight = diffuseTransport / totalWeight;
+    vec3 glossyLight = specularTransport / totalWeight;
+    float ao = 1.0 - clamp(occlusion / totalWeight, 0.0, 0.55);
+    vec3 resolved = color * ao + bouncedLight * 0.20 + glossyLight * 0.75;
+    return mix(color, max(resolved, 0.0), settings.pathtrace_intensity);
+}
+
+vec3 anamorphic_flares(vec2 uv, vec2 texelSize, vec3 color) {
+    vec3 flare = vec3(0.0);
+
+    for (int i = -10; i <= 10; ++i) {
+        if (i == 0) {
+            continue;
+        }
+
+        float t = abs(float(i)) / 10.0;
+        vec2 horizontal = vec2(float(i) * 7.5, 0.0) * texelSize;
+        vec3 h = sample_screen(uv + horizontal);
+        vec3 brightH = max(h - vec3(settings.bloom_threshold), vec3(0.0));
+        flare += brightH * (1.0 - t) * vec3(0.80, 0.95, 1.25);
+
+        vec2 diagonal = vec2(float(i) * 3.0, float(i) * 0.55) * texelSize;
+        vec3 d = sample_screen(uv + diagonal);
+        vec3 brightD = max(d - vec3(settings.bloom_threshold + 0.08), vec3(0.0));
+        flare += brightD * (1.0 - t) * vec3(1.20, 0.55, 1.05) * 0.35;
+    }
+
+    return color + flare * settings.flare_intensity * 0.18;
+}
+
+vec3 recover_highlights(vec3 color) {
+    float luma = luminance(color);
+    vec3 compressed = color / (1.0 + color * settings.highlight_recovery);
+    float mask = smoothstep(0.72, 2.4, luma);
+    return mix(color, compressed * (1.0 + luma * 0.18), mask);
 }
 
 void main() {
@@ -332,29 +404,41 @@ void main() {
         color = screen_space_gi(uv, texelSize, color);
     }
 
-    // 8. Screen-Space Reflection for wet/highlighted surfaces
+    // 8. Path-tracing style multi-bounce resolve
+    if ((settings.effect_mask & EFFECT_PATH_TRACED_LIGHT) != 0) {
+        color = path_traced_lighting_resolve(uv, texelSize, color);
+    }
+
+    // 9. Screen-Space Reflection for wet/highlighted surfaces
     if ((settings.effect_mask & EFFECT_SSR) != 0) {
         color = screen_space_reflection(uv, texelSize, color);
     }
 
-    // 9. Volumetric Fog and light shafts
+    // 10. Volumetric Fog and light shafts
     if ((settings.effect_mask & EFFECT_VOLUMETRIC_FOG) != 0) {
         color = volumetric_fog(uv, color);
     }
 
-    // 10. Film Grain
+    // 11. Anamorphic neon flares
+    if ((settings.effect_mask & EFFECT_ANAMORPHIC_FLARES) != 0) {
+        color = anamorphic_flares(uv, texelSize, color);
+    }
+
+    // 12. Film Grain
     if ((settings.effect_mask & EFFECT_GRAIN) != 0) {
         float noise = rand(uv + settings.time * settings.grain_speed);
         color += (noise - 0.5) * settings.grain_intensity;
         color = max(color, 0.0);
     }
 
-    // 11. LUT-style Color Grading
+    // 13. LUT-style Color Grading
     if ((settings.effect_mask & EFFECT_LUT_COLOR_GRADING) != 0) {
         color = lut_color_grade(color);
     }
 
-    // 12. Grayscale / Sepia Color Grading
+    color = recover_highlights(color);
+
+    // 14. Grayscale / Sepia Color Grading
     if ((settings.effect_mask & EFFECT_GRAYSCALE) != 0) {
         float luma = luminance(color);
         color = vec3(luma);
@@ -365,18 +449,18 @@ void main() {
         color = vec3(r, g, b);
     }
 
-    // 13. Invert Color
+    // 15. Invert Color
     if ((settings.effect_mask & EFFECT_INVERT) != 0) {
         color = 1.0 - color;
     }
 
-    // 14. Tone Mapping & Exposure
+    // 16. Tone Mapping & Exposure
     if ((settings.effect_mask & EFFECT_TONEMAP) != 0) {
         color *= settings.exposure;
         color = aces_tonemap(color);
     }
 
-    // 15. Gamma Correction
+    // 17. Gamma Correction
     color = pow(color, vec3(1.0 / settings.gamma));
 
     outColor = vec4(color, 1.0);

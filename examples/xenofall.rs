@@ -95,6 +95,8 @@ const ENEMY_DEATH_DURATION: f32 = 0.6;
 const ZOMBIE_CUBE_SCALE: Vec3 = Vec3::new(0.5, 1.8, 0.35);
 // Y offset: zombie feet at floor (Y=0). Hitbox center at ~0.9m.
 const ZOMBIE_GROUND_Y: f32 = 0.9;
+// zombie_basic.glb faces +Z in its bind pose. Keep this at 0 so enemies face the player.
+const ZOMBIE_MODEL_YAW_OFFSET: f32 = 0.0;
 
 /// How far ahead of the camera enemies spawn (close enough to see immediately)
 const ENEMY_SPAWN_DIST_MIN: f32 = 5.0;
@@ -769,7 +771,7 @@ impl Xenofall {
         // Antes esto requería medir el modelo a mano en Blender. Ahora es 1 línea.
         let spawn = GltfSpawn::at(Vec3::new(ground_pos.x, 0.0, ground_pos.z))
             .with_height(1.8)
-            .facing(Vec3::new(0.0, 0.0, 1.0));
+            .facing(Vec3::new(0.0, 0.0, -1.0));
 
         match ctx.spawn_gltf_smart("assets/models/zombie_basic.glb", spawn) {
             Ok(info) => {
@@ -781,7 +783,7 @@ impl Xenofall {
 
                 // Compute local node transforms relative to the initial parent base transform
                 let p_base_0 = Mat4::from_rotation_translation(
-                    Quat::from_rotation_y(std::f32::consts::PI), // facing direction Vec3(0,0,1) -> PI
+                    Quat::from_rotation_y(ZOMBIE_MODEL_YAW_OFFSET),
                     Vec3::new(ground_pos.x, 0.0, ground_pos.z),
                 );
                 let mut initial_transforms = Vec::new();
@@ -1329,8 +1331,10 @@ impl Xenofall {
             let kx = ctx.input().is_key_just_pressed(KeyCode::KeyX);
             let kc = ctx.input().is_key_just_pressed(KeyCode::KeyC);
             let kt = ctx.input().is_key_just_pressed(KeyCode::KeyT);
+            let ky = ctx.input().is_key_just_pressed(KeyCode::KeyY);
+            let ku = ctx.input().is_key_just_pressed(KeyCode::KeyU);
 
-            if k4 || k5 || k6 || k7 || k8 || k9 || k0 || kg || kb || kn || ki || kz || kx || kc || kt {
+            if k4 || k5 || k6 || k7 || k8 || k9 || k0 || kg || kb || kn || ki || kz || kx || kc || kt || ky || ku {
                 let settings = &mut ctx.reactor.post_process.settings;
                 if k4 {
                     if settings.is_effect_enabled(PostProcessEffect::Vignette) {
@@ -1409,6 +1413,20 @@ impl Xenofall {
                         settings.enable_effect(PostProcessEffect::SSR);
                     }
                 }
+                if ky {
+                    if settings.is_effect_enabled(PostProcessEffect::PathTracedLighting) {
+                        settings.disable_effect(PostProcessEffect::PathTracedLighting);
+                    } else {
+                        settings.enable_effect(PostProcessEffect::PathTracedLighting);
+                    }
+                }
+                if ku {
+                    if settings.is_effect_enabled(PostProcessEffect::AnamorphicFlares) {
+                        settings.disable_effect(PostProcessEffect::AnamorphicFlares);
+                    } else {
+                        settings.enable_effect(PostProcessEffect::AnamorphicFlares);
+                    }
+                }
                 if kg {
                     settings.exposure = match settings.exposure {
                         exp if (exp - 0.8).abs() < 0.01 => 1.0,
@@ -1429,10 +1447,10 @@ impl Xenofall {
                 }
                 if kn {
                     settings.grain_intensity = match settings.grain_intensity {
-                        val if (val - 0.01).abs() < 0.001 => 0.02,
-                        val if (val - 0.02).abs() < 0.001 => 0.05,
-                        val if (val - 0.05).abs() < 0.001 => 0.1,
-                        _ => 0.01,
+                        val if val < 0.001 => 0.003,
+                        val if (val - 0.003).abs() < 0.001 => 0.006,
+                        val if (val - 0.006).abs() < 0.001 => 0.012,
+                        _ => 0.0,
                     };
                 }
                 if ki {
@@ -1583,8 +1601,8 @@ impl Xenofall {
                         let move_dir = to_player.normalize();
                         enemy.position += move_dir * enemy.speed * dt;
 
-                        // Face toward the player correctly (native model looks at +Z)
-                        let facing = Quat::from_rotation_y(move_dir.x.atan2(move_dir.z) + std::f32::consts::PI)
+                        // Face toward the player. zombie_basic.glb looks at +Z in bind pose.
+                        let facing = Quat::from_rotation_y(move_dir.x.atan2(move_dir.z) + ZOMBIE_MODEL_YAW_OFFSET)
                             * Quat::from_rotation_z(sway); // Z-roll waddle
                         let new_parent_pos = if enemy.is_gltf {
                             Vec3::new(enemy.position.x, bob, enemy.position.z)
@@ -1607,7 +1625,7 @@ impl Xenofall {
                         if dist > 0.1 {
                             let face_dir = to_player.normalize();
                             let tremble = (self.t * 22.0).sin() * 0.02; // fast jitter
-                            let facing = Quat::from_rotation_y(face_dir.x.atan2(face_dir.z) + std::f32::consts::PI)
+                            let facing = Quat::from_rotation_y(face_dir.x.atan2(face_dir.z) + ZOMBIE_MODEL_YAW_OFFSET)
                                 * Quat::from_rotation_x(tremble);
                             let new_parent_pos = if enemy.is_gltf {
                                 Vec3::new(enemy.position.x, tremble * 0.5, enemy.position.z)
@@ -1632,8 +1650,8 @@ impl Xenofall {
                     let to_player = Vec3::new(cam_pos.x, enemy.position.y, cam_pos.z) - enemy.position;
                     let face_dir = if to_player.length_squared() > 1e-6 { to_player.normalize() } else { Vec3::new(0.0, 0.0, 1.0) };
                     
-                    // Keep correct facing yaw direction when falling (native model looks at +Z)
-                    let facing_yaw = Quat::from_rotation_y(face_dir.x.atan2(face_dir.z) + std::f32::consts::PI);
+                    // Keep correct facing yaw direction when falling.
+                    let facing_yaw = Quat::from_rotation_y(face_dir.x.atan2(face_dir.z) + ZOMBIE_MODEL_YAW_OFFSET);
 
                     let new_parent_pos = if enemy.is_gltf {
                         Vec3::new(enemy.position.x, 0.0, enemy.position.z)
@@ -1943,6 +1961,8 @@ impl Xenofall {
         let is_fog = settings.is_effect_enabled(PostProcessEffect::VolumetricFog);
         let is_lut = settings.is_effect_enabled(PostProcessEffect::LutColorGrading);
         let is_ssr = settings.is_effect_enabled(PostProcessEffect::SSR);
+        let is_pt = settings.is_effect_enabled(PostProcessEffect::PathTracedLighting);
+        let is_flares = settings.is_effect_enabled(PostProcessEffect::AnamorphicFlares);
 
         let exposure = settings.exposure;
         let bloom_intensity = settings.bloom_intensity;
@@ -2022,6 +2042,8 @@ impl Xenofall {
         let t_fog = print_toggle("X", "Vol. Fog", is_fog);
         let t_lut = print_toggle("C", "LUT Grade", is_lut);
         let t_ssr = print_toggle("T", "SSR", is_ssr);
+        let t_pt = print_toggle("Y", "PT Resolve", is_pt);
+        let t_flares = print_toggle("U", "Neon Flares", is_flares);
 
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m", t_vignette, t_bloom);
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m", t_grain, t_chromatic);
@@ -2029,6 +2051,7 @@ impl Xenofall {
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}                                          \x1b[38;2;180;0;0m║\x1b[0m", t_tonemap);
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m", t_ssgi, t_fog);
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m", t_lut, t_ssr);
+        println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m", t_pt, t_flares);
         println!("  \x1b[38;2;180;0;0m║                                                                          ║\x1b[0m");
         println!("  \x1b[38;2;180;0;0m║\x1b[0m   \x1b[1m■ VALUE ADJUSTMENTS\x1b[0m                                                    \x1b[38;2;180;0;0m║\x1b[0m");
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    [G] Exposure: \x1b[93m{:<4}\x1b[0m   [B] Bloom Int: \x1b[92m{:<4}\x1b[0m   [N] Grain Int: \x1b[95m{:<4}\x1b[0m        \x1b[38;2;180;0;0m║\x1b[0m", exposure, bloom_intensity, grain_intensity);
@@ -2067,6 +2090,7 @@ impl Xenofall {
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    Esc \x1b[91m→\x1b[0m Quit Game  |  4-0 \x1b[91m→\x1b[0m Toggle Post-Process Effects                   \x1b[38;2;180;0;0m║\x1b[0m");
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    G/B/N \x1b[91m→\x1b[0m Cycle Exposure/Bloom/Grain  |  I \x1b[91m→\x1b[0m Pixel Inteligente              \x1b[38;2;180;0;0m║\x1b[0m");
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    Z/X/C/T \x1b[91m→\x1b[0m Toggle SSGI/Fog/LUT/SSR                                      \x1b[38;2;180;0;0m║\x1b[0m");
+        println!("  \x1b[38;2;180;0;0m║\x1b[0m    Y/U \x1b[91m→\x1b[0m Toggle PT Resolve/Neon Flares                                  \x1b[38;2;180;0;0m║\x1b[0m");
         println!("  \x1b[38;2;180;0;0m╚══════════════════════════════════════════════════════════════════════════╝\x1b[0m");
         println!();
     }

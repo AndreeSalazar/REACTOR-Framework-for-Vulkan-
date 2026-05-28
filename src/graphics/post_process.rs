@@ -26,6 +26,8 @@ pub enum PostProcessEffect {
     VolumetricFog,
     LutColorGrading,
     SSR,
+    PathTracedLighting,
+    AnamorphicFlares,
 }
 
 /// Anti-Aliasing quality presets
@@ -179,12 +181,15 @@ pub struct PostProcessSettings {
     pub fog_scatter: f32,
     pub lut_strength: f32,
     pub ssr_strength: f32,
+    pub pathtrace_intensity: f32,
+    pub flare_intensity: f32,
+    pub highlight_recovery: f32,
 
     // General
     pub time: f32,
     pub effect_mask: u32, // Bitflags for enabled effects
 
-    pub _padding: [f32; 4],
+    pub _padding: [f32; 1],
 }
 
 impl Default for PostProcessSettings {
@@ -192,24 +197,27 @@ impl Default for PostProcessSettings {
         let mut settings = Self {
             vignette_intensity: 0.35,
             vignette_smoothness: 0.6,
-            chromatic_intensity: 0.003,
-            grain_intensity: 0.02,
+            chromatic_intensity: 0.0018,
+            grain_intensity: 0.006,
             grain_speed: 1.0,
             bloom_threshold: 0.85,
             bloom_intensity: 0.35,
             bloom_blur_size: 4.0,
-            exposure: 1.15,
+            exposure: 1.02,
             gamma: 2.2,
             sharpen_intensity: 0.25,
-            ssgi_intensity: 0.32,
-            ssgi_radius: 10.0,
+            ssgi_intensity: 0.26,
+            ssgi_radius: 8.0,
             fog_density: 0.18,
             fog_scatter: 0.45,
             lut_strength: 0.72,
             ssr_strength: 0.35,
+            pathtrace_intensity: 0.58,
+            flare_intensity: 0.42,
+            highlight_recovery: 0.62,
             time: 0.0,
             effect_mask: 0,
-            _padding: [0.0, 0.0, 0.0, 0.0],
+            _padding: [0.0],
         };
         settings.enable_effect(PostProcessEffect::ToneMapping);
         settings.enable_effect(PostProcessEffect::Vignette);
@@ -220,6 +228,8 @@ impl Default for PostProcessSettings {
         settings.enable_effect(PostProcessEffect::VolumetricFog);
         settings.enable_effect(PostProcessEffect::LutColorGrading);
         settings.enable_effect(PostProcessEffect::SSR);
+        settings.enable_effect(PostProcessEffect::PathTracedLighting);
+        settings.enable_effect(PostProcessEffect::AnamorphicFlares);
         settings
     }
 }
@@ -246,10 +256,14 @@ impl PostProcessSettings {
         settings.enable_effect(PostProcessEffect::VolumetricFog);
         settings.enable_effect(PostProcessEffect::LutColorGrading);
         settings.enable_effect(PostProcessEffect::SSR);
+        settings.enable_effect(PostProcessEffect::PathTracedLighting);
+        settings.enable_effect(PostProcessEffect::AnamorphicFlares);
         settings.vignette_intensity = 0.4;
-        settings.grain_intensity = 0.03;
+        settings.grain_intensity = 0.008;
         settings.fog_density = 0.22;
         settings.lut_strength = 0.82;
+        settings.flare_intensity = 0.52;
+        settings.highlight_recovery = 0.68;
         settings
     }
 
