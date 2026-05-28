@@ -122,8 +122,23 @@ impl Reactor {
                     )
                 })?;
 
-            // ── Dynamic Rendering: color + depth (MSAA opcional) ──
+            // Determine if we should render to offscreen target for post-processing
+            let use_post_process = self.post_process.enabled && !self.post_process.offscreen_images.is_empty();
+
             let swapchain_view = self.swapchain.image_views[image_index as usize];
+            let swapchain_image = self.swapchain.images[image_index as usize];
+
+            let target_view = if use_post_process {
+                self.post_process.offscreen_images[image_index as usize].view
+            } else {
+                swapchain_view
+            };
+            let target_image = if use_post_process {
+                self.post_process.offscreen_images[image_index as usize].handle
+            } else {
+                swapchain_image
+            };
+
             let msaa_enabled =
                 self.msaa_samples != vk::SampleCountFlags::TYPE_1 && self.msaa_image_view.is_some();
 
@@ -132,7 +147,7 @@ impl Reactor {
                     .image_view(self.msaa_image_view.unwrap())
                     .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
                     .resolve_mode(vk::ResolveModeFlags::AVERAGE)
-                    .resolve_image_view(swapchain_view)
+                    .resolve_image_view(target_view)
                     .resolve_image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
                     .load_op(vk::AttachmentLoadOp::CLEAR)
                     .store_op(vk::AttachmentStoreOp::DONT_CARE)
@@ -141,7 +156,7 @@ impl Reactor {
                     })
             } else {
                 vk::RenderingAttachmentInfo::default()
-                    .image_view(swapchain_view)
+                    .image_view(target_view)
                     .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
                     .load_op(vk::AttachmentLoadOp::CLEAR)
                     .store_op(vk::AttachmentStoreOp::STORE)
@@ -169,7 +184,6 @@ impl Reactor {
                 .depth_attachment(&depth_attachment);
 
             // ── Barreras de inicio ──
-            let swapchain_image = self.swapchain.images[image_index as usize];
             let depth_img = self.depth_image.unwrap();
 
             let color_barrier = vk::ImageMemoryBarrier::default()
@@ -177,7 +191,7 @@ impl Reactor {
                 .new_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
                 .src_access_mask(vk::AccessFlags::empty())
                 .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
-                .image(swapchain_image)
+                .image(target_image)
                 .subresource_range(vk::ImageSubresourceRange {
                     aspect_mask: vk::ImageAspectFlags::COLOR,
                     base_mip_level: 0,
@@ -366,6 +380,107 @@ impl Reactor {
             }
 
             self.context.device.cmd_end_rendering(command_buffer);
+
+            if use_post_process {
+                // Transition offscreen target from COLOR_ATTACHMENT_OPTIMAL to SHADER_READ_ONLY_OPTIMAL
+                self.post_process.offscreen_images[image_index as usize].transition_layout(
+                    &self.context,
+                    command_buffer,
+                    vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                    vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                );
+
+                // Transition swapchain image from UNDEFINED to COLOR_ATTACHMENT_OPTIMAL
+                let swapchain_barrier = vk::ImageMemoryBarrier::default()
+                    .old_layout(vk::ImageLayout::UNDEFINED)
+                    .new_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                    .src_access_mask(vk::AccessFlags::empty())
+                    .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                    .image(swapchain_image)
+                    .subresource_range(vk::ImageSubresourceRange {
+                        aspect_mask: vk::ImageAspectFlags::COLOR,
+                        base_mip_level: 0,
+                        level_count: 1,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    });
+
+                self.context.device.cmd_pipeline_barrier(
+                    command_buffer,
+                    vk::PipelineStageFlags::TOP_OF_PIPE,
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+                    vk::DependencyFlags::empty(),
+                    &[],
+                    &[],
+                    &[swapchain_barrier],
+                );
+
+                // Begin post-processing rendering pass
+                let post_color_attachment = vk::RenderingAttachmentInfo::default()
+                    .image_view(swapchain_view)
+                    .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                    .load_op(vk::AttachmentLoadOp::DONT_CARE) // Overwrite whole screen
+                    .store_op(vk::AttachmentStoreOp::STORE);
+
+                let post_rendering_info = vk::RenderingInfo::default()
+                    .render_area(vk::Rect2D {
+                        offset: vk::Offset2D { x: 0, y: 0 },
+                        extent: self.swapchain.extent,
+                    })
+                    .layer_count(1)
+                    .color_attachments(std::slice::from_ref(&post_color_attachment));
+
+                self.context.device.cmd_begin_rendering(command_buffer, &post_rendering_info);
+
+                // Bind post-processing pipeline
+                self.context.device.cmd_bind_pipeline(
+                    command_buffer,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    self.post_process.pipeline.unwrap(),
+                );
+
+                // Bind descriptor set (the offscreen texture)
+                self.context.device.cmd_bind_descriptor_sets(
+                    command_buffer,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    self.post_process.layout.unwrap(),
+                    0,
+                    &[self.post_process.descriptor_sets[image_index as usize]],
+                    &[],
+                );
+
+                // Push settings
+                let settings_bytes = bytemuck::bytes_of(&self.post_process.settings);
+                self.context.device.cmd_push_constants(
+                    command_buffer,
+                    self.post_process.layout.unwrap(),
+                    vk::ShaderStageFlags::FRAGMENT,
+                    0,
+                    settings_bytes,
+                );
+
+                // Set dynamic viewport and scissor matching swapchain size
+                let viewport = vk::Viewport {
+                    x: 0.0,
+                    y: 0.0,
+                    width: self.swapchain.extent.width as f32,
+                    height: self.swapchain.extent.height as f32,
+                    min_depth: 0.0,
+                    max_depth: 1.0,
+                };
+                let scissor = vk::Rect2D {
+                    offset: vk::Offset2D { x: 0, y: 0 },
+                    extent: self.swapchain.extent,
+                };
+                self.context.device.cmd_set_viewport(command_buffer, 0, &[viewport]);
+                self.context.device.cmd_set_scissor(command_buffer, 0, &[scissor]);
+
+                // Draw fullscreen triangle
+                self.context.device.cmd_draw(command_buffer, 3, 1, 0, 0);
+
+                // End post-processing rendering pass
+                self.context.device.cmd_end_rendering(command_buffer);
+            }
 
             // ── Barrera 2: Color → Present ──
             let image_barrier = vk::ImageMemoryBarrier::default()

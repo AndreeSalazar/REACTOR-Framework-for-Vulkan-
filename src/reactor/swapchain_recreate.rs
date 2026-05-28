@@ -93,6 +93,16 @@ impl Reactor {
         self.depth_image_view = Some(depth_view);
         self.depth_memory = Some(depth_mem);
 
+        // ── Recrear offscreen images de post-proceso ──
+        self.post_process.recreate_offscreen_images(
+            &self.context,
+            self.allocator.clone(),
+            self.swapchain.extent.width,
+            self.swapchain.extent.height,
+            self.swapchain.images.len() as u32,
+            self.swapchain.format,
+        )?;
+
         Ok(())
     }
 }

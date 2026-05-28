@@ -85,6 +85,12 @@ fn main() {
                 } else if filename == "texture.frag" {
                     compile_shader(&src, "shaders/texture_frag.spv");
                     compiled += 1;
+                } else if filename == "post_process.vert" {
+                    compile_shader(&src, "shaders/post_process_vert.spv");
+                    compiled += 1;
+                } else if filename == "post_process.frag" {
+                    compile_shader(&src, "shaders/post_process_frag.spv");
+                    compiled += 1;
                 }
             }
         }

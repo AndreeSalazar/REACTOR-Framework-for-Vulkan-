@@ -244,6 +244,16 @@ impl Reactor {
             log::info!("📦 Async Transfer: not available (using graphics queue)");
         }
 
+        let mut post_process = crate::graphics::post_process::PostProcessPipeline::new();
+        post_process.init(
+            &context,
+            allocator.clone(),
+            swapchain.extent.width,
+            swapchain.extent.height,
+            swapchain.images.len() as u32,
+            swapchain.format,
+        )?;
+
         Ok(Self {
             context,
             swapchain,
@@ -261,6 +271,7 @@ impl Reactor {
             device_lost: false,
             vsync,
             camera_pos: glam::Vec3::ZERO,
+            post_process,
             msaa_samples,
             msaa_image,
             msaa_image_view,
