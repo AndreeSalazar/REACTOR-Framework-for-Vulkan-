@@ -608,6 +608,242 @@ Roadmap abierto:
 
 ---
 
+## 🎬 Hacia iluminación AAA — Qué tenemos y qué falta
+
+Esta es la auditoría honesta del stack de iluminación actual y el camino para
+llegar a calidad **Triple-A profesional** (UE5 Lumen / Frostbite / Decima / RED).
+
+### ✅ Lo que ya está cocinado en la base
+
+| Pieza | Dónde vive | Estado |
+|-------|-----------|--------|
+| ACES Filmic Tone Mapping | `shaders/shader.frag` + `post_process.frag` | Funcional |
+| Hemispherical Ambient | `shader.frag` | Funcional |
+| Schlick Fresnel + GGX-inspired specular | `shader.frag` | **Simplificado** (no es Cook-Torrance completo) |
+| Soft shadows analíticos (ray-cylinder) | `shader.frag::getPillarShadow` | **Ad-hoc**: hardcoded para corredor de Xenofall |
+| Contact AO geométrico | `shader.frag::getContactShadow` | **Ad-hoc**: distancias hardcoded |
+| SSGI aproximado (rebote de luces neón) | `shader.frag::sceneSpaceGlobalIllumination` | **Ad-hoc**: posiciones hardcoded |
+| SSS aproximado | `shader.frag::subsurfaceScatter` | Funcional pero sin albedo difuso real |
+| Volumetric fog + Mie phase | `shader.frag` | Funcional |
+| Cinematic LUT grading | `shader.frag::cinematicLutGrade` | Funcional |
+| Post-process 13 efectos | `shaders/post_process.frag` | Funcional |
+| Pause overlay UI | `post_process.frag::draw_pause_overlay` | Funcional |
+| `ShadowConfig` + `ShadowCascade` + `ShadowMap` structs | `src/graphics/shadows.rs` | **Andamio**: `update()` ignora `camera_view/proj`; `calculate_shadow_factor` comenta "_real implementation would sample shadow map_" — falta wiring |
+| Luces múltiples por uniform buffer | `src/graphics/uniform_buffer.rs` (`MAX_LIGHTS = 16`) | Funcional pero **techo bajo** para AAA |
+| `bindless_pbr.frag` | `shaders/` | **Stub**: solo devuelve `albedo × base_color`, sin lighting |
+
+### ❌ Lo que falta para iluminación Triple-A
+
+Cada item de abajo es una **caja de cocina** que se construye sobre la Capa 1
+existente (Vulkan + descriptors + compute + RT). No hay que tocar `unsafe`.
+
+#### 1. Material PBR completo (Cook-Torrance real)
+
+- **D**isney/GGX Trowbridge-Reitz **D**(h) microfacet normal distribution
+- **G**eometry term Smith Schlick-GGX (correlated)
+- **F**resnel Schlick con ior y f90
+- **Energy compensation** para multi-scattering (Kulla-Conty / Turquin)
+- **Anisotropy** (T/B tangent frame) para pelo, metales cepillados
+- **Clear coat** (capa transparente sobre coches, plásticos)
+- **Sheen** (ropa, terciopelo) — Charlie distribution
+- **Transmission + thickness** (vidrio, hielo, agua)
+- **Iridescence** (capas finas, jabón, mariposas)
+- **Burley/Disney diffusion SSS** (piel, mármol, hojas) — reemplazo del hack actual
+
+> **Por qué**: el `bindless_pbr.frag` actual no ilumina. Sin BRDF correcto,
+> materiales se ven "planos" y reaccionan mal a IBL/lights dinámicas.
+
+#### 2. Image-Based Lighting (IBL) completo
+
+- **Pre-filtered specular cubemap** (mipmaps por roughness, split-sum approx.)
+- **Irradiance cubemap** convolucionado (diffuse ambient direccional)
+- **BRDF LUT 2D** (split-sum integration, RG16F texture)
+- **Box/Sphere parallax-corrected reflection probes** colocables en escena
+- **Sky cubemap dinámico** (atmosphere precomputed o tiempo real)
+
+> **Por qué**: el ambient hemisférico actual es sólo 2 colores constantes. IBL
+> hace que cualquier material reaccione al entorno real.
+
+#### 3. Cascaded Shadow Maps reales (wiring completo)
+
+El struct existe — falta:
+
+- Render passes a 4 shadow textures (1 por cascada) con `vkCmdBeginRenderPass`
+- **PSSM** (Practical Split Scheme) con `cascade_splits` ya configurados
+- Sampling en fragment shader con bias por cascada + slope-scaled depth bias
+- **PCF Poisson disk** o **PCSS real** (blocker search + penumbra)
+- **Variance / Exponential / Moment Shadow Maps** para soft shadows sin artefactos
+- **Contact-hardening shadows** (PCSS con kernel adaptativo)
+- **Shadow caching** para luces estáticas (no re-render cada frame)
+- **Distance Field Shadows** (UE5 Lumen-style) sobre SDFs precalculados
+
+#### 4. Renderer Deferred + G-Buffer
+
+Actualmente solo Forward. Para AAA con cientos de luces:
+
+- **G-Buffer layout** (R11G11B10F + RGBA8 + RGBA8 + RG16F):
+  - `gbuffer0`: Base color (RGB) + AO (A)
+  - `gbuffer1`: World normal octahedral (RG) + metallic + roughness
+  - `gbuffer2`: Emissive (RGB) + material ID (A)
+  - `gbuffer3`: Motion vectors (RG) + linear depth (B) + flags (A)
+- **Lighting pass** en compute shader sobre G-Buffer
+- **Decals** proyectados en G-Buffer entre geometry y lighting
+
+#### 5. Clustered/Tiled Forward+ Lighting
+
+- **Light culling en compute**: dividir frustum en tiles 16×16 o froxels 16×16×32
+- Cada tile/cluster sólo itera luces relevantes (`MAX_LIGHTS = 16` → ilimitado)
+- Estructura jerárquica BVH para 10.000+ luces dinámicas
+
+#### 6. Global Illumination en tiempo real
+
+Una o varias de estas estrategias (de menos a más AAA):
+
+- **SSGI real en compute** (raymarch del depth/color buffer, no hardcoded)
+- **DDGI (Dynamic Diffuse GI)** con probes en grid 3D + relighting RT
+- **Surfel GI** (EA SEED) — partículas de irradiancia sobre superficies
+- **Voxel Cone Tracing (VXGI)** — voxelizar escena + cone trace en compute
+- **SDFGI** (Godot 4 / Distance Field GI software)
+- **Lumen** (UE5 software + hardware RT, screen-trace + mesh SDF)
+- **ReSTIR DI/GI** — Spatiotemporal reservoir resampling (state of the art 2024)
+
+#### 7. Screen-Space Effects "reales" en compute
+
+- **GTAO / HBAO+** sobre depth + normal G-buffer (no hardcoded geometry)
+- **SSR (Screen-Space Reflections)** con BVH hierarchical ray-march
+- **Contact shadows** SSCS (Screen-Space Contact Shadows)
+- **Bent Normals** para AO direccional
+
+#### 8. Anti-aliasing temporal + upscaling
+
+- **TAA real** con motion vectors, neighborhood clipping, history rectification
+- **DLSS 3.5** (NVIDIA Streamline SDK)
+- **FSR 3.1** (AMD FidelityFX)
+- **XeSS** (Intel)
+- **Sub-pixel jitter** en projection matrix
+- **TSR** (UE5 Temporal Super Resolution) como fallback open-source
+
+#### 9. Bloom "AAA"
+
+El bloom actual es single-pass blur. AAA usa:
+
+- **Downsample/upsample mip chain** (13 mips a 1/2, 1/4, … COD Advanced Warfare paper)
+- **Karis average** anti-firefly en el downsample
+- **Tent filter** en upsample para difusión suave
+- **Lens dirt + chromatic bloom** con texture overlay
+
+#### 10. Auto-exposure HDR
+
+- **Histograma de luminancia** en compute (256 bins)
+- **Eye adaptation** temporal (smooth EV adjustment)
+- **HDR display output**: `VK_EXT_hdr_metadata` + scRGB / HDR10 / Dolby Vision
+- **Color spaces**: BT.709 (SDR) ↔ BT.2020 (HDR) ↔ ACEScg (work)
+
+#### 11. Volumetric lighting AAA
+
+- **Froxel volumetrics** (Frostbite: 160×90×128 froxels)
+- **Volumetric shadows** desde CSM en cada froxel
+- **Participating media**: humo, niebla, polvo con scattering anisotrópico
+- **God rays** desde sol/spot lights con CSM sampling
+- **Volumetric clouds** (Schneider/Wronski raymarch + curl noise)
+
+#### 12. Motion blur + Depth of Field
+
+- **Motion blur per-object** sampling motion vectors
+- **DoF bokeh** con circle-of-confusion buffer + hex/circle aperture
+- **Lens flares anamórficos** (ya hay flag, falta implementación real)
+
+#### 13. Atmosphere & Sky
+
+- **Bruneton precomputed scattering** (Rayleigh + Mie LUTs)
+- **Time-of-day** dinámico (sol/luna/estrellas)
+- **Aerial perspective** desde atmosphere LUT
+- **Realtime clouds** integrados con sky
+
+#### 14. Ray Tracing Hardware (DXR equivalent vía VK_KHR_ray_*)
+
+La base existe en `src/raytracing/`. Falta cocinarla con:
+
+- **RT Shadows** (área luces, soft shadows perfectos)
+- **RT Reflections** (espejos, agua, metales — sin SSR artifacts)
+- **RT GI** (DDGI o ReSTIR como arriba)
+- **RT AO** (alta calidad, sin screen-space leaks)
+- **RT Translucency / caustics**
+- **Hybrid Rendering**: raster G-Buffer + RT para reflexiones/sombras/GI
+
+#### 15. Especialidades de personaje
+
+- **Skin shader doble-lobe SSS** (Burley + textura de SSS thickness)
+- **Eye shader** con cornea refractiva + scleral SSS
+- **Hair Marschner / Kajiya-Kay** BRDF + alpha-to-coverage
+- **Cloth Charlie sheen** + anisotropic
+- **Wetness** dinámica (lluvia → roughness/metallic)
+
+#### 16. Naturaleza / mundo abierto
+
+- **Vegetation wind** (vertex shader perlin)
+- **Tree LOD + imposters**
+- **Terrain**: virtual texturing, blend de N capas, displacement
+- **Water**: Gerstner waves + foam + refraction + caustics + SSR
+- **Atmosphere fog** integrado con water y volumetrics
+
+---
+
+### 🗺️ Hoja de ruta sugerida (orden recomendado)
+
+```diagram
+╭─────────────────────────────────────────────────────╮
+│ FASE 1 — Cimientos PBR + Shadows reales             │
+│ ▸ Cook-Torrance completo en bindless_pbr.frag       │
+│ ▸ CSM wiring (4 cascadas, PCF Poisson)              │
+│ ▸ G-Buffer + Deferred opcional                      │
+│ ▸ MAX_LIGHTS dinámico vía SSBO                      │
+╰──────────────────────┬──────────────────────────────╯
+                       ▼
+╭─────────────────────────────────────────────────────╮
+│ FASE 2 — Ambient + Reflections                      │
+│ ▸ IBL completo (cubemap pre-filt + irrad + BRDF LUT)│
+│ ▸ Reflection probes parallax-corrected              │
+│ ▸ SSR + SSAO/GTAO reales en compute                 │
+╰──────────────────────┬──────────────────────────────╯
+                       ▼
+╭─────────────────────────────────────────────────────╮
+│ FASE 3 — Temporal + HDR                             │
+│ ▸ Motion vectors + TAA                              │
+│ ▸ Auto-exposure histograma                          │
+│ ▸ Bloom mip chain + lens dirt                       │
+│ ▸ Tonemap pipeline (ACES → AgX → OCIO)              │
+│ ▸ HDR10 output                                      │
+╰──────────────────────┬──────────────────────────────╯
+                       ▼
+╭─────────────────────────────────────────────────────╮
+│ FASE 4 — GI dinámica                                │
+│ ▸ Clustered Forward+ light culling                  │
+│ ▸ DDGI o Surfel GI con probes RT                    │
+│ ▸ Volumetric froxels + god-rays                     │
+│ ▸ Atmosphere Bruneton + clouds                      │
+╰──────────────────────┬──────────────────────────────╯
+                       ▼
+╭─────────────────────────────────────────────────────╮
+│ FASE 5 — Ray Tracing hardware (el "wow")            │
+│ ▸ RT Shadows / Reflections / AO híbridos            │
+│ ▸ ReSTIR GI                                         │
+│ ▸ Path tracing ground truth opcional + SVGF denoiser│
+│ ▸ DLSS/FSR/XeSS para 4K-8K                          │
+╰─────────────────────────────────────────────────────╯
+```
+
+**Tiempo estimado por fase**: 2-4 semanas cada una para un developer con la
+base actual. Cada fase **deja un demo visible y vendible** (no es un waterfall
+de 6 meses sin output).
+
+> 💡 La base actual ([src/](file:///c:/Users/andre/OneDrive/Desktop/REACTOR-Framework-for-Vulkan-/src)) ya expone todos los handles Vulkan necesarios:
+> descriptors bindless, compute pipelines, RT context con auto-detection,
+> uniform/storage buffers, mipmaps, samplers anisotrópicos, MSAA resolve.
+> **Falta cocinar shaders y wiring** — no falta infraestructura.
+
+---
+
 ## 📖 Documentación
 
 | Documento                                  | Descripción                                       |
