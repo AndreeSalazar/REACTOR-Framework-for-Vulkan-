@@ -36,8 +36,8 @@
 
 use reactor_vulkan::prelude::*;
 use reactor_vulkan::graphics::post_process::PostProcessEffect;
-use winit::event::MouseButton;
-use winit::keyboard::KeyCode;
+use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::keyboard::{KeyCode, PhysicalKey};
 
 // =============================================================================
 // CONSTANTES DE GAMEPLAY
@@ -512,6 +512,7 @@ struct Xenofall {
     game_over_index: Option<usize>,
     victory_index: Option<usize>,
     pause_config: PauseConfig,
+    pause_event_consumed: bool,
 }
 
 impl Xenofall {
@@ -562,7 +563,23 @@ impl Xenofall {
             game_over_index: None,
             victory_index: None,
             pause_config: PauseConfig::new().with_title("XENOFALL - REACTOR TOTAL CONFIG"),
+            pause_event_consumed: false,
         }
+    }
+
+    fn toggle_pause_config(&mut self, ctx: &mut ReactorContext) {
+        self.state = match self.state {
+            GameState::Playing => {
+                self.pause_config.show(ctx);
+                GameState::Paused
+            }
+            GameState::Paused => {
+                println!("\n  \x1b[38;2;180;0;0m▓▓▓ RESUMING - BLOOD PROTOCOL DEACTIVATED ▓▓▓\x1b[0m\n");
+                self.pause_config.hide(ctx);
+                GameState::Playing
+            }
+            other => other,
+        };
     }
 
     fn build_waves() -> Vec<WaveDef> {
@@ -1250,15 +1267,30 @@ impl Xenofall {
             }
         }
 
-        // Pause toggle
-        if ctx.input().is_key_just_pressed(KeyCode::KeyP) {
+        // Pause/config toggle
+        let mut pause_opened_this_frame = false;
+        let pause_already_handled = self.pause_event_consumed;
+        self.pause_event_consumed = false;
+        if !pause_already_handled
+            && (ctx.input().is_key_just_pressed(KeyCode::KeyP)
+                || ctx.input().is_key_just_pressed(KeyCode::Escape))
+        {
+            let was_playing = self.state == GameState::Playing;
+            self.toggle_pause_config(ctx);
+            pause_opened_this_frame = was_playing && self.state == GameState::Paused;
+        }
+        if false && ctx.input().is_key_just_pressed(KeyCode::KeyP)
+            || ctx.input().is_key_just_pressed(KeyCode::Escape)
+        {
             self.state = match self.state {
                 GameState::Playing => {
-                    self.pause_config.mark_dirty();
+                    self.pause_config.show(ctx);
+                    pause_opened_this_frame = true;
                     GameState::Paused
                 }
                 GameState::Paused => {
                     println!("\n  \x1b[38;2;180;0;0m▓▓▓ RESUMING — BLOOD PROTOCOL DEACTIVATED ▓▓▓\x1b[0m\n");
+                    self.pause_config.hide(ctx);
                     GameState::Playing
                 }
                 other => other,
@@ -1300,8 +1332,8 @@ impl Xenofall {
             std::process::exit(0);
         }
 
-        // ESC to quit
-        if ctx.input().is_key_just_pressed(KeyCode::Escape) {
+        // Q to quit
+        if ctx.input().is_key_just_pressed(KeyCode::KeyQ) {
             std::process::exit(0);
         }
 
@@ -1317,7 +1349,7 @@ impl Xenofall {
             return;
         }
 
-        if self.state == GameState::Paused {
+        if self.state == GameState::Paused && !pause_opened_this_frame {
             let pause_result = self.pause_config.update(ctx);
             if pause_result.requested_resume {
                 println!("\n  \x1b[38;2;180;0;0m▓▓▓ RESUMING — BLOOD PROTOCOL DEACTIVATED ▓▓▓\x1b[0m\n");
@@ -1968,6 +2000,26 @@ impl ReactorApp for Xenofall {
             .with_msaa(4)
             .with_renderer(RendererMode::Forward)
             .with_physics_hz(60)
+    }
+
+    fn on_event(&mut self, ctx: &mut ReactorContext, event: &WindowEvent) -> bool {
+        if let WindowEvent::KeyboardInput { event, .. } = event {
+            if event.state == ElementState::Pressed && !event.repeat {
+                match event.physical_key {
+                    PhysicalKey::Code(KeyCode::Escape | KeyCode::KeyP) => {
+                        self.toggle_pause_config(ctx);
+                        self.pause_event_consumed = true;
+                        return true;
+                    }
+                    PhysicalKey::Code(KeyCode::KeyQ) if self.state == GameState::Paused => {
+                        std::process::exit(0);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        false
     }
 
     fn init(&mut self, ctx: &mut ReactorContext) {

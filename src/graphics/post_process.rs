@@ -184,12 +184,14 @@ pub struct PostProcessSettings {
     pub pathtrace_intensity: f32,
     pub flare_intensity: f32,
     pub highlight_recovery: f32,
+    pub pause_overlay_alpha: f32,
+    pub pause_page: f32,
+    pub pause_selected: f32,
+    pub pause_row_count: f32,
 
     // General
     pub time: f32,
     pub effect_mask: u32, // Bitflags for enabled effects
-
-    pub _padding: [f32; 1],
 }
 
 impl Default for PostProcessSettings {
@@ -215,9 +217,12 @@ impl Default for PostProcessSettings {
             pathtrace_intensity: 0.58,
             flare_intensity: 0.42,
             highlight_recovery: 0.62,
+            pause_overlay_alpha: 0.0,
+            pause_page: 0.0,
+            pause_selected: 0.0,
+            pause_row_count: 0.0,
             time: 0.0,
             effect_mask: 0,
-            _padding: [0.0],
         };
         settings.enable_effect(PostProcessEffect::ToneMapping);
         settings.enable_effect(PostProcessEffect::Vignette);

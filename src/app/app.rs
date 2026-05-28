@@ -1431,8 +1431,6 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
 
                 // Update time
                 ctx.time.update();
-                ctx.reactor.input.begin_frame();
-
                 let dt = ctx.time.delta();
 
                 // Fixed timestep for physics
@@ -1450,6 +1448,9 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
 
                 // Render
                 self.app.render(ctx);
+
+                // Clear one-frame input state after update/render consumed it.
+                ctx.reactor.input.begin_frame();
 
                 // Si el dispositivo Vulkan se perdió, detenemos el loop para evitar spam de errores
                 if ctx.reactor.device_lost {

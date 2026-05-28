@@ -46,6 +46,7 @@ pub struct PauseConfig {
     pub page: PauseConfigPage,
     pub selected: usize,
     pub print_on_change: bool,
+    pub overlay_alpha: f32,
     dirty: bool,
 }
 
@@ -56,6 +57,7 @@ impl Default for PauseConfig {
             page: PauseConfigPage::Display,
             selected: 0,
             print_on_change: true,
+            overlay_alpha: 0.78,
             dirty: true,
         }
     }
@@ -78,11 +80,24 @@ impl PauseConfig {
         self.dirty = true;
     }
 
+    pub fn show(&mut self, ctx: &mut ReactorContext) {
+        ctx.reactor.post_process.enabled = true;
+        self.dirty = true;
+        self.sync_overlay(ctx);
+    }
+
+    pub fn hide(&mut self, ctx: &mut ReactorContext) {
+        ctx.reactor.post_process.settings.pause_overlay_alpha = 0.0;
+        self.dirty = true;
+    }
+
     pub fn update(&mut self, ctx: &mut ReactorContext) -> PauseConfigResult {
+        self.sync_overlay(ctx);
         let input = PauseConfigInput::capture(ctx);
         let mut result = PauseConfigResult::default();
 
         if input.resume {
+            self.hide(ctx);
             result.requested_resume = true;
         }
         if input.quit {
@@ -120,7 +135,17 @@ impl PauseConfig {
             self.dirty = false;
         }
 
+        self.sync_overlay(ctx);
         result
+    }
+
+    fn sync_overlay(&self, ctx: &mut ReactorContext) {
+        ctx.reactor.post_process.enabled = true;
+        let settings = &mut ctx.reactor.post_process.settings;
+        settings.pause_overlay_alpha = self.overlay_alpha;
+        settings.pause_page = self.page_index() as f32;
+        settings.pause_selected = self.selected as f32;
+        settings.pause_row_count = self.row_count() as f32;
     }
 
     pub fn print(&self, ctx: &ReactorContext) {
@@ -164,7 +189,7 @@ impl PauseConfig {
             "| V VSync | F Fullscreen | O PostFX | I Pixel | 4-0 legacy FX | Z X C T Y U FX |"
         );
         println!(
-            "| G Exposure | B Bloom | N Grain | P resume | Esc quit                         |"
+            "| G Exposure | B Bloom | N Grain | Esc/P resume | Q quit                         |"
         );
         println!("+{}+", line);
         println!();
@@ -172,7 +197,7 @@ impl PauseConfig {
 
     fn row_count(&self) -> usize {
         match self.page {
-            PauseConfigPage::Display => 11,
+            PauseConfigPage::Display => 12,
             PauseConfigPage::Lighting => 13,
             PauseConfigPage::Color => 13,
             PauseConfigPage::Performance => 10,
@@ -207,6 +232,11 @@ impl PauseConfig {
                     "Post Process",
                     ctx.reactor.post_process.enabled,
                     "Full post stack",
+                ),
+                Row::value(
+                    "HUD Opacity",
+                    self.overlay_alpha,
+                    "Transparent pause overlay",
                 ),
                 Row::bool("VSync", ctx.reactor.vsync, "Recreates swapchain"),
                 Row::bool(
@@ -352,64 +382,65 @@ impl PauseConfig {
         }
     }
 
-    fn adjust_display(&self, ctx: &mut ReactorContext, dir: i32, activate: bool) -> bool {
+    fn adjust_display(&mut self, ctx: &mut ReactorContext, dir: i32, activate: bool) -> bool {
         match self.selected {
             0 => {
                 ctx.reactor.post_process.enabled = !ctx.reactor.post_process.enabled;
                 true
             }
-            1 => toggle_vsync(ctx),
-            2 => toggle_fullscreen(ctx),
-            3 => step_f32(
+            1 => step_f32(&mut self.overlay_alpha, dir, 0.05, 0.20, 1.00),
+            2 => toggle_vsync(ctx),
+            3 => toggle_fullscreen(ctx),
+            4 => step_f32(
                 &mut ctx.reactor.post_process.settings.exposure,
                 dir,
                 0.05,
                 0.40,
                 2.50,
             ),
-            4 => step_f32(
+            5 => step_f32(
                 &mut ctx.reactor.post_process.settings.gamma,
                 dir,
                 0.05,
                 1.60,
                 2.80,
             ),
-            5 => step_f32(
+            6 => step_f32(
                 &mut ctx.reactor.post_process.settings.bloom_intensity,
                 dir,
                 0.05,
                 0.00,
                 2.00,
             ),
-            6 => step_f32(
+            7 => step_f32(
                 &mut ctx.reactor.post_process.settings.bloom_threshold,
                 dir,
                 0.02,
                 0.30,
                 1.60,
             ),
-            7 => step_f32(
+            8 => step_f32(
                 &mut ctx.reactor.post_process.settings.grain_intensity,
                 dir,
                 0.003,
                 0.00,
                 0.12,
             ),
-            8 => step_f32(
+            9 => step_f32(
                 &mut ctx.reactor.post_process.settings.chromatic_intensity,
                 dir,
                 0.0005,
                 0.00,
                 0.015,
             ),
-            9 => step_f32(
+            10 => step_f32(
                 &mut ctx.reactor.post_process.settings.vignette_intensity,
                 dir,
                 0.03,
                 0.00,
                 0.90,
             ),
-            10 => step_f32(
+            11 => step_f32(
                 &mut ctx.reactor.post_process.settings.sharpen_intensity,
                 dir,
                 0.03,
@@ -688,8 +719,9 @@ impl PauseConfigInput {
             prev_page: input.is_key_just_pressed(KeyCode::BracketLeft),
             next_page: input.is_key_just_pressed(KeyCode::BracketRight),
             page,
-            resume: input.is_key_just_pressed(KeyCode::KeyP),
-            quit: input.is_key_just_pressed(KeyCode::Escape),
+            resume: input.is_key_just_pressed(KeyCode::KeyP)
+                || input.is_key_just_pressed(KeyCode::Escape),
+            quit: input.is_key_just_pressed(KeyCode::KeyQ),
             toggle_vsync: input.is_key_just_pressed(KeyCode::KeyV),
             toggle_fullscreen: input.is_key_just_pressed(KeyCode::F11)
                 || input.is_key_just_pressed(KeyCode::KeyF),

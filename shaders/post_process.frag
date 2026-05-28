@@ -39,6 +39,10 @@ layout(push_constant) uniform PostProcessSettings {
     float pathtrace_intensity;
     float flare_intensity;
     float highlight_recovery;
+    float pause_overlay_alpha;
+    float pause_page;
+    float pause_selected;
+    float pause_row_count;
 
     // General
     float time;
@@ -274,6 +278,143 @@ vec3 recover_highlights(vec3 color) {
     return mix(color, compressed * (1.0 + luma * 0.18), mask);
 }
 
+float rect_mask(vec2 uv, vec2 center, vec2 halfSize, float softness) {
+    vec2 d = abs(uv - center) - halfSize;
+    float outside = length(max(d, 0.0));
+    float inside = min(max(d.x, d.y), 0.0);
+    return 1.0 - smoothstep(0.0, softness, outside + inside);
+}
+
+float pause_row_value(int page, int row) {
+    if (page == 0) {
+        if (row == 0) return 1.0;
+        if (row == 1) return clamp(settings.pause_overlay_alpha, 0.0, 1.0);
+        if (row == 2) return float(settings.effect_mask != 0u);
+        if (row == 3) return 1.0;
+        if (row == 4) return clamp((settings.exposure - 0.4) / 2.1, 0.0, 1.0);
+        if (row == 5) return clamp((settings.gamma - 1.6) / 1.2, 0.0, 1.0);
+        if (row == 6) return clamp(settings.bloom_intensity / 2.0, 0.0, 1.0);
+        if (row == 7) return clamp((settings.bloom_threshold - 0.3) / 1.3, 0.0, 1.0);
+        if (row == 8) return clamp(settings.grain_intensity / 0.12, 0.0, 1.0);
+        if (row == 9) return clamp(settings.chromatic_intensity / 0.015, 0.0, 1.0);
+        if (row == 10) return clamp(settings.vignette_intensity / 0.9, 0.0, 1.0);
+        return clamp(settings.sharpen_intensity / 1.5, 0.0, 1.0);
+    }
+
+    if (page == 1) {
+        if (row == 0) return ((settings.effect_mask & EFFECT_SSGI) != 0u) ? 1.0 : 0.0;
+        if (row == 1) return clamp(settings.ssgi_intensity / 1.5, 0.0, 1.0);
+        if (row == 2) return clamp(settings.ssgi_radius / 40.0, 0.0, 1.0);
+        if (row == 3) return ((settings.effect_mask & EFFECT_PATH_TRACED_LIGHT) != 0u) ? 1.0 : 0.0;
+        if (row == 4) return clamp(settings.pathtrace_intensity / 1.5, 0.0, 1.0);
+        if (row == 5) return ((settings.effect_mask & EFFECT_SSR) != 0u) ? 1.0 : 0.0;
+        if (row == 6) return clamp(settings.ssr_strength / 1.5, 0.0, 1.0);
+        if (row == 7) return ((settings.effect_mask & EFFECT_VOLUMETRIC_FOG) != 0u) ? 1.0 : 0.0;
+        if (row == 8) return clamp(settings.fog_density / 1.2, 0.0, 1.0);
+        if (row == 9) return clamp(settings.fog_scatter / 2.0, 0.0, 1.0);
+        if (row == 10) return ((settings.effect_mask & EFFECT_ANAMORPHIC_FLARES) != 0u) ? 1.0 : 0.0;
+        if (row == 11) return clamp(settings.flare_intensity / 2.0, 0.0, 1.0);
+        return clamp(settings.highlight_recovery / 2.0, 0.0, 1.0);
+    }
+
+    if (page == 2) {
+        if (row == 0) return ((settings.effect_mask & EFFECT_LUT_COLOR_GRADING) != 0u) ? 1.0 : 0.0;
+        if (row == 1) return clamp(settings.lut_strength / 1.5, 0.0, 1.0);
+        if (row == 2) return ((settings.effect_mask & EFFECT_TONEMAP) != 0u) ? 1.0 : 0.0;
+        if (row == 3) return ((settings.effect_mask & EFFECT_BLOOM) != 0u) ? 1.0 : 0.0;
+        if (row == 4) return ((settings.effect_mask & EFFECT_VIGNETTE) != 0u) ? 1.0 : 0.0;
+        if (row == 5) return ((settings.effect_mask & EFFECT_CHROMATIC) != 0u) ? 1.0 : 0.0;
+        if (row == 6) return ((settings.effect_mask & EFFECT_GRAIN) != 0u) ? 1.0 : 0.0;
+        if (row == 7) return ((settings.effect_mask & EFFECT_FXAA) != 0u) ? 1.0 : 0.0;
+        if (row == 8) return ((settings.effect_mask & EFFECT_SHARPEN) != 0u) ? 1.0 : 0.0;
+        if (row == 9) return ((settings.effect_mask & EFFECT_GRAYSCALE) != 0u) ? 1.0 : 0.0;
+        if (row == 10) return ((settings.effect_mask & EFFECT_SEPIA) != 0u) ? 1.0 : 0.0;
+        if (row == 11) return ((settings.effect_mask & EFFECT_INVERT) != 0u) ? 1.0 : 0.0;
+        return ((settings.effect_mask & EFFECT_BLUR) != 0u) ? 1.0 : 0.0;
+    }
+
+    if (page == 3) {
+        if (row == 0) return 0.65;
+        if (row == 1) return 1.0;
+        if (row == 2) return float(settings.effect_mask != 0u);
+        if (row == 3) return ((settings.effect_mask & EFFECT_FXAA) != 0u) ? 1.0 : 0.0;
+        if (row == 4) return ((settings.effect_mask & EFFECT_PATH_TRACED_LIGHT) != 0u) ? 1.0 : 0.0;
+        if (row == 5) return ((settings.effect_mask & EFFECT_SSR) != 0u) ? 1.0 : 0.0;
+        if (row == 6) return ((settings.effect_mask & EFFECT_VOLUMETRIC_FOG) != 0u) ? 1.0 : 0.0;
+        if (row == 7) return ((settings.effect_mask & EFFECT_ANAMORPHIC_FLARES) != 0u) ? 1.0 : 0.0;
+        return ((settings.effect_mask & EFFECT_GRAIN) != 0u) ? 1.0 : 0.0;
+    }
+
+    return row == int(settings.pause_selected) ? 1.0 : 0.35;
+}
+
+vec3 draw_pause_overlay(vec2 uv, vec3 color) {
+    float alpha = clamp(settings.pause_overlay_alpha, 0.0, 1.0);
+    if (alpha <= 0.001) {
+        return color;
+    }
+
+    vec3 outc = mix(color, vec3(0.006, 0.008, 0.014), alpha * 0.70);
+
+    vec2 panelCenter = vec2(0.50, 0.52);
+    vec2 panelHalf = vec2(0.38, 0.38);
+    float panel = rect_mask(uv, panelCenter, panelHalf, 0.012);
+    outc = mix(outc, vec3(0.018, 0.020, 0.034), panel * alpha * 0.88);
+
+    float border = rect_mask(uv, panelCenter, panelHalf + vec2(0.004), 0.004)
+        - rect_mask(uv, panelCenter, panelHalf - vec2(0.004), 0.004);
+    vec3 accent = mix(vec3(0.0, 0.85, 1.0), vec3(1.0, 0.05, 0.58), fract(settings.pause_page * 0.37));
+    outc += accent * border * alpha * 0.65;
+
+    // Block-letter PAUSA hint: five luminous vertical glyph zones.
+    vec2 titleBase = vec2(0.305, 0.175);
+    for (int i = 0; i < 5; ++i) {
+        vec2 c = titleBase + vec2(float(i) * 0.047, 0.0);
+        float stemL = rect_mask(uv, c + vec2(-0.014, 0.0), vec2(0.004, 0.035), 0.002);
+        float stemR = rect_mask(uv, c + vec2(0.014, 0.0), vec2(0.004, 0.035), 0.002);
+        float top = rect_mask(uv, c + vec2(0.0, -0.030), vec2(0.017, 0.004), 0.002);
+        float mid = rect_mask(uv, c + vec2(0.0, 0.000), vec2(0.017, 0.004), 0.002);
+        float bot = rect_mask(uv, c + vec2(0.0, 0.030), vec2(0.017, 0.004), 0.002);
+        float glyph = max(max(stemL, stemR), max(top, max(mid, bot)));
+        if (i == 1 || i == 3) glyph = max(stemL, max(stemR, bot)); // A/U-ish
+        if (i == 2) glyph = max(stemL, max(top, max(mid, bot))); // S-ish
+        outc += glyph * accent * alpha * 0.95;
+    }
+
+    int page = int(clamp(settings.pause_page, 0.0, 4.0));
+    for (int i = 0; i < 5; ++i) {
+        float x = 0.22 + float(i) * 0.14;
+        float active = i == page ? 1.0 : 0.25;
+        float tab = rect_mask(uv, vec2(x, 0.255), vec2(0.052, 0.012), 0.003);
+        outc = mix(outc, accent, tab * alpha * active);
+    }
+
+    int rows = int(clamp(settings.pause_row_count, 1.0, 13.0));
+    int selected = int(clamp(settings.pause_selected, 0.0, float(rows - 1)));
+    for (int row = 0; row < 13; ++row) {
+        if (row >= rows) continue;
+        float y = 0.315 + float(row) * 0.043;
+        float selectedMask = row == selected ? 1.0 : 0.0;
+        float rail = rect_mask(uv, vec2(0.50, y), vec2(0.255, 0.010), 0.003);
+        float value = pause_row_value(page, row);
+        float fillCenter = 0.245 + value * 0.255;
+        float fill = rect_mask(uv, vec2(fillCenter, y), vec2(value * 0.255, 0.008), 0.003);
+        float knob = rect_mask(uv, vec2(0.245 + value * 0.510, y), vec2(0.006, 0.017), 0.003);
+        float leftTick = rect_mask(uv, vec2(0.185, y), vec2(0.010, 0.010), 0.002);
+
+        outc = mix(outc, vec3(0.10, 0.12, 0.18), rail * alpha * (0.82 + selectedMask * 0.18));
+        outc = mix(outc, accent, fill * alpha * (0.78 + selectedMask * 0.18));
+        outc += knob * vec3(0.95, 0.98, 1.0) * alpha * (0.55 + selectedMask * 0.35);
+        outc += leftTick * accent * alpha * (0.30 + value * 0.45);
+
+        float rowFrame = rect_mask(uv, vec2(0.50, y), vec2(0.305, 0.018), 0.003)
+            - rect_mask(uv, vec2(0.50, y), vec2(0.300, 0.014), 0.003);
+        outc += rowFrame * accent * alpha * selectedMask * 0.55;
+    }
+
+    return clamp(outc, 0.0, 8.0);
+}
+
 void main() {
     vec2 uv = fragTexCoord;
     vec2 texelSize = 1.0 / textureSize(screenTexture, 0);
@@ -462,6 +603,7 @@ void main() {
 
     // 17. Gamma Correction
     color = pow(color, vec3(1.0 / settings.gamma));
+    color = draw_pause_overlay(uv, color);
 
     outColor = vec4(color, 1.0);
 }
