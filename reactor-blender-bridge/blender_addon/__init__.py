@@ -38,10 +38,12 @@ def register():
         return
     from . import prefs, panel
     from .operators import connect as op_connect
+    from .handlers import depsgraph
 
     prefs.register()
     op_connect.register()
     panel.register()
+    depsgraph.register()
 
 
 def unregister():
@@ -49,7 +51,9 @@ def unregister():
         return
     from . import prefs, panel
     from .operators import connect as op_connect
+    from .handlers import depsgraph
 
+    depsgraph.unregister()
     panel.unregister()
     op_connect.unregister()
     prefs.unregister()

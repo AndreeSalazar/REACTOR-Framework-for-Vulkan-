@@ -96,6 +96,9 @@ gilrs = "0.10"
 # Build utilities
 walkdir = { workspace = true }
 
+[dev-dependencies]
+reactor-bridge = { path = "reactor-blender-bridge/reactor_bridge" }
+
 [build-dependencies]
 walkdir = { workspace = true }
 
@@ -134,6 +137,10 @@ path = "examples/xenofall.rs"
 [[example]]
 name = "generate_audio"
 path = "examples/generate_audio.rs"
+
+[[example]]
+name = "blender_live"
+path = "examples/blender_live.rs"
 
 # =============================================================================
 # Profiles

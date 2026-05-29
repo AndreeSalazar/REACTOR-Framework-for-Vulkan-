@@ -18,5 +18,5 @@
 pub mod protocol;
 pub mod server;
 
-pub use protocol::{Error as ErrorMsg, Goodbye, Hello, HelloAck, Message, Ping, Pong, PROTOCOL_VERSION};
+pub use protocol::{Error as ErrorMsg, Goodbye, Hello, HelloAck, Message, Ping, Pong, TransformUpdated, PROTOCOL_VERSION};
 pub use server::{BridgeConfig, BridgeHandle};

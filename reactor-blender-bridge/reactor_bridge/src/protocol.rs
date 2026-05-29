@@ -32,6 +32,7 @@ pub enum Message {
     Pong(Pong),
     Error(ErrorPayload),
     Goodbye(Goodbye),
+    TransformUpdated(TransformUpdated),
 }
 
 impl Message {
@@ -100,6 +101,12 @@ pub struct ErrorPayload {
 pub struct Goodbye {
     #[serde(default)]
     pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransformUpdated {
+    pub id: String,
+    pub matrix: [f32; 16],
 }
 
 // -----------------------------------------------------------------------------

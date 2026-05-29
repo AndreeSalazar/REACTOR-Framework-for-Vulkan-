@@ -1034,7 +1034,6 @@ impl Xenofall {
                             self.enemies[j].state = EnemyState::Dying;
                             self.enemies[j].death_timer = 0.0;
                             self.kills += 1;
-                            self.total_enemies_alive = self.total_enemies_alive.saturating_sub(1);
                             self.score = (self.score + SCORE_PER_KILL).min(SCORE_CAP);
                         }
                     }
@@ -1043,7 +1042,6 @@ impl Xenofall {
 
             if died {
                 self.kills += 1;
-                self.total_enemies_alive = self.total_enemies_alive.saturating_sub(1);
 
                 // Score calculation with combo and build multipliers
                 let combo_mult = 1 + self.combo.min(MAX_COMBO);
