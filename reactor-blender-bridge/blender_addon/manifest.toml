@@ -1,0 +1,23 @@
+schema_version = "1.0.0"
+
+id = "reactor_live_link"
+version = "0.1.0"
+name = "REACTOR Live Link"
+tagline = "Live sync between Blender and REACTOR runtime"
+maintainer = "Salazar-interactive <salazar.interactive@example.com>"
+type = "add-on"
+
+website = "https://github.com/AndreeSalazar/REACTOR-Framework-for-Vulkan-"
+tags = ["Development", "Pipeline", "Game Engine"]
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:Apache-2.0"]
+copyright = ["2026 Salazar-interactive"]
+
+# Permisos requeridos por Blender 4.2+ extensions API
+[permissions]
+network = "Connect to REACTOR runtime on 127.0.0.1:19840"
+
+# Wheel de websockets se descarga via pip si no esta presente.
+# En produccion se podria empaquetar con la extension.
