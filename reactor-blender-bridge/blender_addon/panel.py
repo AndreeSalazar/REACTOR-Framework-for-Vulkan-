@@ -62,6 +62,9 @@ class REACTOR_PT_live_panel(bpy.types.Panel):
         if not connected and "Conectando" not in status:
             layout.operator("reactor.live_connect", icon='PLAY', text="Conectar a REACTOR")
         else:
+            if connected:
+                layout.operator("reactor.live_sync", icon='FILE_REFRESH', text="Sincronizar Escena")
+                layout.separator()
             layout.operator("reactor.live_disconnect", icon='PAUSE', text="Desconectar")
 
 def register():

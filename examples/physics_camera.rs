@@ -226,7 +226,7 @@ impl ReactorApp for PhysicsCameraDemo {
             if self.mouse_captured {
                 self.mouse_captured = false;
             } else {
-                std::process::exit(0);
+                ctx.reactor.exit_requested = true;
             }
         }
 

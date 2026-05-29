@@ -61,7 +61,7 @@ impl FpsController {
         // ── Salir ──
         if let Some(k) = self.quit_key {
             if ctx.input().is_key_down(k) {
-                std::process::exit(0);
+                ctx.reactor.exit_requested = true;
             }
         }
 

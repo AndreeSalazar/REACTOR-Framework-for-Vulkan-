@@ -70,6 +70,7 @@ pub struct Reactor {
     // ── Flags de estado del frame ──
     pub resized: bool,
     pub device_lost: bool,
+    pub exit_requested: bool,
     pub vsync: bool,
     pub camera_pos: glam::Vec3,
     pub post_process: crate::graphics::post_process::PostProcessPipeline,

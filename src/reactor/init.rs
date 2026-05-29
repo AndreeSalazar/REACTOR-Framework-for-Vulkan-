@@ -297,6 +297,7 @@ impl Reactor {
             ray_tracing,
             resized: false,
             device_lost: false,
+            exit_requested: false,
             vsync,
             camera_pos: glam::Vec3::ZERO,
             post_process,

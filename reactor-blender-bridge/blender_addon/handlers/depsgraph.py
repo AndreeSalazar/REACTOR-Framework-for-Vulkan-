@@ -65,8 +65,9 @@ def _on_depsgraph_update(scene, depsgraph):
 
         try:
             client.send(json.dumps(msg))
+            print(f"[REACTOR] → Enviado TransformUpdated para '{obj_name}'")
         except Exception as e:
-            print(f"[REACTOR] Error sending TransformUpdated for '{obj_name}': {e}")
+            print(f"[REACTOR] ✗ Error al enviar TransformUpdated para '{obj_name}': {e}")
 
 
 def sync_full_scene():

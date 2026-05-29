@@ -278,8 +278,7 @@ impl ReactorApp for BlenderLive {
         // 3. Salir con ESC
         // -----------------------------------------------------------------
         if ctx.input().is_key_just_pressed(KeyCode::Escape) {
-            self.cleanup();
-            std::process::exit(0);
+            ctx.reactor.exit_requested = true;
         }
     }
 

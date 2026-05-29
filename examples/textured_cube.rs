@@ -96,9 +96,8 @@ impl ReactorApp for TexturedCube {
             ctx.scene.objects[0].transform = transform;
         }
 
-        // ESC to exit
         if ctx.input().is_key_down(winit::keyboard::KeyCode::Escape) {
-            std::process::exit(0);
+            ctx.reactor.exit_requested = true;
         }
     }
 }

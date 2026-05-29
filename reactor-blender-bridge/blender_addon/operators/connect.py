@@ -1,4 +1,5 @@
 import bpy
+import os
 import socket
 import threading
 import json
@@ -214,22 +215,29 @@ class REACTOR_OT_live_connect(bpy.types.Operator):
     def execute(self, context):
         global _client, _timer_handle
         
+        print("[REACTOR] ── Iniciando conexión Live Link ──")
+        
         # Cargar configuración desde el JSON compartido
         config = load_live_config()
         host = config.get("host", "127.0.0.1")
         port = config.get("port", 19840)
         
-        # Si no se encuentra en el JSON, fallback a preferencias del addon
+        # Intentar fallback a preferencias del addon si no hay JSON
         try:
-            prefs = context.preferences.addons[__package__.split('.')[0]].preferences
-            if not os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "reactor_live_config.json")):
+            addon_key = __package__.split('.')[0]
+            prefs = context.preferences.addons[addon_key].preferences
+            # Solo usar preferencias si load_live_config no encontró el JSON
+            if not config.get("_found_file", False):
                 host = prefs.host
                 port = prefs.port
+                print(f"[REACTOR] Usando preferencias del addon: {host}:{port}")
         except Exception:
-            pass
+            print(f"[REACTOR] Usando configuración por defecto: {host}:{port}")
         
         context.scene.reactor_status = "Conectando..."
         context.scene.reactor_latency = "Calculando..."
+        
+        print(f"[REACTOR] Conectando WebSocket a {host}:{port}...")
         
         try:
             _client = RawWebSocketClient(
@@ -239,6 +247,7 @@ class REACTOR_OT_live_connect(bpy.types.Operator):
                 on_error=on_connection_error
             )
             _client.connect()
+            print(f"[REACTOR] ✓ WebSocket conectado a {host}:{port}")
             
             # Enviar Hello handshake
             hello = {
@@ -250,13 +259,16 @@ class REACTOR_OT_live_connect(bpy.types.Operator):
                 }
             }
             _client.send(json.dumps(hello))
+            print("[REACTOR] → Enviado Hello handshake")
             
             # Registrar timer de polling si no está registrado
             if not bpy.app.timers.is_registered(poll_reactor_queue):
                 bpy.app.timers.register(poll_reactor_queue, first_interval=0.05)
+                print("[REACTOR] ✓ Timer de polling registrado (50ms)")
                 
             self.report({'INFO'}, f"Conectando a {host}:{port}...")
         except Exception as e:
+            print(f"[REACTOR] ✗ Error de conexión: {e}")
             self.report({'ERROR'}, f"Fallo al conectar: {e}")
             context.scene.reactor_status = "Desconectado"
             context.scene.reactor_latency = "N/A"
@@ -331,13 +343,17 @@ def poll_reactor_queue():
             
             if msg_type == "HelloAck":
                 if data.get("accepted"):
+                    print("[REACTOR] ✓ HelloAck aceptado — ¡Conexión establecida!")
                     bpy.context.scene.reactor_status = "Conectado"
                     bpy.context.scene.reactor_connected = True
+                    # Sincronizar toda la escena al conectar
                     try:
                         from ..handlers import depsgraph
                         depsgraph.sync_full_scene()
                     except Exception as e:
-                        print(f"[REACTOR] Error al sincronizar escena completa al conectar: {e}")
+                        import traceback
+                        print(f"[REACTOR] ✗ Error al sincronizar escena completa al conectar: {e}")
+                        traceback.print_exc()
                 else:
                     bpy.context.scene.reactor_status = f"Rechazado: {data.get('reason')}"
                     bpy.context.scene.reactor_connected = False
@@ -371,9 +387,29 @@ def poll_reactor_queue():
     return 0.05 # Run again in 50ms
 
 
+class REACTOR_OT_live_sync(bpy.types.Operator):
+    bl_idname = "reactor.live_sync"
+    bl_label = "Sincronizar Escena"
+    bl_description = "Sincroniza todos los objetos geometricos actuales con REACTOR de forma manual"
+
+    def execute(self, context):
+        global _client
+        if not _client or not _client.connected:
+            self.report({'ERROR'}, "REACTOR no esta conectado.")
+            return {'CANCELLED'}
+        try:
+            from ..handlers import depsgraph
+            depsgraph.sync_full_scene()
+            self.report({'INFO'}, "Escena sincronizada de forma manual con éxito.")
+        except Exception as e:
+            self.report({'ERROR'}, f"Fallo al sincronizar: {e}")
+        return {'FINISHED'}
+
+
 def register():
     bpy.utils.register_class(REACTOR_OT_live_connect)
     bpy.utils.register_class(REACTOR_OT_live_disconnect)
+    bpy.utils.register_class(REACTOR_OT_live_sync)
     
     # Register scene properties
     bpy.types.Scene.reactor_connected = bpy.props.BoolProperty(name="Connected", default=False)
@@ -388,7 +424,9 @@ def unregister():
         
     bpy.utils.unregister_class(REACTOR_OT_live_connect)
     bpy.utils.unregister_class(REACTOR_OT_live_disconnect)
+    bpy.utils.unregister_class(REACTOR_OT_live_sync)
     
     del bpy.types.Scene.reactor_connected
     del bpy.types.Scene.reactor_status
     del bpy.types.Scene.reactor_latency
+

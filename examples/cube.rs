@@ -162,7 +162,7 @@ impl ReactorApp for CubeDemo {
 
         // Exit on Escape
         if ctx.input().is_key_down(KeyCode::Escape) {
-            std::process::exit(0);
+            ctx.reactor.exit_requested = true;
         }
 
         // Camera movement

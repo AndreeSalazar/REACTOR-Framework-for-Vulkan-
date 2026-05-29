@@ -1320,12 +1320,12 @@ impl Xenofall {
         if (self.state == GameState::GameOver || self.state == GameState::Victory)
             && ctx.input().is_key_just_pressed(KeyCode::Space)
         {
-            std::process::exit(0);
+            ctx.reactor.exit_requested = true;
         }
 
         // Q to quit
         if ctx.input().is_key_just_pressed(KeyCode::KeyQ) {
-            std::process::exit(0);
+            ctx.reactor.exit_requested = true;
         }
 
         // Card selection
@@ -1347,7 +1347,7 @@ impl Xenofall {
                 self.state = GameState::Playing;
             }
             if pause_result.requested_quit {
-                std::process::exit(0);
+                ctx.reactor.exit_requested = true;
             }
         }
 
@@ -2003,7 +2003,7 @@ impl ReactorApp for Xenofall {
                         return true;
                     }
                     PhysicalKey::Code(KeyCode::KeyQ) if self.state == GameState::Paused => {
-                        std::process::exit(0);
+                        ctx.reactor.exit_requested = true;
                     }
                     _ => {}
                 }
