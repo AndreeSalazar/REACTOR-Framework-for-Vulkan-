@@ -56,11 +56,8 @@ struct BlenderLive {
     /// Mapa: id de entidad (string Blender) → índice en ctx.scene.objects
     entity_map: HashMap<String, usize>,
 
-    /// Índice del cubo de demostración en la escena.
-    demo_cube_idx: Option<usize>,
-
-    /// Tiempo acumulado para la rotación demo.
-    time: f32,
+    /// Mapa: id de luz (string Blender) → índice en ctx.lighting.lights
+    light_map: HashMap<String, usize>,
 
     /// Malla de cubo compartida para las nuevas entidades creadas.
     cube_mesh: Option<Arc<reactor_vulkan::Mesh>>,
@@ -78,8 +75,7 @@ impl BlenderLive {
             bridge_handle: None,
             bridge_rx: None,
             entity_map: HashMap::new(),
-            demo_cube_idx: None,
-            time: 0.0,
+            light_map: HashMap::new(),
             cube_mesh: None,
             blender_material: None,
             runtime: None,
@@ -180,27 +176,12 @@ impl ReactorApp for BlenderLive {
         .expect("Failed to load fragment shader");
 
         // Crear materiales
-        let cube_mat = Arc::new(ctx.create_material(&vert, &frag).expect("Failed to create material"));
         let blender_mat = Arc::new(ctx.create_material(&vert, &frag).expect("Failed to create material"));
         self.blender_material = Some(blender_mat);
 
         // Crear malla
         let mesh = create_cube_mesh(ctx);
-        self.cube_mesh = Some(mesh.clone());
-
-        // Cubo de demo
-        let cube_transform = Mat4::from_translation(Vec3::new(0.0, 0.5, 0.0));
-        let idx = ctx.scene.add_object(mesh.clone(), cube_mat, cube_transform);
-        self.demo_cube_idx = Some(idx);
-        self.entity_map.insert("DemoCube".to_string(), idx);
-
-        // Suelo
-        let floor_transform = Mat4::from_scale_rotation_translation(
-            Vec3::new(10.0, 0.05, 10.0),
-            glam::Quat::IDENTITY,
-            Vec3::new(0.0, -0.025, 0.0),
-        );
-        ctx.scene.add_object(mesh, self.blender_material.clone().unwrap(), floor_transform);
+        self.cube_mesh = Some(mesh);
 
         // Cámara
         ctx.camera.position = Vec3::new(3.0, 3.0, 5.0);
@@ -243,21 +224,8 @@ impl ReactorApp for BlenderLive {
     }
 
     fn update(&mut self, ctx: &mut ReactorContext) {
-        let dt = ctx.time.delta();
-        self.time += dt;
-
         // -----------------------------------------------------------------
-        // 1. Rotación suave del cubo demo (para visualizar que está vivo)
-        // -----------------------------------------------------------------
-        if let Some(idx) = self.demo_cube_idx {
-            if let Some(obj) = ctx.scene.get_mut(idx) {
-                let rot = glam::Quat::from_rotation_y(self.time * 0.5);
-                obj.transform = Mat4::from_rotation_translation(rot, Vec3::new(0.0, 0.5, 0.0));
-            }
-        }
-
-        // -----------------------------------------------------------------
-        // 2. Procesar mensajes del bridge (no-blocking)
+        // 1. Procesar mensajes del bridge (no-blocking)
         // -----------------------------------------------------------------
         if let Some(mut rx) = self.bridge_rx.take() {
             // Drain all pending messages this frame
@@ -275,7 +243,7 @@ impl ReactorApp for BlenderLive {
         }
 
         // -----------------------------------------------------------------
-        // 3. Salir con ESC
+        // 2. Salir con ESC
         // -----------------------------------------------------------------
         if ctx.input().is_key_just_pressed(KeyCode::Escape) {
             ctx.reactor.exit_requested = true;
@@ -318,16 +286,63 @@ impl BlenderLive {
     }
 
     fn apply_transform(&mut self, ctx: &mut ReactorContext, t: TransformUpdated) {
+        let name_lower = t.id.to_lowercase();
+        
+        // ── CASO A: Sincronización de Cámara ──
+        if name_lower.contains("camera") {
+            let m = Mat4::from_cols_array(&t.matrix);
+            let pos = m.w_axis.truncate();
+            let forward = -m.z_axis.truncate().normalize();
+            
+            let yaw = forward.x.atan2(-forward.z);
+            let pitch = forward.y.asin();
+            
+            ctx.camera.position = pos;
+            ctx.camera.set_rotation(yaw, pitch);
+            
+            println!(
+                "\x1b[35m  🎥 Cámara Sincronizada → pos: (x: {:.2}, y: {:.2}, z: {:.2}), yaw: {:.2}, pitch: {:.2}\x1b[0m",
+                pos.x, pos.y, pos.z, yaw, pitch
+            );
+            return;
+        }
+
+        // ── CASO B: Sincronización de Luces Dinámicas ──
+        if name_lower.contains("light") {
+            let m = Mat4::from_cols_array(&t.matrix);
+            let pos = m.w_axis.truncate();
+            
+            if let Some(&light_idx) = self.light_map.get(&t.id) {
+                if let Some(light) = ctx.lighting.get_light_mut(light_idx) {
+                    light.position = pos;
+                    println!(
+                        "\x1b[33m  💡 Luz Actualizada '{}' → pos: (x: {:.2}, y: {:.2}, z: {:.2})\x1b[0m",
+                        t.id, pos.x, pos.y, pos.z
+                    );
+                }
+            } else {
+                let light_idx = ctx.lighting.add_light(reactor_vulkan::prelude::Light::point(
+                    pos,
+                    Vec3::new(0.0, 1.0, 1.0), // Neon cyan fill light
+                    15.0, // High intensity
+                    20.0, // Range
+                ));
+                self.light_map.insert(t.id.clone(), light_idx);
+                println!(
+                    "\x1b[32m  + Nueva Luz Sincronizada '{}' → pos: (x: {:.2}, y: {:.2}, z: {:.2})\x1b[0m",
+                    t.id, pos.x, pos.y, pos.z
+                );
+            }
+            return;
+        }
+
+        // ── CASO C: Sincronización de Geometría / Objetos MESH ──
         // Buscar si ya tenemos esta entidad mapeada
         if let Some(&idx) = self.entity_map.get(&t.id) {
             // Aplicar la nueva matriz de transformación
             if let Some(obj) = ctx.scene.get_mut(idx) {
                 let m = t.matrix;
                 obj.transform = Mat4::from_cols_array(&m);
-                // Si el cubo demo fue movido por Blender, dejar de rotarlo
-                if self.demo_cube_idx == Some(idx) {
-                    self.demo_cube_idx = None;
-                }
                 
                 // Mostrar log visual de la sincronización en tiempo real
                 let translation = obj.transform.w_axis;

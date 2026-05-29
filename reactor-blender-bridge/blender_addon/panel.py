@@ -47,15 +47,15 @@ class REACTOR_PT_live_panel(bpy.types.Panel):
         row.label(text="Estado:")
         
         if connected:
-            row.label(text=status, icon='STATUS_YES')
+            row.label(text=status, icon='CHECKBOX_HLT')
             latency_row = status_box.row()
             latency_row.label(text="Latencia:")
-            latency_row.label(text=latency, icon='TIMER')
+            latency_row.label(text=latency, icon='TIME')
         else:
             if "Conectando" in status:
-                row.label(text=status, icon='STATUS_ALERT')
+                row.label(text=status, icon='ERROR')
             else:
-                row.label(text=status, icon='STATUS_NO')
+                row.label(text=status, icon='CHECKBOX_DEHLT')
                 
         # Connection button
         layout.separator()
