@@ -33,8 +33,34 @@ def _on_depsgraph_update(scene, depsgraph):
 
     # Iterate over updates
     for update in depsgraph.updates:
+        # CASO A: Se actualizó un material directamente en Blender
+        if isinstance(update.id, bpy.types.Material):
+            mat = update.id
+            color_flat = list(mat.diffuse_color)
+            
+            # Buscar qué objetos en la escena usan este material y enviar su color
+            for scene_obj in scene.objects:
+                if scene_obj.type == 'MESH' and len(scene_obj.data.materials) > 0:
+                    if scene_obj.data.materials[0] == mat:
+                        matrix_flat = blender_to_reactor_matrix(scene_obj.matrix_world)
+                        msg = {
+                            "type": "TransformUpdated",
+                            "data": {
+                                "id": scene_obj.name,
+                                "matrix": matrix_flat,
+                                "color": color_flat
+                            }
+                        }
+                        try:
+                            client.send(json.dumps(msg))
+                            print(f"[REACTOR] 🎨 Material color actualizado para '{scene_obj.name}' → {color_flat[:3]}")
+                        except Exception:
+                            pass
+            continue
+
+        # CASO B: Se actualizó la transformación o geometría de un objeto
         obj = update.id
-        # Only process objects (not materials, meshes, etc.)
+        # Only process objects (not meshes, scenes, etc.)
         if not isinstance(obj, bpy.types.Object):
             continue
 
@@ -43,14 +69,23 @@ def _on_depsgraph_update(scene, depsgraph):
                             'CURVE', 'SURFACE', 'FONT', 'LATTICE'}:
             continue
 
-        # Check if transform actually changed (avoid redundant sends)
+        # Obtener el color del material si está disponible
+        color_flat = None
+        if obj.type == 'MESH' and len(obj.data.materials) > 0:
+            mat = obj.data.materials[0]
+            if mat is not None:
+                color_flat = list(mat.diffuse_color)
+
         obj_name = obj.name
         current_matrix = tuple(tuple(row) for row in obj.matrix_world)
+        
+        # El estado incluye la matriz y el color para forzar envío si el color cambia
+        current_state = (current_matrix, tuple(color_flat) if color_flat else None)
 
-        if obj_name in _last_transforms and _last_transforms[obj_name] == current_matrix:
+        if obj_name in _last_transforms and _last_transforms[obj_name] == current_state:
             continue
 
-        _last_transforms[obj_name] = current_matrix
+        _last_transforms[obj_name] = current_state
 
         # Convert and send
         matrix_flat = blender_to_reactor_matrix(obj.matrix_world)
@@ -62,6 +97,8 @@ def _on_depsgraph_update(scene, depsgraph):
                 "matrix": matrix_flat
             }
         }
+        if color_flat is not None:
+            msg["data"]["color"] = color_flat
 
         try:
             client.send(json.dumps(msg))
@@ -89,8 +126,16 @@ def sync_full_scene():
             continue
 
         obj_name = obj.name
+        
+        # Obtener el color del material
+        color_flat = None
+        if obj.type == 'MESH' and len(obj.data.materials) > 0:
+            mat = obj.data.materials[0]
+            if mat is not None:
+                color_flat = list(mat.diffuse_color)
+
         current_matrix = tuple(tuple(row) for row in obj.matrix_world)
-        _last_transforms[obj_name] = current_matrix
+        _last_transforms[obj_name] = (current_matrix, tuple(color_flat) if color_flat else None)
 
         matrix_flat = blender_to_reactor_matrix(obj.matrix_world)
 
@@ -101,6 +146,8 @@ def sync_full_scene():
                 "matrix": matrix_flat
             }
         }
+        if color_flat is not None:
+            msg["data"]["color"] = color_flat
 
         try:
             client.send(json.dumps(msg))

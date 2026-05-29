@@ -300,6 +300,7 @@ impl Reactor {
             exit_requested: false,
             vsync,
             camera_pos: glam::Vec3::ZERO,
+            light_pos: glam::Vec4::new(5.0, 5.0, 5.0, 1.0),
             post_process,
             pixel_intelligent: crate::core::PixelIntelligent::default(),
             msaa_samples,

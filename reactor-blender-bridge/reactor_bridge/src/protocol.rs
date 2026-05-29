@@ -107,6 +107,8 @@ pub struct Goodbye {
 pub struct TransformUpdated {
     pub id: String,
     pub matrix: [f32; 16],
+    #[serde(default)]
+    pub color: Option<[f32; 4]>,
 }
 
 // -----------------------------------------------------------------------------

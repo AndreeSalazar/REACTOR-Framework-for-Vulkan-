@@ -73,6 +73,7 @@ pub struct Reactor {
     pub exit_requested: bool,
     pub vsync: bool,
     pub camera_pos: glam::Vec3,
+    pub light_pos: glam::Vec4,
     pub post_process: crate::graphics::post_process::PostProcessPipeline,
     pub pixel_intelligent: PixelIntelligent,
 

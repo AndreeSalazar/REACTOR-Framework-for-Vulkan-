@@ -9,6 +9,7 @@ pub struct SceneObject {
     pub transform: Mat4,
     pub visible: bool,
     pub name: Option<String>,
+    pub color: glam::Vec4,
 }
 
 impl SceneObject {
@@ -19,6 +20,7 @@ impl SceneObject {
             transform,
             visible: true,
             name: None,
+            color: glam::Vec4::ONE,
         }
     }
 

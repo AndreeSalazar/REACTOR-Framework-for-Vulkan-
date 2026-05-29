@@ -164,14 +164,14 @@ impl ReactorApp for BlenderLive {
             Vec3::new(1.0, 0.95, 0.85),
         );
 
-        // Cargar shaders base
+        // Cargar shaders base profesionales y neutros para Live Link
         let vert = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
-            "../shaders/vert.spv"
+            "../shaders/blender_live_vert.spv"
         )))
         .expect("Failed to load vertex shader");
 
         let frag = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
-            "../shaders/frag.spv"
+            "../shaders/blender_live_frag.spv"
         )))
         .expect("Failed to load fragment shader");
 
@@ -310,11 +310,14 @@ impl BlenderLive {
         // ── CASO B: Sincronización de Luces Dinámicas ──
         if name_lower.contains("light") {
             let m = Mat4::from_cols_array(&t.matrix);
-            let pos = m.w_axis.truncate();
+            let pos = m.w_axis;
+            
+            // Actualizar la posición de la luz en el reactor para los push constants
+            ctx.reactor.light_pos = pos;
             
             if let Some(&light_idx) = self.light_map.get(&t.id) {
                 if let Some(light) = ctx.lighting.get_light_mut(light_idx) {
-                    light.position = pos;
+                    light.position = pos.truncate();
                     println!(
                         "\x1b[33m  💡 Luz Actualizada '{}' → pos: (x: {:.2}, y: {:.2}, z: {:.2})\x1b[0m",
                         t.id, pos.x, pos.y, pos.z
@@ -322,10 +325,10 @@ impl BlenderLive {
                 }
             } else {
                 let light_idx = ctx.lighting.add_light(reactor_vulkan::prelude::Light::point(
-                    pos,
-                    Vec3::new(0.0, 1.0, 1.0), // Neon cyan fill light
+                    pos.truncate(),
+                    Vec3::new(1.0, 1.0, 1.0), // Neutral white light
                     15.0, // High intensity
-                    20.0, // Range
+                    30.0, // Range
                 ));
                 self.light_map.insert(t.id.clone(), light_idx);
                 println!(
@@ -344,6 +347,15 @@ impl BlenderLive {
                 let m = t.matrix;
                 obj.transform = Mat4::from_cols_array(&m);
                 
+                // Si viene un color de material, aplicarlo al objeto de la escena
+                if let Some(col) = t.color {
+                    obj.color = glam::Vec4::from_slice(&col);
+                    println!(
+                        "\x1b[36m  🎨 Color de Material Actualizado para '{}' → (r: {:.2}, g: {:.2}, b: {:.2}, a: {:.2})\x1b[0m",
+                        t.id, col[0], col[1], col[2], col[3]
+                    );
+                }
+                
                 // Mostrar log visual de la sincronización en tiempo real
                 let translation = obj.transform.w_axis;
                 println!(
@@ -357,7 +369,15 @@ impl BlenderLive {
             let mat = self.blender_material.clone().expect("blender material not initialized");
             let m = t.matrix;
             let transform = Mat4::from_cols_array(&m);
-            let idx = ctx.scene.add_object(mesh, mat, transform);
+            let mut obj = SceneObject::new(mesh, mat, transform);
+            
+            // Si viene un color de material, aplicarlo al objeto de la escena
+            if let Some(col) = t.color {
+                obj.color = glam::Vec4::from_slice(&col);
+            }
+            
+            let idx = ctx.scene.objects.len();
+            ctx.scene.objects.push(obj);
             self.entity_map.insert(t.id.clone(), idx);
             
             let translation = transform.w_axis;
