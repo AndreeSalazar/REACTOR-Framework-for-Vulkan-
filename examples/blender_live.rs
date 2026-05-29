@@ -47,6 +47,9 @@ struct BlenderLive {
 
     /// Material por defecto para los objetos sincronizados desde Blender.
     blender_material: Option<Arc<reactor_vulkan::Material>>,
+
+    /// Runtime de Tokio para el servidor de WebSocket.
+    runtime: Option<tokio::runtime::Runtime>,
 }
 
 impl BlenderLive {
@@ -59,7 +62,21 @@ impl BlenderLive {
             time: 0.0,
             cube_mesh: None,
             blender_material: None,
+            runtime: None,
         }
+    }
+
+    fn cleanup(&mut self) {
+        println!("  ➔ Cerrando servidor bridge y hilos de fondo cleanly...");
+        if let Some(handle) = self.bridge_handle.take() {
+            if let Some(ref rt) = self.runtime {
+                rt.block_on(async {
+                    handle.shutdown().await;
+                });
+            }
+        }
+        self.runtime = None;
+        println!("  ✓ Servidor e hilos cerrados cleanly.");
     }
 }
 
@@ -193,8 +210,7 @@ impl ReactorApp for BlenderLive {
                     h.addr
                 );
                 self.bridge_handle = Some(h);
-                // Leak the runtime so it stays alive for the lifetime of the app
-                std::mem::forget(rt);
+                self.runtime = Some(rt);
             }
             Err(e) => {
                 eprintln!("\x1b[31m  ✗ Error arrancando bridge: {e}\x1b[0m");
@@ -238,8 +254,13 @@ impl ReactorApp for BlenderLive {
         // 3. Salir con ESC
         // -----------------------------------------------------------------
         if ctx.input().is_key_just_pressed(KeyCode::Escape) {
+            self.cleanup();
             std::process::exit(0);
         }
+    }
+
+    fn on_exit(&mut self, _ctx: &mut ReactorContext) {
+        self.cleanup();
     }
 }
 
