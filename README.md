@@ -844,6 +844,304 @@ de 6 meses sin output).
 
 ---
 
+## 🔗 REACTOR ⇄ Blender Live Link — Construir el juego en tiempo real
+
+**Visión:** abrir Blender, modelar / iluminar / animar, y que **REACTOR muestre
+el resultado al instante** en una ventana paralela — sin exportar, sin reiniciar,
+sin tocar archivos. Cuando guardas en Blender, el juego se actualiza vivo.
+El binomio **Blender + REACTOR = un nuevo juego construido más rápido**.
+
+```diagram
+╭─────────────────────────╮   delta sync (TCP/WS)  ╭──────────────────────────╮
+│  BLENDER 4.x            │ ◀────────────────────▶ │  REACTOR runtime         │
+│  ─ Addon Python         │   JSON / MessagePack   │  ─ Bridge server (Rust)  │
+│  ─ Panel "REACTOR Live" │   60 Hz tick           │  ─ Live scene mutator    │
+│  ─ Operadores Bake/Push │                        │  ─ Hot-reload assets     │
+│  ─ Preview camera link  │   eventos bidireccional│  ─ Picking back-channel  │
+╰─────────┬───────────────╯                        ╰─────────┬────────────────╯
+          │                                                  │
+          ▼                                                  ▼
+   tu .blend (verdad)                              tu juego corriendo
+          │                                                  │
+          ╰─────────────── un solo .reactor project ─────────╯
+```
+
+> **Carpeta nueva propuesta:** [`reactor-blender-bridge/`](file:///c:/Users/andre/OneDrive/Desktop/REACTOR-Framework-for-Vulkan-/reactor-blender-bridge)
+> en la raíz del repo, separada de `src/` para que sea instalable como add-on
+> de Blender independiente y cocinable por el motor.
+
+---
+
+### 📁 Estructura propuesta de la carpeta
+
+```text
+reactor-blender-bridge/
+├── README.md                        # Guía de instalación + flujo de uso
+├── blender_addon/                   # ── LADO BLENDER (Python) ───────────
+│   ├── __init__.py                  # bl_info + register_module
+│   ├── manifest.toml                # Manifest Blender 4.2+ (extensions)
+│   ├── prefs.py                     # Preferencias addon (puerto, host, modo)
+│   ├── panel.py                     # Panel "REACTOR Live" en N-panel del 3D View
+│   ├── operators/
+│   │   ├── connect.py               # Conectar / desconectar al runtime
+│   │   ├── push_scene.py            # Empujar escena entera (cold start)
+│   │   ├── bake_assets.py           # Cocinar texturas/meshes a cooked_assets/
+│   │   ├── play_in_reactor.py       # Lanzar REACTOR runtime y empezar live
+│   │   ├── pick_entity.py           # Click en viewport REACTOR → seleccionar en Blender
+│   │   └── snapshot.py              # Capturar frame REACTOR a Image Editor
+│   ├── handlers/
+│   │   ├── depsgraph.py             # depsgraph_update_post → delta
+│   │   ├── frame_change.py          # frame_change_post → animation tick
+│   │   ├── save.py                  # save_post → cocinar assets cambiados
+│   │   └── undo_redo.py             # rebuild state al deshacer
+│   ├── encoders/
+│   │   ├── mesh.py                  # bpy.Mesh → vertices/indices/uv/tangent
+│   │   ├── material.py              # bpy.Material PBR → REACTOR material
+│   │   ├── light.py                 # bpy.Light → Light
+│   │   ├── camera.py                # bpy.Camera → Camera
+│   │   ├── transform.py             # matrix_world → Mat4 (Z-up → Y-up convert)
+│   │   ├── animation.py             # NLA tracks / actions → AnimationClip
+│   │   ├── armature.py              # bones → Skeleton + skin weights
+│   │   ├── shape_keys.py            # blendshapes / morph targets
+│   │   ├── texture.py               # imágenes → DDS/KTX2/PNG (cooked)
+│   │   └── collection.py            # bpy.Collection → ECS hierarchy
+│   ├── transport/
+│   │   ├── websocket.py             # cliente WS (asyncio)
+│   │   ├── tcp_socket.py            # cliente TCP raw (fallback)
+│   │   ├── shared_memory.py         # mmap para mesh data grande
+│   │   └── protocol.py              # serialización delta (msgpack)
+│   └── ui/
+│       ├── icons.py                 # iconos REACTOR
+│       └── status_bar.py            # estado conexión en status bar
+│
+├── reactor_bridge/                  # ── LADO REACTOR (Rust crate) ───────
+│   ├── Cargo.toml                   # Crate `reactor-bridge`
+│   └── src/
+│       ├── lib.rs                   # Re-exports + ReactorBridge plugin
+│       ├── server.rs                # tokio TCP/WS server (puerto 19840)
+│       ├── protocol.rs              # tipos compartidos (serde + msgpack)
+│       ├── live_scene.rs            # Apply delta → ctx.scene mutator
+│       ├── asset_pipe.rs            # Recibir texturas/meshes, hot-swap
+│       ├── picking.rs               # Mouse pick → enviar entity_id de vuelta
+│       ├── preview_camera.rs        # Sync cámara Blender ↔ REACTOR
+│       ├── recorder.rs              # Grabar timeline para "scrub" en Blender
+│       └── coord_convert.rs         # Z-up ⇄ Y-up, handedness
+│
+├── proto/                           # ── PROTOCOLO COMÚN (cross-lang) ────
+│   ├── messages.fbs                 # FlatBuffers schema (opcional)
+│   ├── messages.proto               # Protobuf alternativa
+│   └── README.md                    # Especificación de mensajes
+│
+├── examples/
+│   ├── basic_sync.blend             # Escena demo (cubo + luz + cámara)
+│   ├── animated_character.blend     # Char con armature + actions
+│   ├── pbr_materials.blend          # Demo materiales
+│   └── live_lighting.blend          # Demo iluminación en vivo
+│
+└── tests/
+    ├── test_mesh_encoding.py        # PyTest del lado Blender
+    └── test_live_scene.rs           # cargo test del lado Rust
+```
+
+---
+
+### 🎯 Hoja de ruta — 8 fases con tareas detalladas
+
+#### 🔧 FASE 0 — Cimientos del protocolo (semana 1)
+
+- [ ] Diseñar el **transport** definitivo (recomendado: WebSocket sobre `tokio-tungstenite` + msgpack-rs en Rust; `websockets` + `msgpack` en Python).
+- [ ] Definir el **enum de mensajes** en `proto/messages.fbs` o `protocol.rs`:
+   - `Handshake { version, capabilities[] }`
+   - `Heartbeat { ts }`
+   - `EntityCreated { id, kind, parent }`
+   - `EntityRemoved { id }`
+   - `TransformUpdated { id, matrix4x4 }`
+   - `MeshUploaded { id, vertices, indices, attributes[] }`
+   - `MaterialUpdated { id, pbr_params }`
+   - `LightUpdated { id, light_data }`
+   - `CameraUpdated { id, projection, view }`
+   - `TextureUploaded { id, format, mip_chain }`
+   - `AnimationKeyframe { rig_id, time, pose }`
+   - `PickRequest { screen_x, screen_y }` → `PickResponse { entity_id }`
+   - `ScenePushFull` / `ScenePushDelta`
+- [ ] Versionado del protocolo (`PROTOCOL_VERSION = 1`) con backward compat.
+- [ ] Logs estructurados a ambos lados (tracing en Rust, `bpy.app.debug`).
+- [ ] **Test de ping/pong** Blender ↔ REACTOR midiendo latencia.
+
+#### 🐍 FASE 1 — Addon Blender mínimo (semana 2)
+
+- [ ] Esqueleto del addon Blender 4.2+ con `manifest.toml` (extensions).
+- [ ] Panel "REACTOR Live" en N-panel del 3D Viewport con: botón Connect, IP, puerto, estado.
+- [ ] Operador `reactor.connect` que abre WebSocket con handshake.
+- [ ] Operador `reactor.push_scene` que serializa la escena actual (mesh + transform + cámara) y la empuja.
+- [ ] Operador `reactor.disconnect` con cleanup limpio.
+- [ ] Status bar global mostrando "REACTOR: connected · 60 Hz · 12 entities".
+
+#### 🦀 FASE 2 — Bridge server REACTOR (semana 2-3)
+
+- [ ] Crate `reactor-bridge` en `reactor-blender-bridge/reactor_bridge/`.
+- [ ] `ReactorBridge` como **plugin opcional**: si está activo, añade un `tokio` runtime y server WS al lado del main loop Vulkan.
+- [ ] **`live_scene.rs`**: aplica un mensaje delta a `ReactorContext::scene` de forma thread-safe (canal `mpsc` consumido en `update()`).
+- [ ] Mensaje `EntityCreated → spawn_cube/spawn_gltf_smart`.
+- [ ] Mensaje `TransformUpdated → ctx.set_transform`.
+- [ ] Mensaje `LightUpdated → lighting.add_light / mutate`.
+- [ ] Manejo de errores: si Blender se desconecta, REACTOR sigue corriendo.
+
+#### 🎨 FASE 3 — Sincronización de geometría y materiales (semana 3-4)
+
+- [ ] **Encoder de mesh** Python: extraer `vertices, normals, uvs, tangents, indices` de `bpy.Mesh.calc_loop_triangles()`.
+- [ ] Compresión **Draco** opcional para meshes pesadas.
+- [ ] **Encoder de material PBR**: leer el shader Principled BSDF de Blender → base_color, metallic, roughness, emissive, normal map, alpha mode.
+- [ ] **Encoder de imagen**: detectar texturas, exportar a PNG/KTX2 en directorio temporal, enviar handle.
+- [ ] **Hot-swap de assets** en REACTOR: cuando llega `TextureUploaded`, re-bind descriptor sin recrear pipeline.
+- [ ] **Conversión de coordenadas**: Blender es Z-up RH, REACTOR es Y-up RH → matriz de cambio de base en `coord_convert.rs`.
+- [ ] **Auto-bake de normal maps** si el material usa nodos procedurales no PBR.
+- [ ] Test E2E: modificar color de un material en Blender → se ve en REACTOR en < 100 ms.
+
+#### 🦴 FASE 4 — Animaciones y rigs (semana 4-5)
+
+- [ ] **Encoder de armature**: extraer jerarquía de huesos + bind pose + skin weights por vértice (4 huesos/vert).
+- [ ] **Encoder de actions**: muestrear cada F-Curve a 30/60 fps → keyframes Vec3/Quat.
+- [ ] Mensaje `AnimationClipUploaded` con todas las pose tracks.
+- [ ] **Shape keys / blendshapes**: enviar los morph targets como `MorphTarget`.
+- [ ] Sync de **frame_current**: cuando el usuario hace scrub en el timeline de Blender, REACTOR pinta ese frame exacto.
+- [ ] Botón "**Play in REACTOR**" que lanza la animación a velocidad real.
+- [ ] Soporte de **NLA tracks** (stripes de animaciones combinables).
+
+#### 💡 FASE 5 — Iluminación y cámaras en vivo (semana 5)
+
+- [ ] **Encoder de luces** Blender (Sun / Point / Spot / Area) → `Light::*` REACTOR.
+- [ ] Mover una luz en Blender → REACTOR re-ilumina en el siguiente frame.
+- [ ] **Sync de world background**: HDRI / sky color de Blender → IBL en REACTOR.
+- [ ] **Encoder de cámaras**: Blender camera → `Camera::perspective` con FOV/clip planes.
+- [ ] **Preview camera lock**: tu cámara de Blender = cámara de REACTOR en tiempo real.
+- [ ] **Toggle "Game Camera vs Editor Camera"** en el panel.
+
+#### 🖱️ FASE 6 — Bidireccional: REACTOR → Blender (semana 6)
+
+- [ ] **Picking back-channel**: click en la ventana de REACTOR → REACTOR raycast → envía `PickResponse { entity_id }` → Blender selecciona el objeto correspondiente.
+- [ ] **Gizmos en runtime**: arrastrar un objeto en el viewport de REACTOR con un gizmo → enviar nueva transform a Blender → `bpy.object.matrix_world = ...`.
+- [ ] **Recorder de gameplay**: grabar las transforms del jugador en REACTOR → importar a Blender como F-Curve (cinemática automática).
+- [ ] **Screenshot operator**: capturar frame REACTOR → enviar como imagen al Image Editor de Blender.
+- [ ] **Runtime stats panel**: FPS, draw calls, VRAM de REACTOR visibles en Blender.
+
+#### ⚙️ FASE 7 — Asset cooker integrado (semana 7)
+
+- [ ] Operador "**Cook & Push**" en Blender:
+  1. Aplica modificadores destructivamente.
+  2. Triangula meshes.
+  3. Genera mipmaps de texturas.
+  4. Empaqueta todo en `cooked_assets/<scene_name>.reactor`.
+  5. Empuja al runtime.
+- [ ] Watcher de `.blend` → re-cook automático al guardar (opcional).
+- [ ] **Cache inteligente**: solo re-cook lo que cambió (hash de meshes/materials).
+- [ ] **Progress bar** en Blender durante el cook.
+- [ ] **Deploy mode**: cook final + empaquetado para distribución.
+
+#### 🚀 FASE 8 — Productividad y QoL (semana 8+)
+
+- [ ] **Live scripting**: editar `gameplay.lua` o `gameplay.rhai` en el text editor de Blender, recargar en REACTOR sin reiniciar.
+- [ ] **Console interactiva**: enviar comandos REPL desde Blender al runtime ("teletransport jugador a 0,5,0").
+- [ ] **Profiler integrado**: ver el GPU/CPU profiler de REACTOR como gráfico dentro de Blender.
+- [ ] **Multi-cliente**: dos artistas conectados al mismo runtime para playtesting cooperativo.
+- [ ] **Record / replay** de sesiones de live sync (debuggable).
+- [ ] **VR preview**: si el usuario tiene VR, ver el juego en HMD desde Blender directamente.
+- [ ] **AI assist**: usar IA local para auto-rig, auto-UV, auto-LOD durante el cook.
+- [ ] **Export final**: botón "Build Standalone" que compila el juego cocinado a `.exe` / `.app` / `.AppImage`.
+
+---
+
+### 🧪 Sub-sistemas con tareas atómicas
+
+#### Transport layer (escoger UNO o varios)
+
+- [ ] **WebSocket** (`tokio-tungstenite` + `websockets`): cross-platform, debug fácil con DevTools, latencia ~1 ms en localhost. **← RECOMENDADO**.
+- [ ] **TCP raw** (`std::net::TcpStream` + `socket`): mínimo overhead, requiere framing manual.
+- [ ] **Named pipes / Unix sockets**: latencia más baja, sólo localhost.
+- [ ] **Shared memory** (`mmap` + ringbuffer): para meshes pesadas (> 10 MB).
+- [ ] **gRPC** (`tonic`): si quieres tipado fuerte y streaming oficial.
+- [ ] **Cap'n Proto / FlatBuffers**: zero-copy parsing.
+
+#### Encoder reglas (Blender → REACTOR)
+
+- [ ] Axis convention: Blender `Z-up RH` → REACTOR `Y-up RH` (mat4 swap).
+- [ ] Units: Blender metros → REACTOR metros (1:1).
+- [ ] Color space: Blender Linear → REACTOR Linear (sRGB conv en shader).
+- [ ] Mesh: triangulate, generar tangents si faltan (MikkTSpace).
+- [ ] UVs: flip V si tu texture loader lo necesita.
+- [ ] Animation: tiempo Blender (frames @ scene.fps) → segundos REACTOR.
+- [ ] Bone weights: normalizar suma=1, top-4 weights, descartar resto.
+
+#### Conflict resolution
+
+- [ ] Estrategia "Blender es la verdad" (cambios en REACTOR no persisten).
+- [ ] Estrategia "Last writer wins" con timestamps.
+- [ ] Estrategia "CRDT" para edición multi-usuario (avanzado).
+
+#### Performance budgets
+
+- [ ] Delta push **< 16 ms** end-to-end para mantener 60 fps en Blender.
+- [ ] Mesh upload máx **5 MB/frame** (chunked si más).
+- [ ] Texture upload **async background** (no bloquea el frame).
+- [ ] Throttle: si Blender está editando un slider, agrupar updates a 30 Hz.
+- [ ] Bandwidth target: **< 100 KB/s** en idle, **< 10 MB/s** en edición activa.
+
+#### Seguridad y robustez
+
+- [ ] Sólo `localhost` por defecto (sin exposición red).
+- [ ] Token opcional `REACTOR_BRIDGE_TOKEN` env var para autenticar.
+- [ ] Reconnect automático si REACTOR muere y se relanza.
+- [ ] Graceful degradation: si llega un mensaje desconocido, log y continuar.
+- [ ] Validación de IDs (evitar `unwrap()` con entity_id ajeno).
+
+#### Testing
+
+- [ ] **Unit Python**: encoders de mesh/material (PyTest + fixtures `.blend`).
+- [ ] **Unit Rust**: `cargo test` del `live_scene::apply_delta`.
+- [ ] **Integration**: spawn Blender headless (`blender -b -P test.py`) + REACTOR runtime + script de assertions.
+- [ ] **Latency benchmark**: medir tiempo entre `obj.location.x = 5` y `set_transform` en REACTOR.
+- [ ] **Fuzz protocol**: enviar mensajes malformados, REACTOR no debe panic.
+
+#### Documentación
+
+- [ ] [README de instalación](file:///c:/Users/andre/OneDrive/Desktop/REACTOR-Framework-for-Vulkan-/reactor-blender-bridge) con GIFs.
+- [ ] Tutorial "**De Blender vacío a juego corriendo en 5 minutos**".
+- [ ] Referencia de cada mensaje del protocolo.
+- [ ] Recetas: "Sincronizar luces", "Animar un personaje", "Sustituir material en vivo".
+- [ ] Vídeo de 3 min mostrando el flujo completo.
+
+---
+
+### 💡 Ideas extra (stretch goals para diferenciarse)
+
+- [ ] **REACTOR Geometry Nodes**: poder usar nodos de Blender que generan geometría procedural y se evaluen en GPU vía compute shader REACTOR.
+- [ ] **Shader Graph bidireccional**: el editor de nodos Shading de Blender genera GLSL/SPIR-V para REACTOR (Principled BSDF → bindless PBR material).
+- [ ] **Bake de iluminación a probes**: usar Cycles para bakear DDGI probes y enviarlos a REACTOR como cubemaps.
+- [ ] **Live debugging visual**: render gizmos REACTOR (colliders, raycast lines, ECS bounds) en el viewport de Blender.
+- [ ] **Asset Browser bridge**: el Asset Browser de Blender muestra los `cooked_assets/` con thumbnails generados por REACTOR.
+- [ ] **VSE (Video Sequence Editor) cinemáticas**: grabar gameplay en REACTOR → traer la timeline al VSE para edición no-lineal.
+- [ ] **Storyboard mode**: definir secuencias en Blender Grease Pencil → REACTOR las anima.
+- [ ] **Networking de prueba**: dos instancias REACTOR conectadas para playtesting LAN, controladas desde una sola Blender.
+- [ ] **Live scripting con Rhai/Lua**: escribir gameplay en el text editor de Blender, REACTOR lo hot-reload.
+- [ ] **Profile presets**: Cinematic / Mobile / VR / Lowend que reconfiguran REACTOR vía un dropdown.
+- [ ] **DCC bridge generalizado**: misma arquitectura para integrar Maya, Houdini, ZBrush, Substance Painter.
+- [ ] **Web preview**: además de la ventana nativa, un viewer WebGPU en el navegador que recibe el mismo stream.
+- [ ] **Recorder → glTF**: exportar todo lo enviado en una sesión como un glTF estático para distribución.
+- [ ] **AI co-pilot in Blender**: panel con LLM que sugiere mejoras de gameplay/iluminación viendo el stream.
+- [ ] **Marketplace de presets**: comunidad sube presets de iluminación / shaders / setups que se aplican con un click.
+
+---
+
+### 🏁 Definition of Done — Cuándo está listo
+
+✅ **MVP listo si:** crear un cubo en Blender + asignarle material rojo + añadir un sun light → aparecen en REACTOR con menos de 100 ms de latencia, sin reiniciar nada.
+
+✅ **v1.0 listo si:** un usuario abre Blender, sigue el tutorial de 5 minutos, y termina con un personaje 3D iluminado y animado corriendo en REACTOR sin tocar la línea de comandos.
+
+✅ **v2.0 listo si:** un equipo de 2 artistas + 1 programador edita simultáneamente desde Blender + VS Code, juega en REACTOR, y publica un build standalone con el botón "Deploy".
+
+---
+
 ## 📖 Documentación
 
 | Documento                                  | Descripción                                       |
