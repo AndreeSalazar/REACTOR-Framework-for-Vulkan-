@@ -82,6 +82,35 @@ $$T_{Reactor} = M_{B\to R} \cdot T_{Blender} \cdot M_{B\to R}^{-1}$$
 
 ---
 
+## 📄 Archivo de Configuración Compartido (`reactor_live_config.json`)
+
+Para evitar tener que configurar manualmente las direcciones de red y puertos cada vez que instalas el addon o ejecutas el motor, REACTOR y Blender ahora soportan un archivo JSON de configuración compartido en la raíz del proyecto. El addon buscará este archivo automáticamente hacia arriba en la estructura de directorios y cargará estos valores al conectar.
+
+Crea un archivo llamado `reactor_live_config.json` en la raíz de tu proyecto con la siguiente estructura:
+
+```json
+{
+  "host": "127.0.0.1",
+  "port": 19840,
+  "auto_connect": true,
+  "sync_transforms": true,
+  "sync_cameras": true,
+  "sync_lights": true,
+  "log_level": "info"
+}
+```
+
+---
+
+## 🔄 Sincronización Completa de la Escena (Full Scene Sync)
+
+Una de las grandes mejoras añadidas es la **Sincronización Completa de la Escena**. 
+En lugar de tener que mover manualmente cada objeto en Blender para que aparezca por primera vez en REACTOR, en el momento en que se pulsa **"Conectar a REACTOR"**, el addon recorre automáticamente toda la escena activa de Blender y envía la transformación inicial de todos los objetos geométricos al motor.
+
+Esto garantiza que al iniciar la sincronización, REACTOR y Blender reflejen exactamente el mismo estado 3D desde el primer milisegundo.
+
+---
+
 ## 🔗 Estructura del Addon y Protocolo WebSocket
 
 El puente funciona sobre un protocolo WebSocket minimalista de bajísima sobrecarga. Los mensajes utilizan el formato **JSON** estructurado de la siguiente forma:
@@ -103,7 +132,8 @@ Se envía de forma automática cada vez que modificas cualquier objeto geométri
   }
 }
 ```
-*(Donde `matrix` es un array plano de 16 floats en formato Row-Major que representa la matriz de transformación mundial convertida).*
+*(Donde `matrix` es un array plano de 16 floats en formato **Column-Major** que representa la matriz de transformación mundial convertida, lista para ser leída por `glam::Mat4` y Vulkan sin coste de transposición).*
+
 
 ---
 

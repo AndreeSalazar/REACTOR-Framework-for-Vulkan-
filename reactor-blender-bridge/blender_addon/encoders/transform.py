@@ -36,24 +36,24 @@ _SWAP_INV = _SWAP.inverted()
 
 def blender_to_reactor_matrix(matrix_world):
     """Convierte una matrix_world de Blender (4x4, Z-Up RH)
-    a una matriz REACTOR (4x4, Y-Up RH) en formato row-major flat list [16 floats].
+    a una matriz REACTOR (4x4, Y-Up RH) en formato column-major flat list [16 floats]
+    para ser leída directamente por glam::Mat4::from_cols_array en Rust.
 
     Args:
         matrix_world: bpy.types.Object.matrix_world (mathutils.Matrix 4x4)
 
     Returns:
-        list[float]: 16 floats en row-major order para enviar por WebSocket.
+        list[float]: 16 floats en column-major order para enviar por WebSocket.
     """
-    # T_R = M · T_B · M⁻¹
+    # T_R = M_B->R · T_B · M_B->R⁻¹
     converted = _SWAP @ matrix_world @ _SWAP_INV
 
-    # Blender stores matrices column-major internally.
-    # REACTOR expects row-major, so we transpose before flattening.
-    row_major = converted.transposed()
+    # Aplanamos la matriz de forma explícita columna por columna (column-major)
+    # que es el formato nativo esperado por glam y Vulkan.
     flat = []
-    for row in range(4):
-        for col in range(4):
-            flat.append(row_major[row][col])
+    for col in range(4):
+        for row in range(4):
+            flat.append(converted[row][col])
     return flat
 
 

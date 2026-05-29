@@ -25,6 +25,26 @@ use winit::keyboard::KeyCode;
 // Re-use reactor-bridge via dev-dependency
 use reactor_bridge::{BridgeConfig, BridgeHandle, Message, TransformUpdated};
 
+#[derive(serde::Deserialize)]
+struct LiveConfig {
+    host: String,
+    port: u16,
+}
+
+fn load_live_config() -> LiveConfig {
+    if let Ok(content) = std::fs::read_to_string("reactor_live_config.json") {
+        if let Ok(cfg) = serde_json::from_str::<LiveConfig>(&content) {
+            println!("\x1b[32m  ✓ Cargada configuración desde reactor_live_config.json\x1b[0m");
+            return cfg;
+        }
+    }
+    // Fallback
+    LiveConfig {
+        host: "127.0.0.1".to_string(),
+        port: 19840,
+    }
+}
+
 /// Estado de la app de Live Link.
 struct BlenderLive {
     /// Handle del servidor WebSocket (para shutdown limpio).
@@ -192,7 +212,11 @@ impl ReactorApp for BlenderLive {
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Message>();
         self.bridge_rx = Some(rx);
 
-        let cfg = BridgeConfig::default();
+        let live_cfg = load_live_config();
+        let cfg = BridgeConfig {
+            host: live_cfg.host,
+            port: live_cfg.port,
+        };
         let rt = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(1)
             .enable_all()
@@ -305,6 +329,13 @@ impl BlenderLive {
                 if self.demo_cube_idx == Some(idx) {
                     self.demo_cube_idx = None;
                 }
+                
+                // Mostrar log visual de la sincronización en tiempo real
+                let translation = obj.transform.w_axis;
+                println!(
+                    "\x1b[36m  ↺ Sincronizado '{}' → pos: (x: {:.2}, y: {:.2}, z: {:.2})\x1b[0m",
+                    t.id, translation.x, translation.y, translation.z
+                );
             }
         } else {
             // Entidad nueva — crear un cubo placeholder
@@ -314,9 +345,11 @@ impl BlenderLive {
             let transform = Mat4::from_cols_array(&m);
             let idx = ctx.scene.add_object(mesh, mat, transform);
             self.entity_map.insert(t.id.clone(), idx);
+            
+            let translation = transform.w_axis;
             println!(
-                "\x1b[32m  + Entidad nueva '{}' → scene[{}]\x1b[0m",
-                t.id, idx
+                "\x1b[32m  + Nueva Entidad Sincronizada '{}' → scene[{}] pos: (x: {:.2}, y: {:.2}, z: {:.2})\x1b[0m",
+                t.id, idx, translation.x, translation.y, translation.z
             );
         }
     }

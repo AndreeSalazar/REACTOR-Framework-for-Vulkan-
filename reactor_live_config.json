@@ -1,0 +1,9 @@
+{
+  "host": "127.0.0.1",
+  "port": 19840,
+  "auto_connect": true,
+  "sync_transforms": true,
+  "sync_cameras": true,
+  "sync_lights": true,
+  "log_level": "info"
+}

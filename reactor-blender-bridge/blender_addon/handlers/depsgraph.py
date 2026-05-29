@@ -69,6 +69,47 @@ def _on_depsgraph_update(scene, depsgraph):
             print(f"[REACTOR] Error sending TransformUpdated for '{obj_name}': {e}")
 
 
+def sync_full_scene():
+    """Sincroniza todos los objetos geométricos de la escena actual con REACTOR."""
+    client = _get_client()
+    if client is None or not client.connected:
+        return
+
+    # Import encoder lazily to avoid import errors outside Blender
+    from ..encoders.transform import blender_to_reactor_matrix
+
+    print("[REACTOR] Sincronizando escena completa con REACTOR...")
+    count = 0
+    # Iterar por todos los objetos de la escena
+    for obj in bpy.context.scene.objects:
+        # Saltar objetos no geométricos o que no nos interesen
+        if obj.type not in {'MESH', 'EMPTY', 'LIGHT', 'CAMERA', 'ARMATURE',
+                            'CURVE', 'SURFACE', 'FONT', 'LATTICE'}:
+            continue
+
+        obj_name = obj.name
+        current_matrix = tuple(tuple(row) for row in obj.matrix_world)
+        _last_transforms[obj_name] = current_matrix
+
+        matrix_flat = blender_to_reactor_matrix(obj.matrix_world)
+
+        msg = {
+            "type": "TransformUpdated",
+            "data": {
+                "id": obj_name,
+                "matrix": matrix_flat
+            }
+        }
+
+        try:
+            client.send(json.dumps(msg))
+            count += 1
+        except Exception as e:
+            print(f"[REACTOR] Error enviando sync inicial para '{obj_name}': {e}")
+
+    print(f"[REACTOR] Sincronizados {count} objetos iniciales con el motor.")
+
+
 def register():
     """Registra el handler de depsgraph en Blender."""
     bpy.app.handlers.depsgraph_update_post.append(_on_depsgraph_update)

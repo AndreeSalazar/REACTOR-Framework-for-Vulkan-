@@ -173,6 +173,39 @@ def on_connection_error(err):
     _msg_queue.put({"type": "_InternalError", "msg": str(err)})
 
 
+def load_live_config():
+    import os
+    import json
+    
+    # Valores por defecto
+    config = {
+        "host": "127.0.0.1",
+        "port": 19840,
+        "auto_connect": True,
+        "sync_transforms": True,
+        "sync_cameras": True,
+        "sync_lights": True,
+        "log_level": "info"
+    }
+    
+    # Buscar hacia arriba desde connect.py
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    for _ in range(5):
+        config_path = os.path.join(current_dir, "reactor_live_config.json")
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    file_config = json.load(f)
+                    config.update(file_config)
+                print(f"[REACTOR] Cargada configuracion de {config_path}")
+                break
+            except Exception as e:
+                print(f"[REACTOR] Error leyendo archivo de config JSON: {e}")
+        current_dir = os.path.dirname(current_dir)
+        
+    return config
+
+
 class REACTOR_OT_live_connect(bpy.types.Operator):
     bl_idname = "reactor.live_connect"
     bl_label = "Conectar a REACTOR"
@@ -181,10 +214,19 @@ class REACTOR_OT_live_connect(bpy.types.Operator):
     def execute(self, context):
         global _client, _timer_handle
         
-        # Get host and port from preferences
-        prefs = context.preferences.addons[__package__.split('.')[0]].preferences
-        host = prefs.host
-        port = prefs.port
+        # Cargar configuración desde el JSON compartido
+        config = load_live_config()
+        host = config.get("host", "127.0.0.1")
+        port = config.get("port", 19840)
+        
+        # Si no se encuentra en el JSON, fallback a preferencias del addon
+        try:
+            prefs = context.preferences.addons[__package__.split('.')[0]].preferences
+            if not os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "reactor_live_config.json")):
+                host = prefs.host
+                port = prefs.port
+        except Exception:
+            pass
         
         context.scene.reactor_status = "Conectando..."
         context.scene.reactor_latency = "Calculando..."
@@ -198,18 +240,18 @@ class REACTOR_OT_live_connect(bpy.types.Operator):
             )
             _client.connect()
             
-            # Send Hello handshake
+            # Enviar Hello handshake
             hello = {
                 "type": "Hello",
                 "data": {
                     "version": 1,
                     "client": "blender_addon",
-                    "capabilities": ["ping"]
+                    "capabilities": ["ping", "scene_sync"]
                 }
             }
             _client.send(json.dumps(hello))
             
-            # Register polling timer if not registered
+            # Registrar timer de polling si no está registrado
             if not bpy.app.timers.is_registered(poll_reactor_queue):
                 bpy.app.timers.register(poll_reactor_queue, first_interval=0.05)
                 
@@ -291,6 +333,11 @@ def poll_reactor_queue():
                 if data.get("accepted"):
                     bpy.context.scene.reactor_status = "Conectado"
                     bpy.context.scene.reactor_connected = True
+                    try:
+                        from ..handlers import depsgraph
+                        depsgraph.sync_full_scene()
+                    except Exception as e:
+                        print(f"[REACTOR] Error al sincronizar escena completa al conectar: {e}")
                 else:
                     bpy.context.scene.reactor_status = f"Rechazado: {data.get('reason')}"
                     bpy.context.scene.reactor_connected = False
