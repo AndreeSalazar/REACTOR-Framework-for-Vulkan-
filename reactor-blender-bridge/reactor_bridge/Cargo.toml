@@ -1,0 +1,25 @@
+[package]
+name = "reactor-bridge"
+version = "0.1.0"
+edition = "2021"
+description = "REACTOR ⇄ Blender Live Link — WebSocket bridge (FASE 0: ping/pong)"
+license-file = "../../LICENSE"
+authors = ["Eddi André Salazar Matos"]
+
+[lib]
+name = "reactor_bridge"
+path = "src/lib.rs"
+
+[[bin]]
+name = "reactor-bridge-server"
+path = "src/bin/reactor_bridge_server.rs"
+
+[dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time", "signal"] }
+tokio-tungstenite = "0.23"
+futures-util = "0.3"
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+thiserror = { workspace = true }

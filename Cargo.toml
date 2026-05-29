@@ -10,7 +10,7 @@
 # =============================================================================
 
 [workspace]
-members = ["."]
+members = [".", "reactor-blender-bridge/reactor_bridge"]
 resolver = "2"
 
 # Shared dependency versions — all workspace members should use these.
