@@ -945,6 +945,178 @@ reactor-blender-bridge/
 
 ---
 
+### 📐 Especificación Técnica de Sincronización (Live Link Spec)
+
+Para asegurar una integración robusta y predecible entre **Blender** y **REACTOR**, se definen tres pilares técnicos: la conversión de coordenadas, la especificación de mensajes WebSocket y el flujo de cocinado de assets.
+
+#### 1. Conversión de Coordenadas (Z-Up ⇄ Y-Up)
+Blender utiliza un sistema de coordenadas **Z-Up, Mano Derecha (Right-Handed)**. El motor REACTOR, en consonancia con Vulkan, emplea un sistema **Y-Up, Mano Derecha (Right-Handed)**.
+
+Para pasar un punto o matriz de transformación desde el espacio de Blender al de REACTOR, se aplica una matriz de cambio de base $M_{B\to R}$ que realiza una rotación de $-90^\circ$ sobre el eje X:
+
+$$
+M_{B\to R} = \begin{bmatrix}
+1 & 0 & 0 & 0 \\
+0 & 0 & 1 & 0 \\
+0 & -1 & 0 & 0 \\
+0 & 0 & 0 & 1
+\end{bmatrix}
+$$
+
+Para cualquier objeto en Blender con una matriz de transformación del mundo $T_{\text{Blender}}$ (representada en formato columna-major en Blender, y convertida a fila-major en REACTOR):
+1. **Posición**:
+   $$
+   \begin{bmatrix} X_R \\ Y_R \\ Z_R \\ 1 \end{bmatrix} = M_{B\to R} \cdot \begin{bmatrix} X_B \\ Y_B \\ Z_B \\ 1 \end{bmatrix} \implies X_R = X_B,\; Y_R = Z_B,\; Z_R = -Y_B
+   $$
+2. **Transformación Completa**:
+   Para transformar una matriz de transformación completa (escala, rotación y traslación):
+   $$
+   T_{\text{Reactor}} = M_{B\to R} \cdot T_{\text{Blender}} \cdot M_{B\to R}^{-1}
+   $$
+
+> [!NOTE]
+> **Cámaras y Luces**: Las cámaras y luces de Blender apuntan por defecto hacia su eje $-Z$ local con el vector $+Y$ local apuntando "hacia arriba". En REACTOR, las orientaciones locales son idénticas, por lo que una vez que la matriz del mundo se convierte utilizando el cambio de base anterior, la dirección de proyección coincide exactamente.
+
+#### 2. Esquemas de Mensajes WebSocket (JSON/MessagePack)
+Los siguientes esquemas describen los payloads JSON transferidos a través del WebSocket (`ws://127.0.0.1:19840`). Todos los mensajes van envueltos en el sobre común: `{"type": "MessageType", "data": { ... }}`.
+
+##### `EntityCreated` (Creación de Entidad)
+Enviado por Blender cuando se crea un objeto o colección.
+```json
+{
+  "type": "EntityCreated",
+  "data": {
+    "id": "e7c2a123-28db-4cb8-8c10-53bc1bf5b8f3",
+    "name": "SciFi_Door_01",
+    "kind": "Mesh",
+    "parent_id": null
+  }
+}
+```
+*Tipos de `kind` válidos: `"Mesh"`, `"Light"`, `"Camera"`, `"Empty"`.*
+
+##### `TransformUpdated` (Actualización de Matriz de Mundo)
+Se emite continuamente en el tick de actualización (hasta a 60 Hz) durante la edición o reproducción en el viewport de Blender.
+```json
+{
+  "type": "TransformUpdated",
+  "data": {
+    "id": "e7c2a123-28db-4cb8-8c10-53bc1bf5b8f3",
+    "matrix": [
+      1.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 1.0, 0.0,
+      0.0, -1.0, 0.0, 0.0,
+      2.5, 0.0, -5.0, 1.0
+    ]
+  }
+}
+```
+*`matrix` contiene 16 floats representando la matriz $T_{\text{Reactor}}$ en orden fila-major.*
+
+##### `MeshUploaded` (Subida de Datos de Geometría)
+Transfiere la topología de un mesh recién creado, modificado o cocinado.
+```json
+{
+  "type": "MeshUploaded",
+  "data": {
+    "id": "mesh_door_geo",
+    "vertices": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, ...],
+    "normals": [0.0, 1.0, 0.0, 0.0, 1.0, 0.0, ...],
+    "uvs": [0.0, 0.0, 1.0, 0.0, ...],
+    "tangents": [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, ...],
+    "indices": [0, 1, 2, 2, 3, 0, ...]
+  }
+}
+```
+
+##### `MaterialUpdated` (Propiedades de Material PBR)
+Sincroniza los parámetros del Principled BSDF de Blender con el pipeline PBR de REACTOR.
+```json
+{
+  "type": "MaterialUpdated",
+  "data": {
+    "id": "mat_door_gold",
+    "albedo_color": [1.0, 0.84, 0.0, 1.0],
+    "metallic": 1.0,
+    "roughness": 0.15,
+    "emissive": [0.0, 0.0, 0.0],
+    "albedo_texture_id": "tex_gold_albedo_id",
+    "normal_texture_id": "tex_gold_normal_id"
+  }
+}
+```
+
+##### `LightUpdated` (Propiedades Lumínicas)
+Actualiza en tiempo real las fuentes de luz en el motor Vulkan.
+```json
+{
+  "type": "LightUpdated",
+  "data": {
+    "id": "light_sun_01",
+    "kind": "Directional",
+    "color": [1.0, 0.95, 0.85],
+    "intensity": 5.0,
+    "range": 100.0
+  }
+}
+```
+*Tipos de `kind` soportados: `"Point"`, `"Directional"`, `"Spot"`, `"Area"`.*
+
+##### `CameraUpdated` (Datos de Proyección de Cámara)
+Sincroniza la cámara activa para mantener paridad de renderizado.
+```json
+{
+  "type": "CameraUpdated",
+  "data": {
+    "id": "camera_main",
+    "fov": 60.0,
+    "near": 0.1,
+    "far": 1000.0,
+    "aspect": 1.7778
+  }
+}
+```
+
+##### `TextureUploaded` (Subida de Imagen o Canal Cocinado)
+Transfiere imágenes de texturas en crudo o comprimidas.
+```json
+{
+  "type": "TextureUploaded",
+  "data": {
+    "id": "tex_gold_albedo_id",
+    "width": 1024,
+    "height": 1024,
+    "format": "RGBA8",
+    "pixels": "iVBORw0KGgoAAAANSUhEUgAA..."
+  }
+}
+```
+*`pixels` es una cadena base64 en la variante de texto WebSocket, o una secuencia de bytes cruda en MessagePack.*
+
+#### 3. Flujo Automatizado de Cocinado (Asset Baking Workflow)
+El flujo para procesar materiales procedurales y meshes complejas desde Blender a REACTOR sin bloquear el hilo principal de renderizado sigue el siguiente ciclo:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Blender Addon (Python)
+    participant S as Bridge Server (Rust)
+    participant R as REACTOR Engine (Vulkan)
+
+    Note over B: Cambios en el grafo de nodos PBR<br/>o Trigger manual "Cook & Push"
+    B->>B: Ejecuta ciclos de horneado (Cycles Bake)<br/>a texturas planas 2D
+    B->>B: Comprime texturas (DDS/KTX2) &<br/>Triangula geometría (MikkTSpace tangents)
+    B->>S: Envía TextureUploaded y MeshUploaded (WebSocket)
+    S->>S: Recibe y deserializa el buffer binario en hilo de red
+    S->>R: Despacha tarea de hot-reload al Queue del Job System
+    Note over R: Job System de REACTOR procesa en background
+    R->>R: Sube buffers de mesh e imágenes a memoria GPU
+    R->>R: Actualiza los bindless Descriptor Sets (vkUpdateDescriptorSets)
+    Note over R: Render loop aplica los nuevos handles<br/>en el siguiente frame sin lag
+```
+
+---
+
 ### 🎯 Hoja de ruta — 8 fases con tareas detalladas
 
 #### 🔧 FASE 0 — Cimientos del protocolo (semana 1)
