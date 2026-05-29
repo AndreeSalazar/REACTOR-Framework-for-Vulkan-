@@ -114,7 +114,7 @@ impl ReactorApp for BlenderLive {
         println!("║    ██║  ██║███████╗██║  ██║╚██████╗   ██║   ╚██████╔╝██║  ██║ ║");
         println!("║    ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝ ║");
         println!("║                                                               ║");
-        println!("║           ⇄  B L E N D E R   L I V E   L I N K  ⇄            ║");
+        println!("║           ⇄  B L E N D E R   L I V E   L I N K  ⇄             ║");
         println!("║                                                               ║");
         println!("╚═══════════════════════════════════════════════════════════════╝\x1b[0m");
         println!();

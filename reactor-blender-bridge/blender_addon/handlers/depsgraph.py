@@ -18,8 +18,8 @@ _last_transforms = {}
 
 def _get_client():
     """Obtiene la instancia global del WebSocket client."""
-    from ..operators.connect import _client
-    return _client
+    from ..operators import connect
+    return connect._client
 
 
 def _on_depsgraph_update(scene, depsgraph):
