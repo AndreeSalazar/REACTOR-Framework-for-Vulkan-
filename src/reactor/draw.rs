@@ -574,7 +574,7 @@ impl Reactor {
 
         // ── Submit ──
         let wait_semaphores = [self.image_available_semaphores[self.current_frame]];
-        let signal_semaphores = [self.render_finished_semaphores[self.current_frame]];
+        let signal_semaphores = [self.render_finished_semaphores[image_index as usize]];
         let command_buffers_submit = [command_buffer];
         let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
 
@@ -950,7 +950,7 @@ impl Reactor {
         }
 
         let wait_semaphores = [self.image_available_semaphores[self.current_frame]];
-        let signal_semaphores = [self.render_finished_semaphores[self.current_frame]];
+        let signal_semaphores = [self.render_finished_semaphores[image_index as usize]];
         let command_buffers_submit = [command_buffer];
         let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
 
