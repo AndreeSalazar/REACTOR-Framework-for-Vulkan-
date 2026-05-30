@@ -846,18 +846,18 @@ de 6 meses sin output).
 
 ## 🔗 REACTOR ⇄ Blender Live Link — Construir el juego en tiempo real
 
-**Visión:** abrir Blender, modelar / iluminar / animar, y que **REACTOR muestre
+**Visión.** Abrir Blender, modelar / iluminar / animar, y que **REACTOR muestre
 el resultado al instante** en una ventana paralela — sin exportar, sin reiniciar,
-sin tocar archivos. Cuando guardas en Blender, el juego se actualiza vivo.
-El binomio **Blender + REACTOR = un nuevo juego construido más rápido**.
+sin tocar archivos. Cuando editas en Blender, el juego se actualiza en vivo.
+**Blender + REACTOR = un nuevo juego construido más rápido.**
 
 ```diagram
-╭─────────────────────────╮   delta sync (TCP/WS)  ╭──────────────────────────╮
-│  BLENDER 4.x            │ ◀────────────────────▶ │  REACTOR runtime         │
-│  ─ Addon Python         │   JSON / MessagePack   │  ─ Bridge server (Rust)  │
-│  ─ Panel "REACTOR Live" │   60 Hz tick           │  ─ Live scene mutator    │
-│  ─ Operadores Bake/Push │                        │  ─ Hot-reload assets     │
-│  ─ Preview camera link  │   eventos bidireccional│  ─ Picking back-channel  │
+╭─────────────────────────╮   WebSocket JSON       ╭──────────────────────────╮
+│  BLENDER 4.2+           │ ◀────────────────────▶ │  REACTOR runtime         │
+│  ─ Addon Python         │   ws://127.0.0.1:19840 │  ─ Bridge server (Rust)  │
+│  ─ Panel "REACTOR Live" │   tick depsgraph 60 Hz │  ─ Live scene mutator    │
+│  ─ Encoder transform/   │   PROTOCOL_VERSION = 1 │  ─ Mapping id → SceneObj │
+│    color/light/camera   │                        │  ─ Render Vulkan 1.3     │
 ╰─────────┬───────────────╯                        ╰─────────┬────────────────╯
           │                                                  │
           ▼                                                  ▼
@@ -866,13 +866,119 @@ El binomio **Blender + REACTOR = un nuevo juego construido más rápido**.
           ╰─────────────── un solo .reactor project ─────────╯
 ```
 
-> **Carpeta nueva propuesta:** [`reactor-blender-bridge/`](file:///c:/Users/andre/OneDrive/Desktop/REACTOR-Framework-for-Vulkan-/reactor-blender-bridge)
-> en la raíz del repo, separada de `src/` para que sea instalable como add-on
-> de Blender independiente y cocinable por el motor.
+> **Carpeta del puente:** [`reactor-blender-bridge/`](file:///c:/Users/andre/OneDrive/Desktop/REACTOR-Framework-for-Vulkan-/reactor-blender-bridge)
+> — separada de `src/` para distribuirse como add-on Blender independiente y
+> consumirse desde el motor como crate dev-dependency `reactor-bridge`.
 
 ---
 
-### 📁 Estructura propuesta de la carpeta
+### ✅ Estado actual (v1.2.0) — Lo que YA funciona
+
+| Pieza                                | Estado            | Dónde vive                                                                                                         |
+|--------------------------------------|-------------------|--------------------------------------------------------------------------------------------------------------------|
+| **Servidor WebSocket** (tokio + tungstenite, puerto 19840) | ✅ Estable | [`reactor_bridge/src/server.rs`](file:///c:/Users/andre/OneDrive/Desktop/REACTOR-Framework-for-Vulkan-/reactor-blender-bridge/reactor_bridge/src/server.rs) |
+| **Handshake** `Hello` / `HelloAck` con versión y capabilities | ✅ Estable | [`protocol.rs`](file:///c:/Users/andre/OneDrive/Desktop/REACTOR-Framework-for-Vulkan-/reactor-blender-bridge/reactor_bridge/src/protocol.rs) |
+| **Heartbeat** `Ping` / `Pong` con timestamps µs | ✅ Estable | server.rs (loop 1 Hz)                                                                                              |
+| **Mensaje** `TransformUpdated { id, matrix[16], color? }`  | ✅ Estable | protocol.rs                                                                                                        |
+| **Cierre limpio** `Goodbye` + códigos `Error` estándar     | ✅ Estable | protocol.rs                                                                                                        |
+| **Addon Blender** — Panel N-panel "REACTOR Live"           | ✅ Funcional | [`blender_addon/panel.py`](file:///c:/Users/andre/OneDrive/Desktop/REACTOR-Framework-for-Vulkan-/reactor-blender-bridge/blender_addon/panel.py) |
+| **Addon Blender** — Operador Connect/Disconnect            | ✅ Funcional | [`operators/connect.py`](file:///c:/Users/andre/OneDrive/Desktop/REACTOR-Framework-for-Vulkan-/reactor-blender-bridge/blender_addon/operators/connect.py) |
+| **Addon Blender** — Encoder de transform (mat4 col-major → row-major + cambio de base Z→Y) | ✅ Funcional | [`encoders/transform.py`](file:///c:/Users/andre/OneDrive/Desktop/REACTOR-Framework-for-Vulkan-/reactor-blender-bridge/blender_addon/encoders/transform.py) |
+| **Addon Blender** — Handler `depsgraph_update_post` → delta | ✅ Funcional | [`handlers/depsgraph.py`](file:///c:/Users/andre/OneDrive/Desktop/REACTOR-Framework-for-Vulkan-/reactor-blender-bridge/blender_addon/handlers/depsgraph.py) |
+| **Sync de objetos MESH** (matriz de mundo + color de material base) | ✅ Funcional | [`examples/blender_live.rs::apply_transform`](file:///c:/Users/andre/OneDrive/Desktop/REACTOR-Framework-for-Vulkan-/examples/blender_live.rs) caso C |
+| **Sync de cámara** (heurística `name ~ /camera/`) | ✅ Funcional | mismo, caso A                                                                                                       |
+| **Sync de luces dinámicas** (heurística `name ~ /light/` → `Light::point`) | ✅ Funcional | mismo, caso B                                                                                                       |
+| **Shader mini-PBR profesional** (Cook-Torrance + GGX + IBL hemisférico procedural + ACES) | ✅ Nuevo | [`shaders/blender_live_frag.frag`](file:///c:/Users/andre/OneDrive/Desktop/REACTOR-Framework-for-Vulkan-/shaders/blender_live_frag.frag) |
+
+#### Limitaciones honestas hoy
+
+- **Solo cubos de placeholder** — todos los objetos sincronizados se renderizan como cubos del tamaño 1×1×1 (la transform aplica escala correctamente). Cuando llegue `MeshUploaded` se usará la geometría real.
+- **El "tipo" de entidad se infiere del nombre** (`*camera*`, `*light*`, resto = mesh). Hay un mensaje `EntityCreated` en la spec pero aún no se envía.
+- **No hay material PBR real** todavía — solo se sincroniza el `Base Color` (RGBA) del Principled BSDF y el shader del ejemplo deriva metallic/roughness por heurística sobre el albedo.
+- **Sin texturas, sin meshes custom, sin armatures, sin animaciones, sin picking inverso, sin hot-reload de assets** — todo eso es la hoja de ruta de abajo (Fases 3-7).
+
+---
+
+### 🚀 Quick Start (5 minutos)
+
+#### 1. Arrancar el runtime de REACTOR con bridge activo
+
+```bash
+cargo run --release --example blender_live
+```
+
+Verás banner en consola y `✓ Bridge server arrancado en 127.0.0.1:19840`. Una ventana negra
+quedará esperando conexión.
+
+#### 2. Instalar el addon en Blender 4.2+
+
+```text
+Edit → Preferences → Add-ons → Install from Disk…
+  └─ reactor-blender-bridge/blender_addon/  (carpeta completa)
+Enable "REACTOR Live Link"
+```
+
+#### 3. Conectar
+
+En el `3D Viewport`:
+
+```text
+N-panel → REACTOR → [Connect]
+  • Host: 127.0.0.1
+  • Port: 19840
+```
+
+El estado debería pasar a `✓ Connected · PROTOCOL_VERSION = 1`.
+
+#### 4. Mover algo
+
+Selecciona el cubo por defecto de Blender y arrástralo en el viewport. **El mismo
+cubo se mueve en tiempo real en la ventana de REACTOR**, con el shader PBR
+aplicado al `Base Color` del material activo.
+
+> **Cambiar puerto/host:** edita
+> [`reactor_live_config.json`](file:///c:/Users/andre/OneDrive/Desktop/REACTOR-Framework-for-Vulkan-/reactor_live_config.json)
+> en la raíz del repo y reinicia el ejemplo.
+
+---
+
+### 🧪 Verificar la conexión sin Blender
+
+Para diagnóstico de red puro (sin tocar Blender) hay un cliente CLI en
+[`reactor_bridge/src/bin/`](file:///c:/Users/andre/OneDrive/Desktop/REACTOR-Framework-for-Vulkan-/reactor-blender-bridge/reactor_bridge/src/bin):
+
+```bash
+# Con el ejemplo blender_live ya corriendo en otra terminal:
+cargo run -p reactor-bridge --bin probe
+# Espera: Hello → HelloAck → Ping → Pong → Goodbye
+```
+
+---
+
+### 📐 Especificación técnica resumida
+
+| Tema                    | Valor                                                                              |
+|-------------------------|------------------------------------------------------------------------------------|
+| **Transporte**          | WebSocket RFC 6455 sobre TCP, marcos **texto JSON UTF-8**                          |
+| **Puerto por defecto**  | `19840` (configurable vía `reactor_live_config.json`)                              |
+| **Sobre de mensaje**    | `{"type": "<MsgType>", "data": { ... }}` (serde `internally-tagged`)               |
+| **Versionado**          | `PROTOCOL_VERSION = 1`; mismatch → `HelloAck { accepted: false }` + cierre limpio  |
+| **Heartbeat**           | `Ping/Pong` ~1 Hz; `Pong` incluye `server_ts_micros` para medir RTT y skew         |
+| **Sistema de coords**   | Blender **Z-up RH** → REACTOR **Y-up RH** vía $M_{B\to R}$ (ver fórmula abajo)     |
+| **Orden de matrices**   | Blender column-major → row-major al serializar (`[m00,m10,m20,m30, m01,…]`)        |
+| **Throughput probado**  | 60 transforms/seg sin pérdida en localhost; latencia E2E ≈ 1-3 ms                  |
+| **Concurrencia**        | El bridge corre en su propio runtime Tokio (1 worker thread); main loop intacto    |
+| **Spec completa**       | [`proto/messages.md`](file:///c:/Users/andre/OneDrive/Desktop/REACTOR-Framework-for-Vulkan-/reactor-blender-bridge/proto/messages.md) |
+
+---
+
+### 🗺️ Hoja de ruta (Fases 0-8) — Aspiracional
+
+> Lo que sigue son **8 fases planificadas** para llevar el Live Link de "sync de
+> transforms" a "construir el juego completo desde Blender". Las marcas `[ ]`
+> son trabajo pendiente; las `[x]` son lo que la tabla "Estado actual" ya confirma.
+
+#### 📁 Estructura objetivo de la carpeta
 
 ```text
 reactor-blender-bridge/
@@ -947,7 +1053,7 @@ reactor-blender-bridge/
 
 ### 📐 Especificación Técnica de Sincronización (Live Link Spec)
 
-Para asegurar una integración robusta y predecible entre **Blender** y **REACTOR**, se definen tres pilares técnicos: la conversión de coordenadas, la especificación de mensajes WebSocket y el flujo de cocinado de assets.
+Esta sección detalla los tres pilares técnicos del protocolo: la conversión de coordenadas, los esquemas de mensajes WebSocket y el flujo de cocinado de assets. La parte de **coordenadas** ya está implementada en el encoder de transform; el resto de los esquemas son la spec a la que se irá llegando fase a fase.
 
 #### 1. Conversión de Coordenadas (Z-Up ⇄ Y-Up)
 Blender utiliza un sistema de coordenadas **Z-Up, Mano Derecha (Right-Handed)**. El motor REACTOR, en consonancia con Vulkan, emplea un sistema **Y-Up, Mano Derecha (Right-Handed)**.

@@ -17,6 +17,7 @@
 // =============================================================================
 
 use reactor_vulkan::prelude::*;
+use reactor_vulkan::systems::scene::SceneObject;
 use reactor_vulkan::Vertex;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -97,33 +98,61 @@ impl BlenderLive {
 }
 
 fn create_cube_mesh(ctx: &mut ReactorContext) -> Arc<reactor_vulkan::Mesh> {
-    let vertices = [
-        // Front face (z = 0.5)
-        Vertex::new(Vec3::new(-0.5, -0.5, 0.5), Vec3::new(1.0, 1.0, 1.0), Vec2::ZERO),
-        Vertex::new(Vec3::new(0.5, -0.5, 0.5), Vec3::new(1.0, 1.0, 1.0), Vec2::ZERO),
-        Vertex::new(Vec3::new(0.5, 0.5, 0.5), Vec3::new(1.0, 1.0, 1.0), Vec2::ZERO),
-        Vertex::new(Vec3::new(-0.5, 0.5, 0.5), Vec3::new(1.0, 1.0, 1.0), Vec2::ZERO),
-        // Back face (z = -0.5)
-        Vertex::new(Vec3::new(-0.5, -0.5, -0.5), Vec3::new(1.0, 1.0, 1.0), Vec2::ZERO),
-        Vertex::new(Vec3::new(0.5, -0.5, -0.5), Vec3::new(1.0, 1.0, 1.0), Vec2::ZERO),
-        Vertex::new(Vec3::new(0.5, 0.5, -0.5), Vec3::new(1.0, 1.0, 1.0), Vec2::ZERO),
-        Vertex::new(Vec3::new(-0.5, 0.5, -0.5), Vec3::new(1.0, 1.0, 1.0), Vec2::ZERO),
-    ];
-    let indices = [
-        // Front face
-        0, 1, 2, 2, 3, 0,
-        // Right face
-        1, 5, 6, 6, 2, 1,
-        // Back face
-        5, 4, 7, 7, 6, 5,
-        // Left face
-        4, 0, 3, 3, 7, 4,
-        // Top face
-        3, 2, 6, 6, 7, 3,
-        // Bottom face
-        4, 5, 1, 1, 0, 4,
-    ];
-    Arc::new(ctx.create_mesh(&vertices, &indices).expect("failed to create mesh"))
+    // Cubo con normales **por cara** (24 vértices, 36 índices) y UVs por cara.
+    // Esto es indispensable para que el shader PBR pueda iluminar correctamente
+    // — un cubo con normales (1,1,1) compartidas se ve "plano" y rompe NdotL.
+    let face = |p: [[f32; 3]; 4], n: [f32; 3]| {
+        let n = Vec3::from_array(n);
+        [
+            Vertex::with_normal(Vec3::from_array(p[0]), n, Vec2::new(0.0, 0.0)),
+            Vertex::with_normal(Vec3::from_array(p[1]), n, Vec2::new(1.0, 0.0)),
+            Vertex::with_normal(Vec3::from_array(p[2]), n, Vec2::new(1.0, 1.0)),
+            Vertex::with_normal(Vec3::from_array(p[3]), n, Vec2::new(0.0, 1.0)),
+        ]
+    };
+
+    let mut vertices: Vec<Vertex> = Vec::with_capacity(24);
+    // +Z (front)
+    vertices.extend_from_slice(&face(
+        [[-0.5, -0.5, 0.5], [0.5, -0.5, 0.5], [0.5, 0.5, 0.5], [-0.5, 0.5, 0.5]],
+        [0.0, 0.0, 1.0],
+    ));
+    // -Z (back)
+    vertices.extend_from_slice(&face(
+        [[0.5, -0.5, -0.5], [-0.5, -0.5, -0.5], [-0.5, 0.5, -0.5], [0.5, 0.5, -0.5]],
+        [0.0, 0.0, -1.0],
+    ));
+    // +X (right)
+    vertices.extend_from_slice(&face(
+        [[0.5, -0.5, 0.5], [0.5, -0.5, -0.5], [0.5, 0.5, -0.5], [0.5, 0.5, 0.5]],
+        [1.0, 0.0, 0.0],
+    ));
+    // -X (left)
+    vertices.extend_from_slice(&face(
+        [[-0.5, -0.5, -0.5], [-0.5, -0.5, 0.5], [-0.5, 0.5, 0.5], [-0.5, 0.5, -0.5]],
+        [-1.0, 0.0, 0.0],
+    ));
+    // +Y (top)
+    vertices.extend_from_slice(&face(
+        [[-0.5, 0.5, 0.5], [0.5, 0.5, 0.5], [0.5, 0.5, -0.5], [-0.5, 0.5, -0.5]],
+        [0.0, 1.0, 0.0],
+    ));
+    // -Y (bottom)
+    vertices.extend_from_slice(&face(
+        [[-0.5, -0.5, -0.5], [0.5, -0.5, -0.5], [0.5, -0.5, 0.5], [-0.5, -0.5, 0.5]],
+        [0.0, -1.0, 0.0],
+    ));
+
+    let mut indices: Vec<u32> = Vec::with_capacity(36);
+    for f in 0..6u32 {
+        let b = f * 4;
+        indices.extend_from_slice(&[b, b + 1, b + 2, b + 2, b + 3, b]);
+    }
+
+    Arc::new(
+        ctx.create_mesh(&vertices, &indices)
+            .expect("failed to create mesh"),
+    )
 }
 
 impl ReactorApp for BlenderLive {
@@ -156,12 +185,14 @@ impl ReactorApp for BlenderLive {
         println!();
 
         // -----------------------------------------------------------------
-        // 2. Escena de prueba: cubo + suelo + iluminación
+        // 2. Iluminación de estudio (referencia: Eevee "studio" preset)
         // -----------------------------------------------------------------
-        ctx.scene.set_ambient(Vec3::new(0.08, 0.06, 0.10));
+        // Ambient bajo + sol cálido suave; el shader PBR añade encima un IBL
+        // hemisférico procedural (cielo/horizonte/suelo) + rim light.
+        ctx.scene.set_ambient(Vec3::new(0.045, 0.05, 0.06));
         ctx.scene.set_sun(
             Vec3::new(-0.4, -1.0, -0.6).normalize(),
-            Vec3::new(1.0, 0.95, 0.85),
+            Vec3::new(1.0, 0.96, 0.88),
         );
 
         // Cargar shaders base profesionales y neutros para Live Link
