@@ -2,20 +2,54 @@
 // REACTOR Build Script — Auto-compile GLSL shaders to SPIR-V
 // =============================================================================
 // Requires `glslc` (from Vulkan SDK) to be in PATH.
-// Shaders are only recompiled when source files change.
+//
+// Estructura esperada:
+//
+//   shaders/
+//   ├── lib/        ← snippets reutilizables (.glsl) — solo `#include`,
+//   │                  no se compilan standalone
+//   ├── core/       ← basic + textured (used by built-in pipelines)
+//   ├── post/       ← post_process chain
+//   └── live/       ← Blender Live Link mini-PBR
+//
+// Cada source `.vert`/`.frag` listado en `SHADER_ALIASES` produce un único
+// `.spv` en `shaders/<alias>.spv` (la ruta canónica que esperan los
+// `include_bytes!` del runtime). El resto de shaders (si los hubiera) se
+// compilan en el mismo directorio que la fuente.
+//
+// Los archivos `.glsl` dentro de `shaders/lib/` se exponen al preprocesador
+// vía `-I shaders/lib`, permitiendo `#include "pbr.glsl"` con la extensión
+// GL_GOOGLE_include_directive.
 // =============================================================================
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
+
+/// Filename → ruta canónica de output (relativa al workspace).
+fn shader_aliases() -> HashMap<&'static str, &'static str> {
+    let mut m = HashMap::new();
+    // ── Core (builtin pipelines) ─────────────────────────────────────────
+    m.insert("shader.vert", "shaders/vert.spv");
+    m.insert("shader.frag", "shaders/frag.spv");
+    m.insert("texture.vert", "shaders/texture_vert.spv");
+    m.insert("texture.frag", "shaders/texture_frag.spv");
+    // ── Post-process chain ───────────────────────────────────────────────
+    m.insert("post_process.vert", "shaders/post_process_vert.spv");
+    m.insert("post_process.frag", "shaders/post_process_frag.spv");
+    // ── Blender Live Link ────────────────────────────────────────────────
+    m.insert("blender_live.vert", "shaders/blender_live_vert.spv");
+    m.insert("blender_live.frag", "shaders/blender_live_frag.spv");
+    m
+}
 
 fn compile_shader(src: &str, dst: &str) {
     let src_path = Path::new(src);
     let dst_path = Path::new(dst);
 
-    // Tell cargo to rerun if the source changes
     println!("cargo:rerun-if-changed={}", src);
 
-    // Skip if output is newer than source
+    // Skip if output is newer than source.
     if dst_path.exists() {
         if let (Ok(src_meta), Ok(dst_meta)) = (src_path.metadata(), dst_path.metadata()) {
             if let (Ok(src_time), Ok(dst_time)) = (src_meta.modified(), dst_meta.modified()) {
@@ -28,7 +62,17 @@ fn compile_shader(src: &str, dst: &str) {
 
     println!("cargo:warning=Compiling shader: {} -> {}", src, dst);
 
-    let status = Command::new("glslc").args([src, "-o", dst]).status();
+    let status = Command::new("glslc")
+        .args([
+            "-I",
+            "shaders/lib",     // permite `#include "pbr.glsl"` desde cualquier shader
+            "--target-env=vulkan1.3",
+            "-O",              // optimización por defecto
+            src,
+            "-o",
+            dst,
+        ])
+        .status();
 
     match status {
         Ok(s) if s.success() => {}
@@ -38,21 +82,21 @@ fn compile_shader(src: &str, dst: &str) {
         }
         Err(e) => {
             eprintln!("Could not run glslc (is Vulkan SDK installed?): {}", e);
-            // Don't fail — allow building without glslc if .spv files exist
         }
     }
 }
 
 fn main() {
-    // Compilar recursivamente TODOS los shaders GLSL en el directorio shaders/
     let shaders_dir = Path::new("shaders");
-
     if !shaders_dir.exists() {
         eprintln!("cargo:warning=Shaders directory not found: shaders/");
         return;
     }
 
-    // Recorrer recursivamente todos los archivos .vert y .frag
+    // Re-run cuando cambie cualquier helper de la lib.
+    println!("cargo:rerun-if-changed=shaders/lib");
+
+    let aliases = shader_aliases();
     let mut compiled = 0;
 
     for entry in walkdir::WalkDir::new(shaders_dir)
@@ -61,43 +105,28 @@ fn main() {
     {
         let path = entry.path();
 
-        // Solo procesar archivos con extensión .vert o .frag
-        if let Some(ext) = path.extension() {
-            let ext_str = ext.to_string_lossy();
-            if ext_str == "vert" || ext_str == "frag" {
-                let src = path.to_string_lossy().to_string();
-                let dst = src.replace(&format!(".{}", ext_str), ".spv");
+        // Solo procesar archivos con extensión .vert o .frag.
+        let Some(ext) = path.extension() else { continue; };
+        let ext_str = ext.to_string_lossy();
+        if ext_str != "vert" && ext_str != "frag" {
+            continue;
+        }
 
-                compile_shader(&src, &dst);
-                compiled += 1;
+        let src = path.to_string_lossy().replace('\\', "/");
+        let filename = path.file_name().unwrap().to_string_lossy().to_string();
 
-                // Also generate aliases for specific files used by built-in loaders:
-                let filename = path.file_name().unwrap().to_string_lossy();
-                if filename == "shader.vert" {
-                    compile_shader(&src, "shaders/vert.spv");
-                    compiled += 1;
-                } else if filename == "shader.frag" {
-                    compile_shader(&src, "shaders/frag.spv");
-                    compiled += 1;
-                } else if filename == "texture.vert" {
-                    compile_shader(&src, "shaders/texture_vert.spv");
-                    compiled += 1;
-                } else if filename == "texture.frag" {
-                    compile_shader(&src, "shaders/texture_frag.spv");
-                    compiled += 1;
-                } else if filename == "post_process.vert" {
-                    compile_shader(&src, "shaders/post_process_vert.spv");
-                    compiled += 1;
-                } else if filename == "post_process.frag" {
-                    compile_shader(&src, "shaders/post_process_frag.spv");
-                    compiled += 1;
-                }
-            }
+        // Si el filename tiene un alias canónico, compila SOLO ahí (sin duplicar
+        // un .spv junto al fuente).
+        if let Some(&alias_dst) = aliases.get(filename.as_str()) {
+            compile_shader(&src, alias_dst);
+            compiled += 1;
+        } else {
+            // Shader sin alias → output en el mismo directorio que la fuente.
+            let dst = src.replace(&format!(".{}", ext_str), ".spv");
+            compile_shader(&src, &dst);
+            compiled += 1;
         }
     }
 
-    println!(
-        "cargo:warning=Compiled {} shaders (including aliases)",
-        compiled
-    );
+    println!("cargo:warning=Compiled {} shaders", compiled);
 }
