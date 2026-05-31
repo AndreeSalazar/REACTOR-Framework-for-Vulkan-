@@ -384,9 +384,9 @@ vec3 draw_pause_overlay(vec2 uv, vec3 color) {
     int page = int(clamp(settings.pause_page, 0.0, 4.0));
     for (int i = 0; i < 5; ++i) {
         float x = 0.22 + float(i) * 0.14;
-        float active = i == page ? 1.0 : 0.25;
+        float is_active = i == page ? 1.0 : 0.25;
         float tab = rect_mask(uv, vec2(x, 0.255), vec2(0.052, 0.012), 0.003);
-        outc = mix(outc, accent, tab * alpha * active);
+        outc = mix(outc, accent, tab * alpha * is_active);
     }
 
     int rows = int(clamp(settings.pause_row_count, 1.0, 13.0));

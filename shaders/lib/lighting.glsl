@@ -15,8 +15,8 @@
 float smooth_distance_attenuation(float d2, float range) {
     float r2     = range * range;
     float factor = d2 / max(r2, REACTOR_EPS);
-    float smooth = saturate(1.0 - factor * factor);
-    return (smooth * smooth) / max(d2, 0.01 * 0.01);
+    float win    = saturate(1.0 - factor * factor);
+    return (win * win) / max(d2, 0.01 * 0.01);
 }
 
 // ── Falloff de cono (spot light) ─────────────────────────────────────────────

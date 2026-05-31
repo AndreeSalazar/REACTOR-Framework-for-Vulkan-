@@ -66,7 +66,6 @@ fn compile_shader(src: &str, dst: &str) {
         .args([
             "-I",
             "shaders/lib",     // permite `#include "pbr.glsl"` desde cualquier shader
-            "--target-env=vulkan1.3",
             "-O",              // optimización por defecto
             src,
             "-o",
