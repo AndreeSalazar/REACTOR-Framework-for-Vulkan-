@@ -1,0 +1,69 @@
+// =============================================================================
+// REACTOR · IBL bake — irradiance.comp
+// =============================================================================
+// Convoluciona un cubemap HDR de radiancia con el lóbulo coseno de un Lambert
+// difuso. Salida: cubemap pequeño (típicamente 32×32) con la irradiancia
+// difusa por cada dirección de normal.
+//
+// Método: muestreo uniforme del hemisferio sobre la base TBN local a la
+// normal. 32 × 16 muestras = 512 rays por píxel (rápido para 32×32×6).
+// =============================================================================
+#version 450
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform samplerCube u_radiance;
+layout(set = 0, binding = 1, rgba16f) uniform writeonly image2DArray u_irradiance;
+
+layout(push_constant) uniform PC {
+    int  face_size;
+    int  num_faces;
+    vec2 _pad;
+} pc;
+
+const float PI = 3.14159265359;
+
+vec3 cube_uv_to_dir(int face, vec2 uv) {
+    vec3 d;
+    if      (face == 0) d = vec3( 1.0, -uv.y, -uv.x);
+    else if (face == 1) d = vec3(-1.0, -uv.y,  uv.x);
+    else if (face == 2) d = vec3( uv.x,  1.0,  uv.y);
+    else if (face == 3) d = vec3( uv.x, -1.0, -uv.y);
+    else if (face == 4) d = vec3( uv.x, -uv.y,  1.0);
+    else                d = vec3(-uv.x, -uv.y, -1.0);
+    return normalize(d);
+}
+
+void main() {
+    ivec3 gid = ivec3(gl_GlobalInvocationID);
+    if (gid.x >= pc.face_size || gid.y >= pc.face_size || gid.z >= pc.num_faces) return;
+
+    vec2 uv = ((vec2(gid.xy) + 0.5) / float(pc.face_size)) * 2.0 - 1.0;
+    vec3 N  = cube_uv_to_dir(gid.z, uv);
+
+    // Base TBN ortonormal local a N.
+    vec3 up = abs(N.y) < 0.999 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0);
+    vec3 right = normalize(cross(up, N));
+    up = normalize(cross(N, right));
+
+    vec3  irradiance = vec3(0.0);
+    float n_samples  = 0.0;
+    const float SAMPLE_DELTA = 0.025;  // ≈ 2 × 64 × 256 muestras totales
+
+    for (float phi = 0.0; phi < 2.0 * PI; phi += SAMPLE_DELTA) {
+        float cos_phi = cos(phi);
+        float sin_phi = sin(phi);
+        for (float theta = 0.0; theta < 0.5 * PI; theta += SAMPLE_DELTA) {
+            float cos_t = cos(theta);
+            float sin_t = sin(theta);
+            // Dirección tangente → mundo.
+            vec3 tan_sample = vec3(sin_t * cos_phi, sin_t * sin_phi, cos_t);
+            vec3 sample_dir = tan_sample.x * right + tan_sample.y * up + tan_sample.z * N;
+            // Lambert: ya ponderamos por cos(θ) implícito al usar
+            // distribución uniforme sobre el hemisferio.
+            irradiance += textureLod(u_radiance, sample_dir, 0.0).rgb * cos_t * sin_t;
+            n_samples  += 1.0;
+        }
+    }
+    irradiance = PI * irradiance / n_samples;
+    imageStore(u_irradiance, gid, vec4(irradiance, 1.0));
+}

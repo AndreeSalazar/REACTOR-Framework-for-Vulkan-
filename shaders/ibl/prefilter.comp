@@ -1,0 +1,108 @@
+// =============================================================================
+// REACTOR · IBL bake — prefilter.comp
+// =============================================================================
+// Pre-filtra un cubemap de radiancia con importance sampling GGX, generando
+// un mip por nivel de roughness. Implementa la primera mitad del "split-sum"
+// de Karis 2014.
+//
+// Se invoca una vez por nivel de mip — el push constant `roughness` y
+// `mip_size` cambian.
+// =============================================================================
+#version 450
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform samplerCube u_radiance;
+// Storage image bound to the SPECIFIC mip level being filtered (one view per mip).
+layout(set = 0, binding = 1, rgba16f) uniform writeonly image2DArray u_mip_out;
+
+layout(push_constant) uniform PC {
+    int   mip_size;        // ancho/alto del mip actual
+    int   num_faces;       // 6
+    float roughness;       // 0..1, mapeado a alpha² internamente
+    int   src_face_size;   // ancho del cubemap original (para mip selection)
+} pc;
+
+const float PI = 3.14159265359;
+const uint  SAMPLE_COUNT = 1024u;
+
+// ── van der Corput sequence (radical inverse base 2) ─────────────────────────
+float radical_inverse_vdc(uint bits) {
+    bits = (bits << 16u) | (bits >> 16u);
+    bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+    bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+    bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+    bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+    return float(bits) * 2.3283064365386963e-10;
+}
+
+// Sample de Hammersley en [0,1)².
+vec2 hammersley(uint i, uint N) {
+    return vec2(float(i) / float(N), radical_inverse_vdc(i));
+}
+
+// Importance sample de un lóbulo GGX (Karis 2014).
+vec3 importance_sample_GGX(vec2 Xi, vec3 N, float roughness) {
+    float a = roughness * roughness;
+    float phi      = 2.0 * PI * Xi.x;
+    float cos_t    = sqrt((1.0 - Xi.y) / (1.0 + (a * a - 1.0) * Xi.y));
+    float sin_t    = sqrt(1.0 - cos_t * cos_t);
+    vec3  H        = vec3(cos(phi) * sin_t, sin(phi) * sin_t, cos_t);
+
+    // tangent → world
+    vec3 up    = abs(N.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    vec3 tan_x = normalize(cross(up, N));
+    vec3 tan_y = cross(N, tan_x);
+    return normalize(tan_x * H.x + tan_y * H.y + N * H.z);
+}
+
+float D_GGX(float NoH, float roughness) {
+    float a  = roughness * roughness;
+    float a2 = a * a;
+    float f  = (NoH * NoH * (a2 - 1.0) + 1.0);
+    return a2 / max(PI * f * f, 1e-5);
+}
+
+vec3 cube_uv_to_dir(int face, vec2 uv) {
+    vec3 d;
+    if      (face == 0) d = vec3( 1.0, -uv.y, -uv.x);
+    else if (face == 1) d = vec3(-1.0, -uv.y,  uv.x);
+    else if (face == 2) d = vec3( uv.x,  1.0,  uv.y);
+    else if (face == 3) d = vec3( uv.x, -1.0, -uv.y);
+    else if (face == 4) d = vec3( uv.x, -uv.y,  1.0);
+    else                d = vec3(-uv.x, -uv.y, -1.0);
+    return normalize(d);
+}
+
+void main() {
+    ivec3 gid = ivec3(gl_GlobalInvocationID);
+    if (gid.x >= pc.mip_size || gid.y >= pc.mip_size || gid.z >= pc.num_faces) return;
+
+    vec2 uv = ((vec2(gid.xy) + 0.5) / float(pc.mip_size)) * 2.0 - 1.0;
+    vec3 N  = cube_uv_to_dir(gid.z, uv);
+    vec3 R  = N;   // asunción Karis: V == R == N
+    vec3 V  = R;
+
+    vec3  prefiltered = vec3(0.0);
+    float total_w     = 0.0;
+
+    for (uint i = 0u; i < SAMPLE_COUNT; ++i) {
+        vec2 Xi = hammersley(i, SAMPLE_COUNT);
+        vec3 H  = importance_sample_GGX(Xi, N, pc.roughness);
+        vec3 L  = normalize(2.0 * dot(V, H) * H - V);
+        float NoL = max(dot(N, L), 0.0);
+        if (NoL > 0.0) {
+            // Mip selection — atenúa fireflies a roughness alta (Krivanek/Colbert).
+            float NoH = max(dot(N, H), 0.0);
+            float D   = D_GGX(NoH, pc.roughness);
+            float pdf = (D * NoH) / (4.0 * max(dot(H, V), 1e-4)) + 1e-4;
+            float src_texel = 4.0 * PI / (6.0 * float(pc.src_face_size * pc.src_face_size));
+            float sample_texel = 1.0 / (float(SAMPLE_COUNT) * pdf + 1e-4);
+            float mip = pc.roughness == 0.0 ? 0.0 : 0.5 * log2(sample_texel / src_texel);
+
+            prefiltered += textureLod(u_radiance, L, mip).rgb * NoL;
+            total_w     += NoL;
+        }
+    }
+    prefiltered /= max(total_w, 1e-4);
+    imageStore(u_mip_out, gid, vec4(prefiltered, 1.0));
+}

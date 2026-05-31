@@ -1,0 +1,53 @@
+// =============================================================================
+// REACTOR · IBL bake — equirect_to_cube.comp
+// =============================================================================
+// Lee una textura HDR equirectangular (latitud/longitud) y la proyecta sobre
+// los 6 lados de un cubemap RGBA16F. Cada layer (z = 0..5) es una cara, en el
+// orden Vulkan canónico:
+//   0 = +X   1 = -X   2 = +Y   3 = -Y   4 = +Z   5 = -Z
+// =============================================================================
+#version 450
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D u_equirect;
+layout(set = 0, binding = 1, rgba16f) uniform writeonly image2DArray u_cubemap;
+
+layout(push_constant) uniform PC {
+    int  face_size;  // ancho/alto en píxeles de cada cara
+    int  num_faces;  // siempre 6 (reservado por si se usan menos en debug)
+    vec2 _pad;
+} pc;
+
+const float PI = 3.14159265359;
+
+// Devuelve la dirección 3D unitaria que corresponde al texel (u,v) ∈ [-1,1]
+// de la cara `face` del cubemap.
+vec3 cube_uv_to_dir(int face, vec2 uv) {
+    vec3 d;
+    if      (face == 0) d = vec3( 1.0, -uv.y, -uv.x); // +X
+    else if (face == 1) d = vec3(-1.0, -uv.y,  uv.x); // -X
+    else if (face == 2) d = vec3( uv.x,  1.0,  uv.y); // +Y
+    else if (face == 3) d = vec3( uv.x, -1.0, -uv.y); // -Y
+    else if (face == 4) d = vec3( uv.x, -uv.y,  1.0); // +Z
+    else                d = vec3(-uv.x, -uv.y, -1.0); // -Z
+    return normalize(d);
+}
+
+// Proyecta una dirección 3D a coordenadas (u,v) equirectangular ∈ [0,1].
+vec2 dir_to_equirect_uv(vec3 d) {
+    float u = atan(d.z, d.x) / (2.0 * PI) + 0.5;
+    float v = asin(clamp(d.y, -1.0, 1.0)) / PI + 0.5;
+    return vec2(u, v);
+}
+
+void main() {
+    ivec3 gid = ivec3(gl_GlobalInvocationID);
+    if (gid.x >= pc.face_size || gid.y >= pc.face_size || gid.z >= pc.num_faces) return;
+
+    vec2 uv = (vec2(gid.xy) + 0.5) / float(pc.face_size); // 0..1
+    uv = uv * 2.0 - 1.0;                                   // -1..1
+    vec3 dir = cube_uv_to_dir(gid.z, uv);
+    vec2 eq_uv = dir_to_equirect_uv(dir);
+    vec3 hdr = textureLod(u_equirect, eq_uv, 0.0).rgb;
+    imageStore(u_cubemap, gid, vec4(hdr, 1.0));
+}

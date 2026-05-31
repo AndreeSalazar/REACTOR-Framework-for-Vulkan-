@@ -104,10 +104,10 @@ fn main() {
     {
         let path = entry.path();
 
-        // Solo procesar archivos con extensión .vert o .frag.
+        // Procesar .vert / .frag / .comp.
         let Some(ext) = path.extension() else { continue; };
         let ext_str = ext.to_string_lossy();
-        if ext_str != "vert" && ext_str != "frag" {
+        if ext_str != "vert" && ext_str != "frag" && ext_str != "comp" {
             continue;
         }
 
