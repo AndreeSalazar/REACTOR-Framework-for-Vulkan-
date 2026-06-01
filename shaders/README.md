@@ -16,7 +16,8 @@ shaders/
 │   ├── color.glsl           ─ sRGB ⇄ linear, luminance, grading
 │   ├── noise.glsl           ─ hash, value/perlin noise, fbm, dither
 │   ├── pbr.glsl             ─ Cook-Torrance: D_GGX · V_Smith · F_Schlick
-│   ├── ibl.glsl             ─ Sky procedural + envIrradiance + envBRDF
+│   ├── ibl.glsl             ─ IBL **procedural** (sky cielo/horizonte + 5-tap diffuse)
+│   ├── ibl_textures.glsl    ─ IBL **desde texturas pre-baked** (cubemap HDR + LUT)
 │   ├── lighting.glsl        ─ Directional / Point / Spot + studio 3-point
 │   └── tonemap.glsl         ─ ACES Narkowicz · ACES fitted · AgX
 │
@@ -27,8 +28,14 @@ shaders/
 ├── post/                    ← post-process chain (13 efectos)
 │   └── post_process.vert/.frag → alias post_process_{vert,frag}.spv
 │
-└── live/                    ← Blender Live Link (mini-PBR estudio)
-    └── blender_live.vert/.frag → alias blender_live_{vert,frag}.spv
+├── live/                    ← Blender Live Link (mini-PBR estudio)
+│   └── blender_live.vert/.frag → alias blender_live_{vert,frag}.spv
+│
+└── ibl/                     ← Compute shaders para cocinar IBL en GPU
+    ├── equirect_to_cube.comp    ─ HDR equirect 2D → cubemap RGBA16F
+    ├── irradiance.comp          ─ cubemap → irradiance difusa (32×32)
+    ├── prefilter.comp           ─ cubemap → specular prefilt (Karis GGX importance)
+    └── brdf_lut.comp            ─ split-sum LUT 2D (RG16F)
 ```
 
 Las **8 rutas canónicas de salida** (`vert.spv`, `frag.spv`,

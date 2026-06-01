@@ -184,7 +184,7 @@ impl IblBaker {
         let equirect_img = upload_equirect_hdr(ctx, allocator.clone(), pool, pixels_rgba_f16, width, height)?;
 
         // ── 2. Crear los 3 outputs ──────────────────────────────────────────
-        let mut radiance = create_cubemap(
+        let radiance = create_cubemap(
             ctx, allocator.clone(),
             IBL_RADIANCE_SIZE,
             1, // 1 mip — fuente para los siguientes pasos
@@ -387,7 +387,7 @@ impl IblBaker {
 /// + dimensiones.
 fn load_hdr_equirect(path: &Path) -> ReactorResult<(Vec<u16>, u32, u32)> {
     let img = image::open(path).map_err(|e| {
-        ReactorError::with_source(ErrorCode::Generic, "no se pudo abrir HDR equirect", e)
+        ReactorError::with_source(ErrorCode::VulkanImageCreation, "no se pudo abrir HDR equirect", e)
     })?;
     let rgb32 = img.to_rgb32f();
     let (w, h) = (rgb32.width(), rgb32.height());
@@ -942,7 +942,7 @@ impl ComputePass {
     ) -> ReactorResult<Self> {
         let device = ctx.ash_device();
         let code = read_spv(&mut Cursor::new(spv)).map_err(|e| ReactorError::with_source(
-            ErrorCode::Generic, "spv inválido", e))?;
+            ErrorCode::VulkanImageCreation, "spv inválido", e))?;
         let sm = unsafe { device.create_shader_module(
             &vk::ShaderModuleCreateInfo::default().code(&code), None).map_err(verr)? };
 
@@ -1035,5 +1035,5 @@ struct BrdfLutPC { size: i32, _pad: i32, _pad2: [f32; 2] }
 // =============================================================================
 
 fn verr<E: std::fmt::Display>(e: E) -> ReactorError {
-    ReactorError::new(ErrorCode::Generic, format!("IBL Vulkan error: {}", e))
+    ReactorError::new(ErrorCode::VulkanImageCreation, format!("IBL Vulkan error: {}", e))
 }

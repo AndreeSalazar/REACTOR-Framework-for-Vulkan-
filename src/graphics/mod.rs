@@ -7,6 +7,7 @@ pub mod debug_renderer;
 pub mod depth;
 pub mod descriptors;
 pub mod framebuffer;
+pub mod ibl;
 pub mod image;
 pub mod msaa;
 pub mod pipeline;
@@ -24,6 +25,7 @@ pub use descriptors::{
     DescriptorBinding, DescriptorPool, DescriptorSet, DescriptorSetLayout, PoolSize,
 };
 pub use framebuffer::{Framebuffer, FramebufferSet};
+pub use ibl::{IblBaker, IblImage, IblTextures};
 pub use image::Image;
 pub use msaa::MsaaTarget;
 pub use pipeline::{Pipeline, PipelineConfig};

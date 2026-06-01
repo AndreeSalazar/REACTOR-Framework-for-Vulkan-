@@ -59,8 +59,9 @@ glam = { workspace = true }
 # Assets
 gltf = "1.4"
 gltf-json = "1.4"
-image = "0.25"
+image = { version = "0.25", features = ["hdr"] }
 ktx2 = "0.3"
+half = { version = "2", features = ["bytemuck"] }
 base64 = "0.22"
 
 # Asset database & caching
