@@ -481,25 +481,32 @@ pub fn create_deferred_graph(width: u32, height: u32) -> FrameGraph {
         ResourceFormat::Depth32F,
     );
     let albedo = graph.create_resource(
-        "GBuffer_Albedo",
+        "GBuffer0_Albedo_AO",
         ResourceType::RenderTarget,
         width,
         height,
         ResourceFormat::RGBA8,
     );
     let normal = graph.create_resource(
-        "GBuffer_Normal",
+        "GBuffer1_Normal_Material",
         ResourceType::RenderTarget,
         width,
         height,
         ResourceFormat::RGBA16F,
     );
-    let position = graph.create_resource(
-        "GBuffer_Position",
+    let emissive = graph.create_resource(
+        "GBuffer2_Emissive_Material",
         ResourceType::RenderTarget,
         width,
         height,
-        ResourceFormat::RGBA32F,
+        ResourceFormat::RGBA16F,
+    );
+    let motion_depth = graph.create_resource(
+        "GBuffer3_Motion_Depth_Flags",
+        ResourceType::RenderTarget,
+        width,
+        height,
+        ResourceFormat::RGBA16F,
     );
     let lit = graph.create_resource(
         "Lit",
@@ -522,7 +529,8 @@ pub fn create_deferred_graph(width: u32, height: u32) -> FrameGraph {
         .write(depth)
         .write(albedo)
         .write(normal)
-        .write(position)
+        .write(emissive)
+        .write(motion_depth)
         .order(0)
         .build();
 
@@ -531,7 +539,8 @@ pub fn create_deferred_graph(width: u32, height: u32) -> FrameGraph {
         .read(depth)
         .read(albedo)
         .read(normal)
-        .read(position)
+        .read(emissive)
+        .read(motion_depth)
         .write(lit)
         .order(1)
         .build();

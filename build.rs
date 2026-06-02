@@ -36,6 +36,9 @@ fn shader_aliases() -> HashMap<&'static str, &'static str> {
     m.insert("shader.frag", "shaders/frag.spv");
     m.insert("texture.vert", "shaders/texture_vert.spv");
     m.insert("texture.frag", "shaders/texture_frag.spv");
+    // ── Deferred / G-Buffer ──────────────────────────────────────────────
+    m.insert("gbuffer.vert", "shaders/deferred/gbuffer_vert.spv");
+    m.insert("gbuffer.frag", "shaders/deferred/gbuffer_frag.spv");
     // ── Post-process chain ───────────────────────────────────────────────
     m.insert("post_process.vert", "shaders/post_process_vert.spv");
     m.insert("post_process.frag", "shaders/post_process_frag.spv");

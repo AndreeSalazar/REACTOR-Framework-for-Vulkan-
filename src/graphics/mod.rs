@@ -7,6 +7,7 @@ pub mod debug_renderer;
 pub mod depth;
 pub mod descriptors;
 pub mod framebuffer;
+pub mod gbuffer;
 pub mod ibl;
 pub mod image;
 pub mod msaa;
@@ -16,6 +17,7 @@ pub mod render_pass;
 pub mod sampler;
 pub mod shadows;
 pub mod swapchain;
+pub mod temporal;
 pub mod uniform_buffer;
 
 pub use buffer::Buffer;
@@ -25,6 +27,7 @@ pub use descriptors::{
     DescriptorBinding, DescriptorPool, DescriptorSet, DescriptorSetLayout, PoolSize,
 };
 pub use framebuffer::{Framebuffer, FramebufferSet};
+pub use gbuffer::{GBuffer, GBufferAttachment};
 pub use ibl::{IblBaker, IblImage, IblTextures};
 pub use image::Image;
 pub use msaa::MsaaTarget;
@@ -36,6 +39,7 @@ pub use render_pass::{RenderPass, RenderPassConfig};
 pub use sampler::{FilterMode, Sampler, SamplerConfig, WrapMode};
 pub use shadows::{ShadowCascade, ShadowConfig, ShadowMap, ShadowUniformData};
 pub use swapchain::Swapchain;
+pub use temporal::TemporalHistory;
 pub use uniform_buffer::{
     GlobalUniformData, LightData, LightUniformData, MaterialUniformData, UniformBuffer,
 };

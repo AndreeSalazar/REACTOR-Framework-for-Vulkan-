@@ -628,6 +628,9 @@ screen-space sean coherentes al cambiar FOV, resolución o cámara.
 | SSAO/GTAO | `post_process.frag` reconstruye posición con la proyección real | AO más estable al variar FOV y resolución |
 | PBR shader lib | `shaders/lib/pbr.glsl` usa Cook-Torrance GGX + Burley/Disney diffuse | Materiales rugosos con respuesta más natural y conservación de energía mejorada |
 | CSM shading | `blender_live.frag` usa PCF Poisson rotado de 12 taps y fade por borde de cascada | Sombras menos cuadriculadas, con menos banding y transiciones más suaves |
+| G-Buffer foundation | `src/graphics/gbuffer.rs` + `shaders/deferred/gbuffer.*` | 4 attachments reales para GTAO, SSR, decals y TAA motion vectors |
+| TAA foundation | `src/graphics/temporal.rs` + `shaders/post/taa_resolve.comp` | History ping-pong HDR/depth y resolve temporal con motion vectors/depth rejection |
+| GTAO foundation | `shaders/post/gtao.comp` | AO compute sobre depth + normal octahedral del G-Buffer |
 | Xenofall | Limpieza de warnings por campos reservados para glTF | Compilación más limpia para iterar sin ruido |
 | Roadmap AAA | Presupuesto VRAM, G-Buffer, TAA, IBL HD y DDGI quedan priorizados | Preparación para deferred lighting y GI dinámica |
 
@@ -1527,7 +1530,10 @@ sequenceDiagram
 - `xenofall` actualizado a banner `REACTOR 1.6.0` y warning de campos glTF reservados limpiado.
 - Cook-Torrance en `shaders/lib/pbr.glsl` refinado con diffuse Burley/Disney para materiales rugosos más cinematográficos.
 - CSM en `blender_live.frag` refinado con PCF Poisson rotado de 12 taps, radio por cascada y fade de borde para suavizar artefactos.
-- Base lista para la siguiente implementación grande: G-Buffer 4 attachments, motion vectors/TAA history, IBL prefiltrado HD y DDGI.
+- G-Buffer foundation: 4 attachments Vulkan (`albedo/AO`, `normal/material`, `emissive/material ID`, `motion/depth/flags`) con recreación en resize y shaders deferred iniciales.
+- TAA foundation: history buffers HDR/depth ping-pong y compute shader inicial con reproyección por motion vectors, clipping de vecindario y rechazo por depth.
+- GTAO foundation: compute shader sobre depth + normal del G-Buffer con rotación temporal y muestreo multi-dirección.
+- Base lista para la siguiente implementación grande: geometry pass deferred conectada, GTAO compute temporal, SSR Hi-Z, decals y DDGI.
 
 ### v1.5.0 — Professional Lighting Foundation (Junio 2026)
 

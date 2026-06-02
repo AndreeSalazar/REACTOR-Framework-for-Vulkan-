@@ -36,6 +36,9 @@ impl Reactor {
             return Ok(());
         }
 
+        self.gbuffer = None;
+        self.temporal_history = None;
+
         // ── Destruir depth previo ──
         if let Some(view) = self.depth_image_view.take() {
             unsafe { self.context.device.destroy_image_view(view, None) };
@@ -104,6 +107,36 @@ impl Reactor {
             self.depth_image_view.unwrap(),
             self.msaa_samples == vk::SampleCountFlags::TYPE_1,
         )?;
+
+        let gbuffer = crate::graphics::GBuffer::new(
+            &self.context,
+            self.allocator.clone(),
+            self.swapchain.extent.width,
+            self.swapchain.extent.height,
+        )?;
+        log::info!(
+            "G-Buffer recreated: 4 attachments @ {}x{} (~{:.1} MiB, storage writes: {})",
+            self.swapchain.extent.width,
+            self.swapchain.extent.height,
+            gbuffer.estimated_bytes() as f32 / (1024.0 * 1024.0),
+            gbuffer.storage_writes_supported
+        );
+        self.gbuffer = Some(gbuffer);
+
+        let temporal_history = crate::graphics::TemporalHistory::new(
+            &self.context,
+            self.allocator.clone(),
+            self.swapchain.extent.width,
+            self.swapchain.extent.height,
+        )?;
+        log::info!(
+            "Temporal history recreated: color/depth ping-pong @ {}x{} (~{:.1} MiB, storage writes: {})",
+            self.swapchain.extent.width,
+            self.swapchain.extent.height,
+            temporal_history.estimated_bytes() as f32 / (1024.0 * 1024.0),
+            temporal_history.storage_writes_supported
+        );
+        self.temporal_history = Some(temporal_history);
 
         Ok(())
     }

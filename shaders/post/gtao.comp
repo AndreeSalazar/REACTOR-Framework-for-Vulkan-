@@ -1,0 +1,110 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(binding = 0) uniform sampler2D u_depth;
+layout(binding = 1) uniform sampler2D u_gbuffer_normal_material;
+layout(binding = 2, r16f) uniform writeonly image2D u_ao;
+
+layout(push_constant) uniform GtaoParams {
+    float proj_x;
+    float proj_y;
+    float near_plane;
+    float far_plane;
+    float radius_pixels;
+    float radius_world;
+    float intensity;
+    float frame_index;
+} pc;
+
+const vec2 GTAO_DIRS[8] = vec2[](
+    vec2( 1.000,  0.000), vec2( 0.707,  0.707),
+    vec2( 0.000,  1.000), vec2(-0.707,  0.707),
+    vec2(-1.000,  0.000), vec2(-0.707, -0.707),
+    vec2( 0.000, -1.000), vec2( 0.707, -0.707)
+);
+
+float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+float linearize_depth(float depth) {
+    float n = max(pc.near_plane, 0.001);
+    float f = max(pc.far_plane, n + 0.001);
+    return (n * f) / max(f - depth * (f - n), 0.0001);
+}
+
+vec3 reconstruct_view_pos(vec2 uv, float depth) {
+    float view_z = linearize_depth(depth);
+    vec2 ndc = uv * 2.0 - 1.0;
+    float px = sign(pc.proj_x) * max(abs(pc.proj_x), 0.0001);
+    float py = sign(pc.proj_y) * max(abs(pc.proj_y), 0.0001);
+    return vec3(ndc.x * view_z / px, ndc.y * view_z / py, -view_z);
+}
+
+vec3 decode_octahedral(vec2 enc) {
+    vec2 f = enc * 2.0 - 1.0;
+    vec3 n = vec3(f.x, f.y, 1.0 - abs(f.x) - abs(f.y));
+    if (n.z < 0.0) {
+        n.xy = (1.0 - abs(n.yx)) * sign(n.xy);
+    }
+    return normalize(n);
+}
+
+void main() {
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(u_ao);
+    if (pixel.x >= size.x || pixel.y >= size.y) {
+        return;
+    }
+
+    vec2 texel = 1.0 / vec2(size);
+    vec2 uv = (vec2(pixel) + 0.5) * texel;
+    float depth = texture(u_depth, uv).r;
+    if (depth >= 0.9999) {
+        imageStore(u_ao, pixel, vec4(1.0, 0.0, 0.0, 1.0));
+        return;
+    }
+
+    vec3 center_pos = reconstruct_view_pos(uv, depth);
+    vec2 enc_normal = texture(u_gbuffer_normal_material, uv).rg;
+    vec3 normal = decode_octahedral(enc_normal);
+
+    float rotation = hash12(vec2(pixel) + pc.frame_index * 17.0) * 6.2831853;
+    mat2 rot = mat2(cos(rotation), -sin(rotation), sin(rotation), cos(rotation));
+    float occlusion = 0.0;
+    float weight_sum = 0.0;
+
+    for (int dir_i = 0; dir_i < 8; ++dir_i) {
+        vec2 dir = rot * GTAO_DIRS[dir_i];
+        for (int step_i = 1; step_i <= 4; ++step_i) {
+            float step_t = float(step_i) / 4.0;
+            vec2 sample_uv = uv + dir * texel * pc.radius_pixels * step_t;
+            if (any(lessThan(sample_uv, vec2(0.0))) || any(greaterThan(sample_uv, vec2(1.0)))) {
+                continue;
+            }
+
+            float sample_depth = texture(u_depth, sample_uv).r;
+            if (sample_depth >= 0.9999) {
+                continue;
+            }
+
+            vec3 sample_pos = reconstruct_view_pos(sample_uv, sample_depth);
+            vec3 delta = sample_pos - center_pos;
+            float dist = length(delta);
+            vec3 horizon = delta / max(dist, 0.0001);
+            float NoH = max(dot(normal, horizon), 0.0);
+            float range = smoothstep(pc.radius_world, 0.0, dist);
+            float thickness = smoothstep(0.001, pc.radius_world * 0.16, delta.z);
+            float w = range * NoH;
+            occlusion += w * thickness;
+            weight_sum += w;
+        }
+    }
+
+    float ao = 1.0 - clamp(occlusion / max(weight_sum, 0.0001), 0.0, 1.0);
+    ao = pow(clamp(ao, 0.0, 1.0), max(pc.intensity, 0.001));
+    imageStore(u_ao, pixel, vec4(ao, 0.0, 0.0, 1.0));
+}

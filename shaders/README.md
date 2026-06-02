@@ -28,6 +28,9 @@ shaders/
 ├── post/                    ← post-process chain (13 efectos)
 │   └── post_process.vert/.frag → alias post_process_{vert,frag}.spv
 │
+├── deferred/                ← geometry pass para G-Buffer profesional
+│   └── gbuffer.vert/.frag   → alias deferred/gbuffer_{vert,frag}.spv
+│
 ├── live/                    ← Blender Live Link (mini-PBR estudio)
 │   └── blender_live.vert/.frag → alias blender_live_{vert,frag}.spv
 │
@@ -125,10 +128,12 @@ color += bayer_dither(gl_FragCoord.xy);
 | **Cubemap HDR real** (KTX2 prefilt)            | ❌ (procedural) | Cargar IBL desde `assets/`, prefilt en compute shader, exponer 1 cubemap + 1 BRDF LUT 2D al frag shader vía descriptors. Sustituye `sampleEnv`. |
 | **Normal mapping**                             | ❌ | Añadir slot tangent al vértice (`VertexPBR`) + sampler de normal map, TBN matrix correcto. |
 | **Shadow maps cascaded (CSM)**                 | ✅ v1.6 | 4 cascadas depth-only + PCF Poisson rotado en `blender_live.frag`; falta debug view, PCSS/contact-hardening y blend temporal. |
-| **Screen-Space Reflections** (SSR)             | ❌ | Compute shader sobre depth + hierarchical Hi-Z marcha. |
-| **Screen-Space AO** (GTAO)                     | ❌ | Reemplaza `curvature_AO` por compute pass sobre depth + normal G-buffer. |
+| **G-Buffer 4 attachments**                     | ✅ foundation | Recursos Vulkan + shaders `deferred/gbuffer.*`; falta conectar geometry pass deferred por material. |
+| **TAA con motion vectors**                     | ✅ foundation | History buffers HDR/depth + `taa_resolve.comp`; falta dispatch integrado tras lighting/post. |
+| **Screen-Space Reflections** (SSR)             | ❌ | Compute shader sobre depth/normal + hierarchical Hi-Z marcha. |
+| **Screen-Space AO** (GTAO)                     | ✅ foundation | `gtao.comp` calcula AO desde depth + normal G-buffer; falta target AO, denoise temporal y composite. |
 | **Volumetric fog froxels**                     | ❌ | Compute shader poblando un volumen 3D + ray-march en la composición. |
-| **TAA con motion vectors**                     | ❌ | Sub-pixel jitter en projection + clipping en el composite. |
+| **Jitter TAA por cámara**                      | ❌ | Añadir Halton jitter a projection + previous matrices por objeto/cámara. |
 | **Bloom mip-chain (13 niveles, Karis avg)**    | ❌ | Sustituir bloom single-pass de `post_process.frag` por downsample/upsample (COD AW 2014). |
 | **Path-traced reference** (verifier)           | ❌ (RT base existe) | Cocinar pipeline RT en `src/raytracing/` + denoiser SVGF. |
 | **Material capas** (clearcoat, sheen, aniso)   | ❌ | Añadir lóbulos extra al BRDF — el slot existe en `pbr.glsl`. |

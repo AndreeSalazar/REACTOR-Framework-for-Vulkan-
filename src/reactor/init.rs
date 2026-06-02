@@ -284,6 +284,34 @@ impl Reactor {
             msaa_samples == vk::SampleCountFlags::TYPE_1,
         )?;
 
+        let gbuffer = crate::graphics::GBuffer::new(
+            &context,
+            allocator.clone(),
+            swapchain.extent.width,
+            swapchain.extent.height,
+        )?;
+        log::info!(
+            "G-Buffer ready: 4 attachments @ {}x{} (~{:.1} MiB, storage writes: {})",
+            swapchain.extent.width,
+            swapchain.extent.height,
+            gbuffer.estimated_bytes() as f32 / (1024.0 * 1024.0),
+            gbuffer.storage_writes_supported
+        );
+
+        let temporal_history = crate::graphics::TemporalHistory::new(
+            &context,
+            allocator.clone(),
+            swapchain.extent.width,
+            swapchain.extent.height,
+        )?;
+        log::info!(
+            "Temporal history ready: color/depth ping-pong @ {}x{} (~{:.1} MiB, storage writes: {})",
+            swapchain.extent.width,
+            swapchain.extent.height,
+            temporal_history.estimated_bytes() as f32 / (1024.0 * 1024.0),
+            temporal_history.storage_writes_supported
+        );
+
         Ok(Self {
             context,
             swapchain,
@@ -308,6 +336,8 @@ impl Reactor {
             camera_near: 0.1,
             camera_far: 1000.0,
             post_process,
+            gbuffer: Some(gbuffer),
+            temporal_history: Some(temporal_history),
             pixel_intelligent: crate::core::PixelIntelligent::default(),
             msaa_samples,
             msaa_image,

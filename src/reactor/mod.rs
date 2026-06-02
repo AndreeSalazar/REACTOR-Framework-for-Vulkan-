@@ -79,6 +79,8 @@ pub struct Reactor {
     pub camera_near: f32,
     pub camera_far: f32,
     pub post_process: crate::graphics::post_process::PostProcessPipeline,
+    pub gbuffer: Option<crate::graphics::GBuffer>,
+    pub temporal_history: Option<crate::graphics::TemporalHistory>,
     pub pixel_intelligent: PixelIntelligent,
 
     // ── Contexto Vulkan (al final: se libera al final por orden de Drop) ──
@@ -132,6 +134,9 @@ impl Drop for Reactor {
         unsafe {
             // Esperar a que la GPU termine cualquier trabajo pendiente.
             let _ = self.context.device.device_wait_idle();
+
+            self.gbuffer = None;
+            self.temporal_history = None;
 
             // ── Shadows ──
             if let Some(pool) = self.shadow_descriptor_pool.take() {

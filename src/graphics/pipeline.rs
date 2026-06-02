@@ -105,6 +105,66 @@ impl Pipeline {
         depth_format: Option<vk::Format>,
         pipeline_cache: vk::PipelineCache,
     ) -> ReactorResult<Self> {
+        let color_formats = if color_format == vk::Format::UNDEFINED {
+            Vec::new()
+        } else {
+            vec![color_format]
+        };
+        Self::with_config_and_cache_multi_color(
+            device,
+            render_pass,
+            vert_spv,
+            frag_spv,
+            width,
+            height,
+            config,
+            descriptor_layouts,
+            &color_formats,
+            depth_format,
+            pipeline_cache,
+        )
+    }
+
+    pub fn with_config_multi_color(
+        device: &ArcDevice,
+        render_pass: Option<vk::RenderPass>,
+        vert_spv: &[u32],
+        frag_spv: &[u32],
+        width: u32,
+        height: u32,
+        config: &PipelineConfig,
+        descriptor_layouts: &[vk::DescriptorSetLayout],
+        color_formats: &[vk::Format],
+        depth_format: Option<vk::Format>,
+    ) -> ReactorResult<Self> {
+        Self::with_config_and_cache_multi_color(
+            device,
+            render_pass,
+            vert_spv,
+            frag_spv,
+            width,
+            height,
+            config,
+            descriptor_layouts,
+            color_formats,
+            depth_format,
+            vk::PipelineCache::null(),
+        )
+    }
+
+    pub fn with_config_and_cache_multi_color(
+        device: &ArcDevice,
+        render_pass: Option<vk::RenderPass>,
+        vert_spv: &[u32],
+        frag_spv: &[u32],
+        width: u32,
+        height: u32,
+        config: &PipelineConfig,
+        descriptor_layouts: &[vk::DescriptorSetLayout],
+        color_formats: &[vk::Format],
+        depth_format: Option<vk::Format>,
+        pipeline_cache: vk::PipelineCache,
+    ) -> ReactorResult<Self> {
         let vert_shader_module = unsafe {
             let create_info = vk::ShaderModuleCreateInfo::default().code(vert_spv);
             device
@@ -201,19 +261,26 @@ impl Pipeline {
             .depth_bounds_test_enable(false)
             .stencil_test_enable(false);
 
-        let attachments = if color_format == vk::Format::UNDEFINED {
-            Vec::new()
-        } else {
-            vec![vk::PipelineColorBlendAttachmentState::default()
-                .color_write_mask(vk::ColorComponentFlags::RGBA)
-                .blend_enable(config.blend_enable)
-                .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
-                .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
-                .color_blend_op(vk::BlendOp::ADD)
-                .src_alpha_blend_factor(vk::BlendFactor::ONE)
-                .dst_alpha_blend_factor(vk::BlendFactor::ZERO)
-                .alpha_blend_op(vk::BlendOp::ADD)]
-        };
+        let active_color_formats: Vec<vk::Format> = color_formats
+            .iter()
+            .copied()
+            .filter(|format| *format != vk::Format::UNDEFINED)
+            .collect();
+
+        let attachments = active_color_formats
+            .iter()
+            .map(|_| {
+                vk::PipelineColorBlendAttachmentState::default()
+                    .color_write_mask(vk::ColorComponentFlags::RGBA)
+                    .blend_enable(config.blend_enable)
+                    .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
+                    .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
+                    .color_blend_op(vk::BlendOp::ADD)
+                    .src_alpha_blend_factor(vk::BlendFactor::ONE)
+                    .dst_alpha_blend_factor(vk::BlendFactor::ZERO)
+                    .alpha_blend_op(vk::BlendOp::ADD)
+            })
+            .collect::<Vec<_>>();
         let color_blend_state = vk::PipelineColorBlendStateCreateInfo::default()
             .logic_op_enable(false)
             .attachments(&attachments);
@@ -241,12 +308,12 @@ impl Pipeline {
         };
 
         // Dynamic Rendering support
-        let mut rendering_info = if color_format == vk::Format::UNDEFINED {
+        let mut rendering_info = if active_color_formats.is_empty() {
             vk::PipelineRenderingCreateInfo::default()
                 .depth_attachment_format(depth_format.unwrap_or(vk::Format::UNDEFINED))
         } else {
             vk::PipelineRenderingCreateInfo::default()
-                .color_attachment_formats(std::slice::from_ref(&color_format))
+                .color_attachment_formats(&active_color_formats)
                 .depth_attachment_format(depth_format.unwrap_or(vk::Format::UNDEFINED))
         };
 
