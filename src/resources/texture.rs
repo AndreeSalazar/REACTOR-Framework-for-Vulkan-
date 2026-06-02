@@ -42,6 +42,28 @@ impl Texture {
         Self::from_rgba(ctx, allocator, &data, width, height, generate_mipmaps)
     }
 
+    /// Load linear texture from file (for metallic, roughness, etc.)
+    pub fn from_file_linear<P: AsRef<Path>>(
+        ctx: &VulkanContext,
+        allocator: Arc<Mutex<Allocator>>,
+        path: P,
+        generate_mipmaps: bool,
+    ) -> ReactorResult<Self> {
+        let path_ref = path.as_ref();
+        let img = image::open(path_ref).map_err(|e| {
+            ReactorError::with_source(
+                ErrorCode::TextureLoadFailed,
+                format!("Failed to open linear texture: {}", path_ref.display()),
+                e,
+            )
+        })?;
+        let rgba = img.to_rgba8();
+        let (width, height) = rgba.dimensions();
+        let data = rgba.into_raw();
+
+        Self::from_rgba_with_format(ctx, allocator, &data, width, height, generate_mipmaps, vk::Format::R8G8B8A8_UNORM)
+    }
+
     /// Load texture from embedded bytes (PNG, JPG, etc.)
     pub fn from_bytes(
         ctx: &VulkanContext,
@@ -125,13 +147,25 @@ impl Texture {
         height: u32,
         generate_mipmaps: bool,
     ) -> ReactorResult<Self> {
+        Self::from_rgba_with_format(ctx, allocator, data, width, height, generate_mipmaps, vk::Format::R8G8B8A8_SRGB)
+    }
+
+    pub fn from_rgba_with_format(
+        ctx: &VulkanContext,
+        allocator: Arc<Mutex<Allocator>>,
+        data: &[u8],
+        width: u32,
+        height: u32,
+        generate_mipmaps: bool,
+        format: vk::Format,
+    ) -> ReactorResult<Self> {
         let mip_levels = if generate_mipmaps {
             ((width.max(height) as f32).log2().floor() as u32) + 1
         } else {
             1
         };
 
-        let image = Image::new_texture(ctx, allocator.clone(), width, height, mip_levels)?;
+        let image = Image::new_texture_with_format(ctx, allocator.clone(), width, height, format, mip_levels)?;
 
         // Create staging buffer
         let buffer_size = (width * height * 4) as u64;

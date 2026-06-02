@@ -26,6 +26,8 @@
 // Set 0: Texturas del material
 layout(set = 0, binding = 0) uniform sampler2D u_albedo_map;
 layout(set = 0, binding = 1) uniform sampler2D u_normal_map;
+layout(set = 0, binding = 2) uniform sampler2D u_metallic_map;
+layout(set = 0, binding = 3) uniform sampler2D u_roughness_map;
 
 // Set 1: Texturas IBL (Image-Based Lighting)
 #define REACTOR_IBL_SET 1
@@ -34,9 +36,78 @@ layout(set = REACTOR_IBL_SET, binding = 1) uniform samplerCube u_ibl_prefiltered
 layout(set = REACTOR_IBL_SET, binding = 2) uniform sampler2D   u_ibl_brdf_lut;
 layout(set = REACTOR_IBL_SET, binding = 3) uniform IblParams { float max_mip; } ibl_params;
 
+// Set 2: Cascaded Shadow Maps
+layout(set = 2, binding = 0) uniform sampler2DArray u_shadow_map;
+layout(set = 2, binding = 1) uniform ShadowData {
+    mat4 cascade_view_proj[4];
+    vec4 cascade_splits;
+    vec4 light_direction;
+    float shadow_bias;
+    float normal_bias;
+    float pcf_radius;
+    uint shadow_enabled;
+} shadow;
+
 #include "ibl_textures.glsl"
 #include "lighting.glsl"
 #include "tonemap.glsl"
+
+// Cálculo de factor de sombra con PCF y Cascaded Shadow Maps (CSM)
+float calculate_shadow(vec3 world_pos, vec3 normal) {
+    if (shadow.shadow_enabled == 0) {
+        return 1.0;
+    }
+
+    int cascade_idx = 3;
+    vec4 shadow_coord = vec4(0.0);
+    
+    for (int i = 0; i < 4; i++) {
+        vec4 proj_coord = shadow.cascade_view_proj[i] * vec4(world_pos, 1.0);
+        vec3 ndc = proj_coord.xyz / proj_coord.w;
+        vec3 uv = ndc * 0.5 + 0.5;
+        
+        if (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0 && ndc.z >= 0.0 && ndc.z <= 1.0) {
+            cascade_idx = i;
+            shadow_coord = vec4(uv.xy, float(cascade_idx), ndc.z);
+            break;
+        }
+    }
+    
+    if (cascade_idx == 3 && (shadow_coord.x < 0.0 || shadow_coord.x > 1.0 || shadow_coord.y < 0.0 || shadow_coord.y > 1.0)) {
+        vec4 proj_coord = shadow.cascade_view_proj[3] * vec4(world_pos, 1.0);
+        vec3 ndc = proj_coord.xyz / proj_coord.w;
+        vec3 uv = ndc * 0.5 + 0.5;
+        shadow_coord = vec4(uv.xy, 3.0, ndc.z);
+    }
+
+    float cos_theta = clamp(dot(normal, shadow.light_direction.xyz), 0.0, 1.0);
+    float bias = max(shadow.shadow_bias * (1.0 - cos_theta), shadow.shadow_bias * 0.1);
+    bias *= (1.0 + float(cascade_idx) * 0.5);
+
+    vec3 biased_pos = world_pos + normal * shadow.normal_bias * (1.0 + float(cascade_idx) * 0.5);
+    vec4 proj_coord = shadow.cascade_view_proj[cascade_idx] * vec4(biased_pos, 1.0);
+    vec3 ndc = proj_coord.xyz / proj_coord.w;
+    vec3 shadow_uv = ndc * 0.5 + 0.5;
+
+    float current_depth = shadow_uv.z - bias;
+    
+    if (shadow_uv.z > 1.0) {
+        return 1.0;
+    }
+
+    float shadow_factor = 0.0;
+    vec2 texel_size = vec2(shadow.pcf_radius);
+    
+    for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+            vec2 offset = vec2(x, y) * texel_size;
+            float shadow_depth = texture(u_shadow_map, vec3(shadow_uv.xy + offset, float(cascade_idx))).r;
+            shadow_factor += current_depth > shadow_depth ? 0.0 : 1.0;
+        }
+    }
+    
+    return shadow_factor / 9.0;
+}
 
 layout(location = 0) in vec3 vWorldNormal;
 layout(location = 1) in vec2 vUV;
@@ -106,8 +177,10 @@ void main() {
     }
 
     // ── Propiedades PBR reales ──────────────────────────────────────────────
-    float metallic  = clamp(push.camera_pos.w, 0.0, 1.0);
-    float roughness = clamp(push.light_pos.w, 0.04, 1.0);
+    float tex_metallic  = texture(u_metallic_map, vUV).r;
+    float tex_roughness = texture(u_roughness_map, vUV).r;
+    float metallic  = clamp(push.camera_pos.w * tex_metallic, 0.0, 1.0);
+    float roughness = clamp(push.light_pos.w * tex_roughness, 0.04, 1.0);
     vec3  f0        = mix(REACTOR_F0_DIEL, albedo, metallic);
 
     // ── Oclusión / contact shadow ──────────────────────────────────────────
@@ -115,15 +188,40 @@ void main() {
     float cs = contact_shadow(P, N);
 
     // ── Lighting analítico: estudio 3-point + luz dinámica de Blender ──────
-    vec3 lo = light_studio_3point(N, V, albedo, metallic, roughness, f0);
+    float shadow_factor = 1.0;
+    if (shadow.shadow_enabled != 0) {
+        shadow_factor = calculate_shadow(P, N);
+    }
+
+    vec3 lo = vec3(0.0);
+    
+    // Evaluate 3-point studio lights, applying shadow to the main key light
+    vec3 keyDir  = normalize(vec3(-0.45, 0.85, 0.40));
+    vec3 fillDir = normalize(vec3( 0.65, 0.45,-0.30));
+    vec3 backDir = normalize(vec3( 0.10, 0.65,-0.95));
+    vec3 keyRad  = vec3(3.2, 3.0, 2.7) * shadow_factor;
+    vec3 fillRad = vec3(0.55, 0.65, 0.85);
+    vec3 backRad = vec3(1.6, 1.55, 1.50);
+    lo += light_eval_directional(N, V, keyDir,  keyRad,  albedo, metallic, roughness, f0);
+    lo += light_eval_directional(N, V, fillDir, fillRad, albedo, metallic, roughness, f0);
+    lo += light_eval_directional(N, V, backDir, backRad, albedo, metallic, roughness, f0);
+
+    // Dynamic point light (shadowed)
     lo += light_eval_point(
         N, V, P,
         push.light_pos.xyz,
         /* color     */ vec3(1.0, 1.0, 1.0),
-        /* intensity */ 12.0,
+        /* intensity */ 12.0 * shadow_factor,
         /* range     */ 25.0,
         albedo, metallic, roughness, f0
     );
+
+    // Dynamic Sun directional light
+    if (shadow.shadow_enabled != 0) {
+        vec3 L_sun = -normalize(shadow.light_direction.xyz);
+        vec3 sun_radiance = vec3(2.5, 2.4, 2.2) * shadow_factor;
+        lo += light_eval_directional(N, V, L_sun, sun_radiance, albedo, metallic, roughness, f0);
+    }
 
     // ── IBL (diffuse + specular split-sum from pre-baked HDR cubemap) ────────
     vec3 ambient = ibl_eval_textured(N, V, albedo, metallic, roughness, f0, ao, ibl_params.max_mip);

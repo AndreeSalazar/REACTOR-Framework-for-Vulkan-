@@ -40,6 +40,8 @@ fn shader_aliases() -> HashMap<&'static str, &'static str> {
     // ── Blender Live Link ────────────────────────────────────────────────
     m.insert("blender_live.vert", "shaders/blender_live_vert.spv");
     m.insert("blender_live.frag", "shaders/blender_live_frag.spv");
+    m.insert("shadow.vert", "shaders/shadow_vert.spv");
+    m.insert("shadow.frag", "shaders/shadow_frag.spv");
     m
 }
 

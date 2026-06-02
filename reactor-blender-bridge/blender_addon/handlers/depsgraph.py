@@ -48,6 +48,8 @@ def get_material_properties(mat):
         "roughness": 0.5,
         "albedo_path": None,
         "normal_path": None,
+        "metallic_path": None,
+        "roughness_path": None,
         "emission_color": [0.0, 0.0, 0.0],
         "emission_strength": 0.0,
     }
@@ -65,13 +67,19 @@ def get_material_properties(mat):
             
             # Metalicidad
             metallic_input = node.inputs.get('Metallic')
-            if metallic_input and not metallic_input.is_linked:
-                props["metallic"] = metallic_input.default_value
+            if metallic_input:
+                if metallic_input.is_linked:
+                    props["metallic_path"] = get_texture_path(metallic_input)
+                else:
+                    props["metallic"] = metallic_input.default_value
             
             # Rugosidad
             roughness_input = node.inputs.get('Roughness')
-            if roughness_input and not roughness_input.is_linked:
-                props["roughness"] = roughness_input.default_value
+            if roughness_input:
+                if roughness_input.is_linked:
+                    props["roughness_path"] = get_texture_path(roughness_input)
+                else:
+                    props["roughness"] = roughness_input.default_value
             
             # Mapa de normales
             props["normal_path"] = get_normal_texture_path(node)
@@ -125,6 +133,8 @@ def _on_depsgraph_update(scene, depsgraph):
                                 "roughness": props["roughness"],
                                 "albedo_path": props["albedo_path"],
                                 "normal_path": props["normal_path"],
+                                "metallic_path": props["metallic_path"],
+                                "roughness_path": props["roughness_path"],
                                 "emission_color": props["emission_color"],
                                 "emission_strength": props["emission_strength"],
                             }
@@ -164,6 +174,8 @@ def _on_depsgraph_update(scene, depsgraph):
             props["roughness"],
             props["albedo_path"],
             props["normal_path"],
+            props["metallic_path"],
+            props["roughness_path"],
             tuple(props["emission_color"]),
             props["emission_strength"]
         ) if props else None
@@ -192,6 +204,8 @@ def _on_depsgraph_update(scene, depsgraph):
                 "roughness": props["roughness"],
                 "albedo_path": props["albedo_path"],
                 "normal_path": props["normal_path"],
+                "metallic_path": props["metallic_path"],
+                "roughness_path": props["roughness_path"],
                 "emission_color": props["emission_color"],
                 "emission_strength": props["emission_strength"],
             })
@@ -237,6 +251,8 @@ def sync_full_scene():
             props["roughness"],
             props["albedo_path"],
             props["normal_path"],
+            props["metallic_path"],
+            props["roughness_path"],
             tuple(props["emission_color"]),
             props["emission_strength"]
         ) if props else None
@@ -259,6 +275,8 @@ def sync_full_scene():
                 "roughness": props["roughness"],
                 "albedo_path": props["albedo_path"],
                 "normal_path": props["normal_path"],
+                "metallic_path": props["metallic_path"],
+                "roughness_path": props["roughness_path"],
                 "emission_color": props["emission_color"],
                 "emission_strength": props["emission_strength"],
             })

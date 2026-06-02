@@ -191,7 +191,10 @@ pub struct PostProcessSettings {
 
     // General
     pub time: f32,
+    pub depth_near: f32,
+    pub depth_far: f32,
     pub effect_mask: u32, // Bitflags for enabled effects
+    pub _padding: u32,
 }
 
 impl Default for PostProcessSettings {
@@ -222,7 +225,10 @@ impl Default for PostProcessSettings {
             pause_selected: 0.0,
             pause_row_count: 0.0,
             time: 0.0,
+            depth_near: 0.1,
+            depth_far: 1000.0,
             effect_mask: 0,
+            _padding: 0,
         };
         settings.enable_effect(PostProcessEffect::ToneMapping);
         settings.enable_effect(PostProcessEffect::Vignette);
@@ -391,6 +397,7 @@ impl PostProcessPipeline {
         height: u32,
         image_count: u32,
         swapchain_format: vk::Format,
+        depth_view: vk::ImageView,
     ) -> crate::core::error::ReactorResult<()> {
         let device = ctx.ash_device();
         self.device = Some(ctx.device.clone());
@@ -404,6 +411,11 @@ impl PostProcessPipeline {
                 .stage_flags(vk::ShaderStageFlags::FRAGMENT),
             vk::DescriptorSetLayoutBinding::default()
                 .binding(1)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(2)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                 .descriptor_count(1)
                 .stage_flags(vk::ShaderStageFlags::FRAGMENT),
@@ -533,7 +545,7 @@ impl PostProcessPipeline {
         // 4. Create Descriptor Pool
         let pool_size = vk::DescriptorPoolSize::default()
             .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .descriptor_count(image_count * 2);
+            .descriptor_count(image_count * 3);
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .pool_sizes(std::slice::from_ref(&pool_size))
             .max_sets(image_count);
@@ -560,6 +572,7 @@ impl PostProcessPipeline {
             height,
             image_count,
             swapchain_format,
+            depth_view,
         )?;
 
         // 7. Initialize Bloom Compute Pipeline (mip-chain with Karis average)
@@ -576,6 +589,7 @@ impl PostProcessPipeline {
         height: u32,
         image_count: u32,
         format: vk::Format,
+        depth_view: vk::ImageView,
     ) -> crate::core::error::ReactorResult<()> {
         let device = ctx.ash_device();
 
@@ -622,12 +636,25 @@ impl PostProcessPipeline {
                 .image_view(img.view)
                 .sampler(sampler);
 
-            let writes = [vk::WriteDescriptorSet::default()
-                .dst_set(self.descriptor_sets[i])
-                .dst_binding(0)
-                .dst_array_element(0)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(std::slice::from_ref(&image_info))];
+            let depth_info = vk::DescriptorImageInfo::default()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(depth_view)
+                .sampler(sampler);
+
+            let writes = [
+                vk::WriteDescriptorSet::default()
+                    .dst_set(self.descriptor_sets[i])
+                    .dst_binding(0)
+                    .dst_array_element(0)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .image_info(std::slice::from_ref(&image_info)),
+                vk::WriteDescriptorSet::default()
+                    .dst_set(self.descriptor_sets[i])
+                    .dst_binding(2)
+                    .dst_array_element(0)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .image_info(std::slice::from_ref(&depth_info)),
+            ];
 
             unsafe {
                 device.update_descriptor_sets(&writes, &[]);

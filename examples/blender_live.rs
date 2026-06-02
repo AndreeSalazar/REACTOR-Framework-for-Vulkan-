@@ -72,6 +72,8 @@ struct BlenderLive {
     /// Texturas de fallback y cache de texturas dinámicas
     fallback_albedo: Option<reactor_vulkan::resources::texture::Texture>,
     fallback_normal: Option<reactor_vulkan::resources::texture::Texture>,
+    fallback_metallic: Option<reactor_vulkan::resources::texture::Texture>,
+    fallback_roughness: Option<reactor_vulkan::resources::texture::Texture>,
     texture_cache: HashMap<String, reactor_vulkan::resources::texture::Texture>,
 
     /// Códigos SPIR-V de los shaders
@@ -91,6 +93,8 @@ impl BlenderLive {
             runtime: None,
             fallback_albedo: None,
             fallback_normal: None,
+            fallback_metallic: None,
+            fallback_roughness: None,
             texture_cache: HashMap::new(),
             vert_code: Vec::new(),
             frag_code: Vec::new(),
@@ -234,13 +238,21 @@ impl ReactorApp for BlenderLive {
             .expect("Failed to create fallback albedo texture");
         let fallback_normal = ctx.reactor.create_solid_texture(128, 128, 255, 255)
             .expect("Failed to create fallback normal texture");
+        let fallback_metallic = ctx.reactor.create_solid_texture(255, 255, 255, 255)
+            .expect("Failed to create fallback metallic texture");
+        let fallback_roughness = ctx.reactor.create_solid_texture(255, 255, 255, 255)
+            .expect("Failed to create fallback roughness texture");
         self.fallback_albedo = Some(fallback_albedo);
         self.fallback_normal = Some(fallback_normal);
+        self.fallback_metallic = Some(fallback_metallic);
+        self.fallback_roughness = Some(fallback_roughness);
 
         // Crear materiales con IBL y texturas
         let albedo_ref = self.fallback_albedo.as_ref().unwrap();
         let normal_ref = self.fallback_normal.as_ref().unwrap();
-        let blender_mat = Arc::new(ctx.reactor.create_pbr_material(&vert, &frag, ibl_layout, albedo_ref, normal_ref)
+        let metallic_ref = self.fallback_metallic.as_ref().unwrap();
+        let roughness_ref = self.fallback_roughness.as_ref().unwrap();
+        let blender_mat = Arc::new(ctx.reactor.create_pbr_material(&vert, &frag, ibl_layout, albedo_ref, normal_ref, metallic_ref, roughness_ref)
             .expect("Failed to create PBR material"));
         self.blender_material = Some(blender_mat);
 
@@ -251,6 +263,9 @@ impl ReactorApp for BlenderLive {
         // Cámara
         ctx.camera.position = Vec3::new(3.0, 3.0, 5.0);
         ctx.camera.set_rotation(-0.5, -0.6);
+
+        // Inicializar Cascade Shadow Maps
+        ctx.reactor.init_shadows().expect("Failed to initialize shadows");
 
         // -----------------------------------------------------------------
         // 3. Arrancar el servidor WebSocket del bridge
@@ -432,6 +447,8 @@ impl BlenderLive {
                 // Cargar/Actualizar texturas si cambian
                 let mut albedo_updated = false;
                 let mut normal_updated = false;
+                let mut metallic_updated = false;
+                let mut roughness_updated = false;
                 
                 if let Some(ref path) = t.albedo_path {
                     if !self.texture_cache.contains_key(path) {
@@ -451,7 +468,25 @@ impl BlenderLive {
                     normal_updated = true;
                 }
 
-                if albedo_updated || normal_updated {
+                if let Some(ref path) = t.metallic_path {
+                    if !self.texture_cache.contains_key(path) {
+                        if let Ok(tex) = ctx.reactor.load_texture_linear(path) {
+                            self.texture_cache.insert(path.clone(), tex);
+                        }
+                    }
+                    metallic_updated = true;
+                }
+
+                if let Some(ref path) = t.roughness_path {
+                    if !self.texture_cache.contains_key(path) {
+                        if let Ok(tex) = ctx.reactor.load_texture_linear(path) {
+                            self.texture_cache.insert(path.clone(), tex);
+                        }
+                    }
+                    roughness_updated = true;
+                }
+
+                if albedo_updated || normal_updated || metallic_updated || roughness_updated {
                     if let Some(descriptor_set) = obj.material.descriptor_set {
                         let albedo_tex = t.albedo_path.as_ref()
                             .and_then(|p| self.texture_cache.get(p))
@@ -460,6 +495,14 @@ impl BlenderLive {
                         let normal_tex = t.normal_path.as_ref()
                             .and_then(|p| self.texture_cache.get(p))
                             .unwrap_or(self.fallback_normal.as_ref().unwrap());
+
+                        let metallic_tex = t.metallic_path.as_ref()
+                            .and_then(|p| self.texture_cache.get(p))
+                            .unwrap_or(self.fallback_metallic.as_ref().unwrap());
+
+                        let roughness_tex = t.roughness_path.as_ref()
+                            .and_then(|p| self.texture_cache.get(p))
+                            .unwrap_or(self.fallback_roughness.as_ref().unwrap());
                             
                         let albedo_info = ash::vk::DescriptorImageInfo::default()
                             .image_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
@@ -470,6 +513,16 @@ impl BlenderLive {
                             .image_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
                             .image_view(normal_tex.view())
                             .sampler(normal_tex.sampler_handle());
+
+                        let metallic_info = ash::vk::DescriptorImageInfo::default()
+                            .image_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                            .image_view(metallic_tex.view())
+                            .sampler(metallic_tex.sampler_handle());
+
+                        let roughness_info = ash::vk::DescriptorImageInfo::default()
+                            .image_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                            .image_view(roughness_tex.view())
+                            .sampler(roughness_tex.sampler_handle());
 
                         let write_albedo = ash::vk::WriteDescriptorSet::default()
                             .dst_set(descriptor_set)
@@ -485,8 +538,22 @@ impl BlenderLive {
                             .descriptor_type(ash::vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                             .image_info(std::slice::from_ref(&normal_info));
 
+                        let write_metallic = ash::vk::WriteDescriptorSet::default()
+                            .dst_set(descriptor_set)
+                            .dst_binding(2)
+                            .dst_array_element(0)
+                            .descriptor_type(ash::vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                            .image_info(std::slice::from_ref(&metallic_info));
+
+                        let write_roughness = ash::vk::WriteDescriptorSet::default()
+                            .dst_set(descriptor_set)
+                            .dst_binding(3)
+                            .dst_array_element(0)
+                            .descriptor_type(ash::vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                            .image_info(std::slice::from_ref(&roughness_info));
+
                         unsafe {
-                            ctx.reactor.context.device.update_descriptor_sets(&[write_albedo, write_normal], &[]);
+                            ctx.reactor.context.device.update_descriptor_sets(&[write_albedo, write_normal, write_metallic, write_roughness], &[]);
                         }
                         println!("\x1b[35m  📝 Texturas dinámicas actualizadas para '{}'\x1b[0m", t.id);
                     }
@@ -507,8 +574,10 @@ impl BlenderLive {
             let ibl_layout = ctx.reactor.ibl_textures.as_ref().unwrap().descriptor_set_layout;
             let albedo_ref = self.fallback_albedo.as_ref().unwrap();
             let normal_ref = self.fallback_normal.as_ref().unwrap();
+            let metallic_ref = self.fallback_metallic.as_ref().unwrap();
+            let roughness_ref = self.fallback_roughness.as_ref().unwrap();
             
-            let mat = Arc::new(ctx.reactor.create_pbr_material(&self.vert_code, &self.frag_code, ibl_layout, albedo_ref, normal_ref)
+            let mat = Arc::new(ctx.reactor.create_pbr_material(&self.vert_code, &self.frag_code, ibl_layout, albedo_ref, normal_ref, metallic_ref, roughness_ref)
                 .expect("Failed to create entity material"));
 
             let m = t.matrix;
@@ -525,6 +594,8 @@ impl BlenderLive {
             // Cargar texturas al inicio si vienen indicadas
             let mut albedo_updated = false;
             let mut normal_updated = false;
+            let mut metallic_updated = false;
+            let mut roughness_updated = false;
             
             if let Some(ref path) = t.albedo_path {
                 if !self.texture_cache.contains_key(path) {
@@ -544,7 +615,25 @@ impl BlenderLive {
                 normal_updated = true;
             }
 
-            if albedo_updated || normal_updated {
+            if let Some(ref path) = t.metallic_path {
+                if !self.texture_cache.contains_key(path) {
+                    if let Ok(tex) = ctx.reactor.load_texture_linear(path) {
+                        self.texture_cache.insert(path.clone(), tex);
+                    }
+                }
+                metallic_updated = true;
+            }
+
+            if let Some(ref path) = t.roughness_path {
+                if !self.texture_cache.contains_key(path) {
+                    if let Ok(tex) = ctx.reactor.load_texture_linear(path) {
+                        self.texture_cache.insert(path.clone(), tex);
+                    }
+                }
+                roughness_updated = true;
+            }
+
+            if albedo_updated || normal_updated || metallic_updated || roughness_updated {
                 if let Some(descriptor_set) = obj.material.descriptor_set {
                     let albedo_tex = t.albedo_path.as_ref()
                         .and_then(|p| self.texture_cache.get(p))
@@ -553,6 +642,14 @@ impl BlenderLive {
                     let normal_tex = t.normal_path.as_ref()
                         .and_then(|p| self.texture_cache.get(p))
                         .unwrap_or(self.fallback_normal.as_ref().unwrap());
+
+                    let metallic_tex = t.metallic_path.as_ref()
+                        .and_then(|p| self.texture_cache.get(p))
+                        .unwrap_or(self.fallback_metallic.as_ref().unwrap());
+
+                    let roughness_tex = t.roughness_path.as_ref()
+                        .and_then(|p| self.texture_cache.get(p))
+                        .unwrap_or(self.fallback_roughness.as_ref().unwrap());
                         
                     let albedo_info = ash::vk::DescriptorImageInfo::default()
                         .image_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
@@ -563,6 +660,16 @@ impl BlenderLive {
                         .image_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
                         .image_view(normal_tex.view())
                         .sampler(normal_tex.sampler_handle());
+
+                    let metallic_info = ash::vk::DescriptorImageInfo::default()
+                        .image_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                        .image_view(metallic_tex.view())
+                        .sampler(metallic_tex.sampler_handle());
+
+                    let roughness_info = ash::vk::DescriptorImageInfo::default()
+                        .image_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                        .image_view(roughness_tex.view())
+                        .sampler(roughness_tex.sampler_handle());
 
                     let write_albedo = ash::vk::WriteDescriptorSet::default()
                         .dst_set(descriptor_set)
@@ -578,8 +685,22 @@ impl BlenderLive {
                         .descriptor_type(ash::vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                         .image_info(std::slice::from_ref(&normal_info));
 
+                    let write_metallic = ash::vk::WriteDescriptorSet::default()
+                        .dst_set(descriptor_set)
+                        .dst_binding(2)
+                        .dst_array_element(0)
+                        .descriptor_type(ash::vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                        .image_info(std::slice::from_ref(&metallic_info));
+
+                    let write_roughness = ash::vk::WriteDescriptorSet::default()
+                        .dst_set(descriptor_set)
+                        .dst_binding(3)
+                        .dst_array_element(0)
+                        .descriptor_type(ash::vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                        .image_info(std::slice::from_ref(&roughness_info));
+
                     unsafe {
-                        ctx.reactor.context.device.update_descriptor_sets(&[write_albedo, write_normal], &[]);
+                        ctx.reactor.context.device.update_descriptor_sets(&[write_albedo, write_normal, write_metallic, write_roughness], &[]);
                     }
                 }
             }

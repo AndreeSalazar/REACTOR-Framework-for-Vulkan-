@@ -101,6 +101,7 @@ impl Reactor {
             self.swapchain.extent.height,
             self.swapchain.images.len() as u32,
             self.swapchain.format,
+            self.depth_image_view.unwrap(),
         )?;
 
         Ok(())

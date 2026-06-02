@@ -122,12 +122,23 @@ impl Image {
         height: u32,
         mip_levels: u32,
     ) -> ReactorResult<Self> {
+        Self::new_texture_with_format(ctx, allocator, width, height, vk::Format::R8G8B8A8_SRGB, mip_levels)
+    }
+
+    pub fn new_texture_with_format(
+        ctx: &VulkanContext,
+        allocator: Arc<Mutex<Allocator>>,
+        width: u32,
+        height: u32,
+        format: vk::Format,
+        mip_levels: u32,
+    ) -> ReactorResult<Self> {
         Self::new(
             ctx,
             allocator,
             width,
             height,
-            vk::Format::R8G8B8A8_SRGB,
+            format,
             vk::ImageUsageFlags::TRANSFER_DST
                 | vk::ImageUsageFlags::SAMPLED
                 | vk::ImageUsageFlags::TRANSFER_SRC,

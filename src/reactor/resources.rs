@@ -21,6 +21,11 @@ impl Reactor {
         Texture::from_file(&self.context, self.allocator.clone(), path, true)
     }
 
+    /// Carga una textura lineal desde fichero (normalmente mapas de datos PBR).
+    pub fn load_texture_linear(&self, path: &str) -> ReactorResult<Texture> {
+        Texture::from_file_linear(&self.context, self.allocator.clone(), path, true)
+    }
+
     /// Carga una textura desde bytes embebidos.
     pub fn load_texture_bytes(&self, bytes: &[u8]) -> ReactorResult<Texture> {
         Texture::from_bytes(&self.context, self.allocator.clone(), bytes, true)
@@ -120,7 +125,7 @@ impl Reactor {
         Ok(mat)
     }
 
-    /// Crea un material PBR con soporte para IBL, mapa de albedo y mapa de normales.
+    /// Crea un material PBR con soporte para IBL, mapa de albedo, mapa de normales, metálico y rugosidad.
     pub fn create_pbr_material(
         &self,
         vert_code: &[u32],
@@ -128,11 +133,13 @@ impl Reactor {
         ibl_set_layout: ash::vk::DescriptorSetLayout,
         albedo_texture: &crate::resources::texture::Texture,
         normal_texture: &crate::resources::texture::Texture,
+        metallic_texture: &crate::resources::texture::Texture,
+        roughness_texture: &crate::resources::texture::Texture,
     ) -> ReactorResult<Material> {
         use crate::resources::material::MaterialBuilder;
         use ash::vk;
 
-        // 1. Crear el descriptor set layout para Set 0 (albedo + normal)
+        // 1. Crear el descriptor set layout para Set 0 (albedo + normal + metallic + roughness)
         let albedo_binding = vk::DescriptorSetLayoutBinding::default()
             .binding(0)
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
@@ -145,7 +152,19 @@ impl Reactor {
             .descriptor_count(1)
             .stage_flags(vk::ShaderStageFlags::FRAGMENT);
 
-        let bindings = [albedo_binding, normal_binding];
+        let metallic_binding = vk::DescriptorSetLayoutBinding::default()
+            .binding(2)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::FRAGMENT);
+
+        let roughness_binding = vk::DescriptorSetLayoutBinding::default()
+            .binding(3)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::FRAGMENT);
+
+        let bindings = [albedo_binding, normal_binding, metallic_binding, roughness_binding];
         let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
 
         let descriptor_layout = unsafe {
@@ -164,7 +183,7 @@ impl Reactor {
         // 2. Crear descriptor pool
         let pool_size = vk::DescriptorPoolSize::default()
             .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .descriptor_count(2);
+            .descriptor_count(4);
 
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .pool_sizes(std::slice::from_ref(&pool_size))
@@ -213,6 +232,16 @@ impl Reactor {
             .image_view(normal_texture.view())
             .sampler(normal_texture.sampler_handle());
 
+        let metallic_info = vk::DescriptorImageInfo::default()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(metallic_texture.view())
+            .sampler(metallic_texture.sampler_handle());
+
+        let roughness_info = vk::DescriptorImageInfo::default()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(roughness_texture.view())
+            .sampler(roughness_texture.sampler_handle());
+
         let write_albedo = vk::WriteDescriptorSet::default()
             .dst_set(descriptor_set)
             .dst_binding(0)
@@ -227,10 +256,24 @@ impl Reactor {
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
             .image_info(std::slice::from_ref(&normal_info));
 
+        let write_metallic = vk::WriteDescriptorSet::default()
+            .dst_set(descriptor_set)
+            .dst_binding(2)
+            .dst_array_element(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .image_info(std::slice::from_ref(&metallic_info));
+
+        let write_roughness = vk::WriteDescriptorSet::default()
+            .dst_set(descriptor_set)
+            .dst_binding(3)
+            .dst_array_element(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .image_info(std::slice::from_ref(&roughness_info));
+
         unsafe {
             self.context
                 .device
-                .update_descriptor_sets(&[write_albedo, write_normal], &[]);
+                .update_descriptor_sets(&[write_albedo, write_normal, write_metallic, write_roughness], &[]);
         }
 
         // 5. Build material pipeline

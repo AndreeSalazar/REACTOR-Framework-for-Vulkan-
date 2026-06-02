@@ -104,8 +104,41 @@ impl ShadowMap {
     }
 
     /// Update shadow cascades for a camera frustum
-    pub fn update(&mut self, _camera_view: Mat4, _camera_proj: Mat4, near: f32, far: f32) {
-        self.light_view = Mat4::look_at_rh(-self.light_direction * 50.0, Vec3::ZERO, Vec3::Y);
+    pub fn update(&mut self, camera_view: Mat4, camera_proj: Mat4, near: f32, far: f32) {
+        // If projection matrix is invalid or contains NaNs, fallback to identity/default
+        let view_proj = camera_proj * camera_view;
+        let inv_cam = view_proj.inverse();
+        if !inv_cam.is_finite() {
+            // Fallback if matrix is not invertible (e.g. at startup)
+            self.light_view = Mat4::look_at_rh(-self.light_direction * 50.0, Vec3::ZERO, Vec3::Y);
+            for (i, cascade) in self.cascades.iter_mut().enumerate() {
+                let prev_split = if i == 0 { 0.0 } else { self.config.cascade_splits.get(i - 1).copied().unwrap_or(0.0) };
+                let curr_split = self.config.cascade_splits.get(i).copied().unwrap_or(1.0);
+                cascade.near = near + (far - near) * prev_split;
+                cascade.far = near + (far - near) * curr_split;
+                cascade.split_depth = cascade.far;
+                let cascade_proj = Mat4::orthographic_rh(-50.0, 50.0, -50.0, 50.0, 0.1, 100.0);
+                cascade.view_proj = cascade_proj * self.light_view;
+            }
+            return;
+        }
+
+        let ndc_corners = [
+            glam::Vec4::new(-1.0,  1.0,  0.0, 1.0),
+            glam::Vec4::new( 1.0,  1.0,  0.0, 1.0),
+            glam::Vec4::new( 1.0, -1.0,  0.0, 1.0),
+            glam::Vec4::new(-1.0, -1.0,  0.0, 1.0),
+            glam::Vec4::new(-1.0,  1.0,  1.0, 1.0),
+            glam::Vec4::new( 1.0,  1.0,  1.0, 1.0),
+            glam::Vec4::new( 1.0, -1.0,  1.0, 1.0),
+            glam::Vec4::new(-1.0, -1.0,  1.0, 1.0),
+        ];
+
+        let mut world_frustum_corners = [Vec3::ZERO; 8];
+        for (i, corner) in ndc_corners.iter().enumerate() {
+            let wp = inv_cam * (*corner);
+            world_frustum_corners[i] = wp.truncate() / wp.w;
+        }
 
         let range = far - near;
 
@@ -113,11 +146,7 @@ impl ShadowMap {
             let prev_split = if i == 0 {
                 0.0
             } else {
-                self.config
-                    .cascade_splits
-                    .get(i - 1)
-                    .copied()
-                    .unwrap_or(0.0)
+                self.config.cascade_splits.get(i - 1).copied().unwrap_or(0.0)
             };
             let curr_split = self.config.cascade_splits.get(i).copied().unwrap_or(1.0);
 
@@ -125,9 +154,62 @@ impl ShadowMap {
             cascade.far = near + range * curr_split;
             cascade.split_depth = cascade.far;
 
-            // Calculate orthographic projection for this cascade
-            let cascade_proj = Mat4::orthographic_rh(-50.0, 50.0, -50.0, 50.0, 0.1, 100.0);
-            cascade.view_proj = cascade_proj * self.light_view;
+            // Interpolate corners for this cascade split
+            let mut cascade_corners = [Vec3::ZERO; 8];
+            for j in 0..4 {
+                let dir = world_frustum_corners[j + 4] - world_frustum_corners[j];
+                cascade_corners[j] = world_frustum_corners[j] + dir * prev_split;
+                cascade_corners[j + 4] = world_frustum_corners[j] + dir * curr_split;
+            }
+
+            // Compute center of cascade split
+            let mut center = Vec3::ZERO;
+            for corner in &cascade_corners {
+                center += *corner;
+            }
+            center /= 8.0;
+
+            // Create light view matrix for this cascade
+            let light_position = center - self.light_direction * 100.0;
+            let light_view = Mat4::look_at_rh(light_position, center, Vec3::Y);
+
+            // Transform cascade corners to light space to find bounding box
+            let mut min_x = f32::MAX;
+            let mut max_x = f32::MIN;
+            let mut min_y = f32::MAX;
+            let mut max_y = f32::MIN;
+            let mut min_z = f32::MAX;
+            let mut max_z = f32::MIN;
+
+            for corner in &cascade_corners {
+                let light_space = light_view.transform_point3(*corner);
+                min_x = min_x.min(light_space.x);
+                max_x = max_x.max(light_space.x);
+                min_y = min_y.min(light_space.y);
+                max_y = max_y.max(light_space.y);
+                min_z = min_z.min(light_space.z);
+                max_z = max_z.max(light_space.z);
+            }
+
+            let extent_x = (max_x - min_x).max(0.001);
+            let extent_y = (max_y - min_y).max(0.001);
+            let texel_x = extent_x / self.config.resolution as f32;
+            let texel_y = extent_y / self.config.resolution as f32;
+            min_x = (min_x / texel_x).floor() * texel_x;
+            max_x = (max_x / texel_x).ceil() * texel_x;
+            min_y = (min_y / texel_y).floor() * texel_y;
+            max_y = (max_y / texel_y).ceil() * texel_y;
+
+            // Add margin to avoid artifacts and clip objects behind/in front.
+            let z_margin = (cascade.far - cascade.near).max(50.0);
+            let cascade_proj = Mat4::orthographic_rh(
+                min_x, max_x,
+                min_y, max_y,
+                -max_z - z_margin,
+                -min_z + z_margin
+            );
+
+            cascade.view_proj = cascade_proj * light_view;
         }
     }
 

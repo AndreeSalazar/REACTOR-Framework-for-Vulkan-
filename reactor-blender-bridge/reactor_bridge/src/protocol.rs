@@ -118,6 +118,10 @@ pub struct TransformUpdated {
     #[serde(default)]
     pub normal_path: Option<String>,
     #[serde(default)]
+    pub metallic_path: Option<String>,
+    #[serde(default)]
+    pub roughness_path: Option<String>,
+    #[serde(default)]
     pub emission_color: Option<[f32; 3]>,
     #[serde(default)]
     pub emission_strength: Option<f32>,

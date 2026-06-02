@@ -201,17 +201,19 @@ impl Pipeline {
             .depth_bounds_test_enable(false)
             .stencil_test_enable(false);
 
-        let color_blend_attachment = vk::PipelineColorBlendAttachmentState::default()
-            .color_write_mask(vk::ColorComponentFlags::RGBA)
-            .blend_enable(config.blend_enable)
-            .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
-            .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
-            .color_blend_op(vk::BlendOp::ADD)
-            .src_alpha_blend_factor(vk::BlendFactor::ONE)
-            .dst_alpha_blend_factor(vk::BlendFactor::ZERO)
-            .alpha_blend_op(vk::BlendOp::ADD);
-
-        let attachments = [color_blend_attachment];
+        let attachments = if color_format == vk::Format::UNDEFINED {
+            Vec::new()
+        } else {
+            vec![vk::PipelineColorBlendAttachmentState::default()
+                .color_write_mask(vk::ColorComponentFlags::RGBA)
+                .blend_enable(config.blend_enable)
+                .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
+                .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
+                .color_blend_op(vk::BlendOp::ADD)
+                .src_alpha_blend_factor(vk::BlendFactor::ONE)
+                .dst_alpha_blend_factor(vk::BlendFactor::ZERO)
+                .alpha_blend_op(vk::BlendOp::ADD)]
+        };
         let color_blend_state = vk::PipelineColorBlendStateCreateInfo::default()
             .logic_op_enable(false)
             .attachments(&attachments);
@@ -239,9 +241,14 @@ impl Pipeline {
         };
 
         // Dynamic Rendering support
-        let mut rendering_info = vk::PipelineRenderingCreateInfo::default()
-            .color_attachment_formats(std::slice::from_ref(&color_format))
-            .depth_attachment_format(depth_format.unwrap_or(vk::Format::UNDEFINED));
+        let mut rendering_info = if color_format == vk::Format::UNDEFINED {
+            vk::PipelineRenderingCreateInfo::default()
+                .depth_attachment_format(depth_format.unwrap_or(vk::Format::UNDEFINED))
+        } else {
+            vk::PipelineRenderingCreateInfo::default()
+                .color_attachment_formats(std::slice::from_ref(&color_format))
+                .depth_attachment_format(depth_format.unwrap_or(vk::Format::UNDEFINED))
+        };
 
         let mut create_info_builder = vk::GraphicsPipelineCreateInfo::default()
             .stages(&shader_stages)

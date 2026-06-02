@@ -5,6 +5,7 @@ layout(location = 0) out vec4 outColor;
 
 layout(binding = 0) uniform sampler2D screenTexture;
 layout(binding = 1) uniform sampler2D bloomTexture;
+layout(binding = 2) uniform sampler2D depthTexture;
 
 layout(push_constant) uniform PostProcessSettings {
     // Vignette
@@ -47,7 +48,10 @@ layout(push_constant) uniform PostProcessSettings {
 
     // General
     float time;
+    float depth_near;
+    float depth_far;
     uint effect_mask;
+    uint _padding;
 } settings;
 
 // Effect indices (matching PostProcessEffect enum)
@@ -126,51 +130,104 @@ vec3 sample_screen(vec2 uv) {
     return texture(screenTexture, clamp(uv, vec2(0.001), vec2(0.999))).rgb;
 }
 
+float sample_depth(vec2 uv) {
+    return texture(depthTexture, clamp(uv, vec2(0.001), vec2(0.999))).r;
+}
+
+float linearize_depth(float depth) {
+    float nearPlane = max(settings.depth_near, 0.001);
+    float farPlane = max(settings.depth_far, nearPlane + 0.001);
+    return (nearPlane * farPlane) / max(farPlane - depth * (farPlane - nearPlane), 0.0001);
+}
+
+vec3 reconstruct_view_pos(vec2 uv) {
+    vec2 size = vec2(textureSize(depthTexture, 0));
+    float aspect = size.x / max(size.y, 1.0);
+    float viewZ = linearize_depth(sample_depth(uv));
+    vec2 ndc = uv * 2.0 - 1.0;
+    return vec3(ndc.x * aspect * viewZ, -ndc.y * viewZ, -viewZ);
+}
+
 vec3 estimate_screen_normal(vec2 uv, vec2 texelSize) {
-    float l = luminance(sample_screen(uv - vec2(texelSize.x, 0.0)));
-    float r = luminance(sample_screen(uv + vec2(texelSize.x, 0.0)));
-    float u = luminance(sample_screen(uv - vec2(0.0, texelSize.y)));
-    float d = luminance(sample_screen(uv + vec2(0.0, texelSize.y)));
-    vec2 g = vec2(r - l, d - u);
-    return normalize(vec3(-g * 2.4, 1.0));
+    vec3 p  = reconstruct_view_pos(uv);
+    vec3 px = reconstruct_view_pos(uv + vec2(texelSize.x, 0.0));
+    vec3 py = reconstruct_view_pos(uv + vec2(0.0, texelSize.y));
+    vec3 n = normalize(cross(px - p, py - p));
+    return n.z < 0.0 ? -n : n;
 }
 
 vec3 screen_space_gi(vec2 uv, vec2 texelSize, vec3 baseColor) {
+    float centerDepth = sample_depth(uv);
+    if (centerDepth >= 0.9999) {
+        return baseColor;
+    }
+
     vec3 normal = estimate_screen_normal(uv, texelSize);
-    float baseLum = luminance(baseColor);
+    vec3 centerPos = reconstruct_view_pos(uv);
     vec3 diffuseBounce = vec3(0.0);
-    vec3 directionalOcclusion = vec3(0.0);
+    float occlusion = 0.0;
     float totalWeight = 0.0;
 
-    const int RINGS = 3;
     const int DIRS = 8;
-    float jitter = interleaved_gradient_noise(gl_FragCoord.xy, 0.0) * 0.35;
+    const int STEPS = 3;
+    float jitter = interleaved_gradient_noise(gl_FragCoord.xy, settings.time) * 6.2831853;
+    float radiusPx = clamp(settings.ssgi_radius, 2.0, 48.0);
+    float radiusWorld = max(centerPos.z * -0.018, 0.08) * radiusPx;
 
-    for (int ring = 1; ring <= RINGS; ++ring) {
-        float ringRadius = settings.ssgi_radius * float(ring) / float(RINGS);
-        for (int i = 0; i < DIRS; ++i) {
-            float a = (float(i) + jitter) * 6.2831853 / float(DIRS);
-            vec2 dir = vec2(cos(a), sin(a));
-            vec2 suv = uv + dir * texelSize * ringRadius;
-            vec3 s = sample_screen(suv);
-            float sLum = luminance(s);
+    for (int i = 0; i < DIRS; ++i) {
+        float a = jitter + (float(i) + 0.5) * 6.2831853 / float(DIRS);
+        vec2 dir = vec2(cos(a), sin(a));
+        for (int stepId = 1; stepId <= STEPS; ++stepId) {
+            float stepT = float(stepId) / float(STEPS);
+            vec2 suv = uv + dir * texelSize * radiusPx * stepT;
+            float sd = sample_depth(suv);
+            if (sd >= 0.9999) {
+                continue;
+            }
 
-            float edge = abs(sLum - baseLum);
-            float edgeWeight = exp(-edge * 5.0);
-            float hemisphere = max(dot(normal, normalize(vec3(dir, 0.55))), 0.0);
-            float distanceWeight = 1.0 / (1.0 + float(ring) * float(ring));
-            float w = edgeWeight * hemisphere * distanceWeight;
+            vec3 samplePos = reconstruct_view_pos(suv);
+            vec3 delta = samplePos - centerPos;
+            float dist = length(delta);
+            vec3 omega = delta / max(dist, 0.0001);
+            float facing = max(dot(normal, omega), 0.0);
+            float rangeWeight = smoothstep(radiusWorld, 0.0, dist);
+            float thickness = smoothstep(0.001, radiusWorld * 0.14, delta.z);
+            float w = facing * rangeWeight;
 
-            diffuseBounce += s * w;
-            directionalOcclusion += vec3(sLum < baseLum ? w : 0.0);
+            occlusion += w * thickness;
+            diffuseBounce += sample_screen(suv) * w * (1.0 - thickness);
             totalWeight += w;
         }
     }
 
+    float rawAo = 1.0 - clamp(occlusion / max(totalWeight, 0.0001), 0.0, 0.92);
+
+    float aoSum = 0.0;
+    float wSum = 0.0;
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            vec2 o = vec2(x, y) * texelSize;
+            float d = linearize_depth(sample_depth(uv + o));
+            float depthWeight = exp(-abs(d + centerPos.z) * 2.5);
+            float spatialWeight = (x == 0 && y == 0) ? 1.0 : ((x == 0 || y == 0) ? 0.65 : 0.38);
+            float sampleAo = rawAo;
+            if (x != 0 || y != 0) {
+                vec3 sp = reconstruct_view_pos(uv + o);
+                vec3 dd = sp - centerPos;
+                sampleAo = 1.0 - clamp(max(dot(normal, normalize(dd)), 0.0) *
+                    smoothstep(radiusWorld, 0.0, length(dd)) *
+                    smoothstep(0.001, radiusWorld * 0.14, dd.z), 0.0, 0.92);
+            }
+            float bw = depthWeight * spatialWeight;
+            aoSum += sampleAo * bw;
+            wSum += bw;
+        }
+    }
+
+    float ao = clamp(aoSum / max(wSum, 0.0001), 0.08, 1.0);
     vec3 bounce = diffuseBounce / max(totalWeight, 0.0001);
-    float ao = 1.0 - clamp(dot(directionalOcclusion, vec3(0.333)) / max(totalWeight, 0.0001), 0.0, 0.75);
-    vec3 gi = mix(baseColor * ao, baseColor + bounce * 0.28, settings.ssgi_intensity);
-    return max(gi, 0.0);
+    vec3 gi = baseColor * ao + bounce * (0.08 * settings.ssgi_intensity);
+    return mix(baseColor, max(gi, 0.0), settings.ssgi_intensity);
 }
 
 vec3 screen_space_reflection(vec2 uv, vec2 texelSize, vec3 color) {

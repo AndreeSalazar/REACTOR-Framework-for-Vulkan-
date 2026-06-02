@@ -74,6 +74,10 @@ pub struct Reactor {
     pub vsync: bool,
     pub camera_pos: glam::Vec3,
     pub light_pos: glam::Vec4,
+    pub camera_view: glam::Mat4,
+    pub camera_proj: glam::Mat4,
+    pub camera_near: f32,
+    pub camera_far: f32,
     pub post_process: crate::graphics::post_process::PostProcessPipeline,
     pub pixel_intelligent: PixelIntelligent,
 
@@ -94,6 +98,19 @@ pub struct Reactor {
 
     // ── IBL (Image-Based Lighting) ──
     pub ibl_textures: Option<crate::graphics::IblTextures>,
+
+    // ── Cascaded Shadow Maps (CSM) ──
+    pub shadow_map: Option<crate::graphics::shadows::ShadowMap>,
+    pub shadow_image: Option<vk::Image>,
+    pub shadow_image_views: Vec<vk::ImageView>,
+    pub shadow_array_view: Option<vk::ImageView>,
+    pub shadow_sampler: Option<vk::Sampler>,
+    pub shadow_memory: Option<vk::DeviceMemory>,
+    pub shadow_pipeline: Option<crate::graphics::pipeline::Pipeline>,
+    pub shadow_descriptor_layout: Option<vk::DescriptorSetLayout>,
+    pub shadow_descriptor_pool: Option<vk::DescriptorPool>,
+    pub shadow_descriptor_sets: Vec<vk::DescriptorSet>,
+    pub shadow_uniform_buffers: Vec<crate::graphics::buffer::Buffer>,
 }
 
 impl Reactor {
@@ -115,6 +132,31 @@ impl Drop for Reactor {
         unsafe {
             // Esperar a que la GPU termine cualquier trabajo pendiente.
             let _ = self.context.device.device_wait_idle();
+
+            // ── Shadows ──
+            if let Some(pool) = self.shadow_descriptor_pool.take() {
+                self.context.device.destroy_descriptor_pool(pool, None);
+            }
+            if let Some(layout) = self.shadow_descriptor_layout.take() {
+                self.context.device.destroy_descriptor_set_layout(layout, None);
+            }
+            self.shadow_pipeline = None;
+            self.shadow_uniform_buffers.clear();
+            if let Some(sampler) = self.shadow_sampler.take() {
+                self.context.device.destroy_sampler(sampler, None);
+            }
+            if let Some(view) = self.shadow_array_view.take() {
+                self.context.device.destroy_image_view(view, None);
+            }
+            for view in self.shadow_image_views.drain(..) {
+                self.context.device.destroy_image_view(view, None);
+            }
+            if let Some(image) = self.shadow_image.take() {
+                self.context.device.destroy_image(image, None);
+            }
+            if let Some(memory) = self.shadow_memory.take() {
+                self.context.device.free_memory(memory, None);
+            }
 
             // ── Depth ──
             if let Some(depth_view) = self.depth_image_view.take() {
