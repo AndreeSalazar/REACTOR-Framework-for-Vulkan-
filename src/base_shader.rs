@@ -261,6 +261,23 @@ impl Default for BaseShaderCookbook {
 }
 
 impl BaseShaderCookbook {
+    pub fn blender_live() -> Self {
+        let mut cookbook = Self::cinematic_aaa();
+        cookbook.post_settings.exposure = 1.04;
+        cookbook.post_settings.bloom_threshold = 0.7;
+        cookbook.post_settings.bloom_intensity = 0.5;
+        cookbook.post_settings.ssgi_intensity = 0.28;
+        cookbook.post_settings.ssgi_radius = 10.0;
+        cookbook.post_settings.ssr_strength = 0.38;
+        cookbook.post_settings.fog_density = 0.12;
+        cookbook.post_settings.fog_scatter = 0.42;
+        cookbook.post_settings.flare_intensity = 0.35;
+        cookbook.post_settings.highlight_recovery = 0.74;
+        cookbook.material.metallic = 0.0;
+        cookbook.material.roughness = 0.48;
+        cookbook
+    }
+
     pub fn cinematic_aaa() -> Self {
         let mut cookbook = Self::default();
         cookbook.post_settings = PostProcessSettings::cinematic();

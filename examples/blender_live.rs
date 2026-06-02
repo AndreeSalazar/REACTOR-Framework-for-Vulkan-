@@ -77,8 +77,7 @@ struct BlenderLive {
     texture_cache: HashMap<String, reactor_vulkan::resources::texture::Texture>,
 
     /// Códigos SPIR-V de los shaders
-    vert_code: Vec<u32>,
-    frag_code: Vec<u32>,
+    shader: BaseShaderCookbook,
 }
 
 impl BlenderLive {
@@ -96,8 +95,7 @@ impl BlenderLive {
             fallback_metallic: None,
             fallback_roughness: None,
             texture_cache: HashMap::new(),
-            vert_code: Vec::new(),
-            frag_code: Vec::new(),
+            shader: BaseShaderCookbook::blender_live(),
         }
     }
 
@@ -243,19 +241,9 @@ impl ReactorApp for BlenderLive {
             Vec3::new(1.0, 0.96, 0.88),
         );
 
-        // Cargar shaders base profesionales y neutros para Live Link
-        let vert = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
-            "../shaders/blender_live_vert.spv"
-        )))
-        .expect("Failed to load vertex shader");
-
-        let frag = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
-            "../shaders/blender_live_frag.spv"
-        )))
-        .expect("Failed to load fragment shader");
-
-        self.vert_code = vert.clone();
-        self.frag_code = frag.clone();
+        // Activar la cocina base profesional. Los juegos pueden mutar
+        // `self.shader` antes de crear materiales si necesitan otro look.
+        ctx.apply_base_shader(&self.shader);
 
         // Bake the procedural studio sky cubemap at startup
         let ibl = reactor_vulkan::graphics::IblBaker::bake_procedural(
@@ -294,17 +282,15 @@ impl ReactorApp for BlenderLive {
         let metallic_ref = self.fallback_metallic.as_ref().unwrap();
         let roughness_ref = self.fallback_roughness.as_ref().unwrap();
         let blender_mat = Arc::new(
-            ctx.reactor
-                .create_pbr_material(
-                    &vert,
-                    &frag,
-                    ibl_layout,
-                    albedo_ref,
-                    normal_ref,
-                    metallic_ref,
-                    roughness_ref,
-                )
-                .expect("Failed to create PBR material"),
+            ctx.create_base_pbr_material(
+                &self.shader,
+                ibl_layout,
+                albedo_ref,
+                normal_ref,
+                metallic_ref,
+                roughness_ref,
+            )
+            .expect("Failed to create PBR material"),
         );
         self.blender_material = Some(blender_mat);
 
@@ -642,17 +628,15 @@ impl BlenderLive {
             let roughness_ref = self.fallback_roughness.as_ref().unwrap();
 
             let mat = Arc::new(
-                ctx.reactor
-                    .create_pbr_material(
-                        &self.vert_code,
-                        &self.frag_code,
-                        ibl_layout,
-                        albedo_ref,
-                        normal_ref,
-                        metallic_ref,
-                        roughness_ref,
-                    )
-                    .expect("Failed to create entity material"),
+                ctx.create_base_pbr_material(
+                    &self.shader,
+                    ibl_layout,
+                    albedo_ref,
+                    normal_ref,
+                    metallic_ref,
+                    roughness_ref,
+                )
+                .expect("Failed to create entity material"),
             );
 
             let m = t.matrix;

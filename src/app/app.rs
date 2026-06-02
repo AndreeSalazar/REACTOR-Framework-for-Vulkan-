@@ -529,6 +529,29 @@ impl ReactorContext {
         )
     }
 
+    /// Crea un material PBR/IBL usando la pareja profesional `blender_live_pbr`.
+    pub fn create_base_pbr_material(
+        &self,
+        cookbook: &crate::base_shader::BaseShaderCookbook,
+        ibl_set_layout: ash::vk::DescriptorSetLayout,
+        albedo_texture: &crate::resources::texture::Texture,
+        normal_texture: &crate::resources::texture::Texture,
+        metallic_texture: &crate::resources::texture::Texture,
+        roughness_texture: &crate::resources::texture::Texture,
+    ) -> crate::core::error::ReactorResult<crate::resources::material::Material> {
+        self.reactor
+            .create_pbr_material(
+                &cookbook.blender_live_pbr.vertex,
+                &cookbook.blender_live_pbr.fragment,
+                ibl_set_layout,
+                albedo_texture,
+                normal_texture,
+                metallic_texture,
+                roughness_texture,
+            )
+            .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
+    }
+
     // =========================================================================
     // Model Loading (OBJ)
     // =========================================================================
@@ -1239,12 +1262,10 @@ impl ReactorContext {
                                 tex_data.height,
                                 true,
                             )?;
-                            // Crear material con textura
-                            let vert = crate::builtin_shaders::vert_textured();
-                            let frag = crate::builtin_shaders::frag_textured();
+                            // Crear material con textura usando la cocina base.
+                            let cookbook = self.base_shader_cookbook();
                             let mat = self
-                                .reactor
-                                .create_textured_material(&vert, &frag, &texture)
+                                .create_base_textured_material(&cookbook, &texture)
                                 .map_err(|e| {
                                     crate::core::error::ReactorError::internal(e.to_string())
                                 })?
