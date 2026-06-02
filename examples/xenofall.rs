@@ -34,7 +34,7 @@
 //
 // =============================================================================
 
-use reactor_vulkan::graphics::post_process::PostProcessEffect;
+use reactor_vulkan::graphics::post_process::{PostProcessEffect, PostProcessSettings};
 use reactor_vulkan::prelude::*;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::keyboard::{KeyCode, PhysicalKey};
@@ -773,6 +773,124 @@ impl Xenofall {
         if let Ok(idx) = ctx.spawn_sphere(Vec3::new(0.0, -1000.0, 0.0), 0.15) {
             self.muzzle_flash_index = Some(idx);
         }
+    }
+
+    fn apply_render_showcase_profile(&mut self, ctx: &mut ReactorContext) {
+        ctx.reactor.post_process.enabled = true;
+        ctx.reactor.post_process.settings = PostProcessSettings::cinematic();
+
+        let s = &mut ctx.reactor.post_process.settings;
+        s.exposure = 1.08;
+        s.gamma = 2.2;
+        s.bloom_threshold = 0.62;
+        s.bloom_intensity = 0.78;
+        s.grain_intensity = 0.010;
+        s.chromatic_intensity = 0.0014;
+        s.vignette_intensity = 0.42;
+        s.sharpen_intensity = 0.18;
+        s.ssgi_intensity = 0.34;
+        s.ssgi_radius = 14.0;
+        s.ssr_strength = 0.46;
+        s.fog_density = 0.24;
+        s.fog_scatter = 0.58;
+        s.flare_intensity = 0.52;
+        s.highlight_recovery = 0.82;
+        s.enable_effect(PostProcessEffect::Bloom);
+        s.enable_effect(PostProcessEffect::SSGI);
+        s.enable_effect(PostProcessEffect::SSR);
+        s.enable_effect(PostProcessEffect::VolumetricFog);
+        s.enable_effect(PostProcessEffect::LutColorGrading);
+        s.enable_effect(PostProcessEffect::ToneMapping);
+        s.enable_effect(PostProcessEffect::AnamorphicFlares);
+        s.enable_effect(PostProcessEffect::FXAA);
+        s.enable_effect(PostProcessEffect::FilmGrain);
+        s.enable_effect(PostProcessEffect::ChromaticAberration);
+
+        let sun_dir = Vec3::new(-0.22, -0.86, -0.45).normalize();
+        let moon_cold = Vec3::new(0.42, 0.55, 0.82);
+        ctx.scene.set_sun(sun_dir, moon_cold * 1.65);
+        ctx.scene.set_ambient(Vec3::new(0.018, 0.022, 0.032));
+        ctx.add_directional_light(sun_dir, moon_cold, 1.35);
+
+        Log::engine("Render Showcase: Cinematic/AAA profile active for Xenofall");
+    }
+
+    fn apply_render_showcase_materials(&mut self, ctx: &mut ReactorContext) {
+        for &idx in &self.floor_indices {
+            if let Some(obj) = ctx.scene.objects.get_mut(idx) {
+                obj.color = Vec4::new(0.26, 0.28, 0.30, 1.0);
+                obj.metallic = 0.0;
+                obj.roughness = 0.18; // wet concrete for SSR/TAA/GTAO preview
+            }
+        }
+
+        for &idx in &self.wall_indices {
+            if let Some(obj) = ctx.scene.objects.get_mut(idx) {
+                obj.color = Vec4::new(0.34, 0.36, 0.35, 1.0);
+                obj.metallic = 0.05;
+                obj.roughness = 0.72;
+            }
+        }
+
+        for &idx in &self.pillar_indices {
+            if let Some(obj) = ctx.scene.objects.get_mut(idx) {
+                obj.color = Vec4::new(0.42, 0.40, 0.36, 1.0);
+                obj.metallic = 0.35;
+                obj.roughness = 0.38;
+            }
+        }
+
+        for (i, &idx) in self.tracer_pool.iter().enumerate() {
+            if let Some(obj) = ctx.scene.objects.get_mut(idx) {
+                obj.color = Vec4::new(1.0, 0.78, 0.25, 1.0);
+                obj.metallic = 0.0;
+                obj.roughness = if i % 2 == 0 { 0.08 } else { 0.16 };
+            }
+        }
+
+        for &idx in &self.impact_pool {
+            if let Some(obj) = ctx.scene.objects.get_mut(idx) {
+                obj.color = Vec4::new(1.0, 0.22, 0.08, 1.0);
+                obj.metallic = 0.0;
+                obj.roughness = 0.12;
+            }
+        }
+
+        if let Some(idx) = self.muzzle_flash_index {
+            if let Some(obj) = ctx.scene.objects.get_mut(idx) {
+                obj.color = Vec4::new(1.0, 0.62, 0.18, 1.0);
+                obj.metallic = 0.0;
+                obj.roughness = 0.04;
+            }
+        }
+    }
+
+    fn print_render_showcase_budget(&self, ctx: &ReactorContext) {
+        let gbuffer_mib = ctx
+            .reactor
+            .gbuffer
+            .as_ref()
+            .map(|g| g.estimated_bytes() as f32 / (1024.0 * 1024.0))
+            .unwrap_or(0.0);
+        let history_mib = ctx
+            .reactor
+            .temporal_history
+            .as_ref()
+            .map(|h| h.estimated_bytes() as f32 / (1024.0 * 1024.0))
+            .unwrap_or(0.0);
+
+        Log::section("REACTOR Render AAA Foundation");
+        Log::kv("G-Buffer 4 attachments", &format!("{:.1} MiB", gbuffer_mib));
+        Log::kv(
+            "TAA history color/depth",
+            &format!("{:.1} MiB", history_mib),
+        );
+        Log::kv("Depth resolve MSAA", "R32F sampleable");
+        Log::kv("GTAO/SSR source", "depth + normal/material G-Buffer");
+        Log::kv(
+            "Next required",
+            "deferred geometry pass + AO/SSR/TAA dispatch",
+        );
     }
 
     fn spawn_enemy(&mut self, ctx: &mut ReactorContext, pos: Vec3, hp: i32, speed: f32) {
@@ -2073,32 +2191,45 @@ impl ReactorApp for Xenofall {
         ctx.camera.position = Vec3::new(0.0, CAMERA_Y, 0.0);
         ctx.camera.set_rotation(0.0, 0.0);
 
+        self.apply_render_showcase_profile(ctx);
+
         // ── Iluminación atmosférica (Casa abandonada, Rumania) ──
         ctx.add_sun();
-        ctx.add_directional_light(Vec3::new(-0.3, -1.0, -0.5), Vec3::new(0.6, 0.5, 0.4), 0.8);
+        ctx.add_directional_light(
+            Vec3::new(-0.3, -1.0, -0.5),
+            Vec3::new(0.45, 0.38, 0.32),
+            0.45,
+        );
 
         // Luces a lo largo del corredor — just below the ceiling
         for i in 0..12 {
             let z = -(i as f32 * 8.0 + 4.0);
+            let flicker_color = if i % 3 == 0 {
+                Vec3::new(0.45, 0.95, 0.78)
+            } else {
+                Vec3::new(1.0, 0.68, 0.34)
+            };
+            let intensity = if i % 4 == 0 { 4.8 } else { 3.2 };
             ctx.add_point_light(
                 Vec3::new(0.0, CORRIDOR_HEIGHT - 0.3, z),
-                Vec3::new(1.0, 0.7, 0.4),
-                3.0,
-                10.0,
+                flicker_color,
+                intensity,
+                11.5,
             );
         }
 
         // Luz roja de emergencia al fondo
         ctx.add_point_light(
             Vec3::new(0.0, CORRIDOR_HEIGHT * 0.8, -85.0),
-            Vec3::new(1.0, 0.2, 0.1),
-            5.0,
-            25.0,
+            Vec3::new(1.0, 0.08, 0.025),
+            7.5,
+            28.0,
         );
 
         // ── Construir escenario ──
         self.build_corridor(ctx);
         self.build_pools(ctx);
+        self.apply_render_showcase_materials(ctx);
 
         // ── Visuales de Interfaz (Crosshair y Overlays) ──
         if let Ok(idx) = ctx.spawn_colored_sphere(Vec3::ZERO, 0.02, 255, 0, 0, 255) {
@@ -2132,6 +2263,7 @@ impl ReactorApp for Xenofall {
         ));
         Log::game(&format!("{} oleadas cargadas", self.waves.len()));
         Log::game("Sistema de cartas roguelite activo");
+        self.print_render_showcase_budget(ctx);
         Log::section("¡Sobrevive al corredor, Contractor!");
         println!();
     }
