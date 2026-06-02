@@ -52,7 +52,31 @@ layout(set = 2, binding = 1) uniform ShadowData {
 #include "lighting.glsl"
 #include "tonemap.glsl"
 
-// Cálculo de factor de sombra con PCF y Cascaded Shadow Maps (CSM)
+const vec2 CSM_POISSON_12[12] = vec2[](
+    vec2(-0.326, -0.406), vec2(-0.840, -0.074), vec2(-0.696,  0.457),
+    vec2(-0.203,  0.621), vec2( 0.962, -0.195), vec2( 0.473, -0.480),
+    vec2( 0.519,  0.767), vec2( 0.185, -0.893), vec2( 0.507,  0.064),
+    vec2( 0.896,  0.412), vec2(-0.322, -0.933), vec2(-0.792, -0.598)
+);
+
+mat2 rotate2d(float a) {
+    float s = sin(a);
+    float c = cos(a);
+    return mat2(c, -s, s, c);
+}
+
+float sample_shadow_compare(vec2 uv, int cascade_idx, float current_depth) {
+    float shadow_depth = texture(u_shadow_map, vec3(uv, float(cascade_idx))).r;
+    return current_depth > shadow_depth ? 0.0 : 1.0;
+}
+
+float cascade_edge_fade(vec2 uv) {
+    vec2 edge = min(uv, 1.0 - uv);
+    float min_edge = min(edge.x, edge.y);
+    return smoothstep(0.003, 0.035, min_edge);
+}
+
+// Cálculo de factor de sombra con PCF Poisson rotado y Cascaded Shadow Maps (CSM)
 float calculate_shadow(vec3 world_pos, vec3 normal) {
     if (shadow.shadow_enabled == 0) {
         return 1.0;
@@ -89,24 +113,26 @@ float calculate_shadow(vec3 world_pos, vec3 normal) {
     vec3 ndc = proj_coord.xyz / proj_coord.w;
     vec3 shadow_uv = ndc * 0.5 + 0.5;
 
-    float current_depth = shadow_uv.z - bias;
-    
-    if (shadow_uv.z > 1.0) {
+    if (shadow_uv.z > 1.0 || shadow_uv.z < 0.0 ||
+        any(lessThan(shadow_uv.xy, vec2(0.0))) ||
+        any(greaterThan(shadow_uv.xy, vec2(1.0)))) {
         return 1.0;
     }
 
+    float current_depth = shadow_uv.z - bias;
     float shadow_factor = 0.0;
-    vec2 texel_size = vec2(shadow.pcf_radius);
-    
-    for (int y = -1; y <= 1; y++) {
-        for (int x = -1; x <= 1; x++) {
-            vec2 offset = vec2(x, y) * texel_size;
-            float shadow_depth = texture(u_shadow_map, vec3(shadow_uv.xy + offset, float(cascade_idx))).r;
-            shadow_factor += current_depth > shadow_depth ? 0.0 : 1.0;
-        }
+    vec2 texel_size = 1.0 / vec2(textureSize(u_shadow_map, 0).xy);
+    vec2 base_radius = max(vec2(shadow.pcf_radius), texel_size);
+    float cascade_scale = mix(1.35, 2.65, float(cascade_idx) / 3.0);
+    mat2 rot = rotate2d(hash12(gl_FragCoord.xy + vec2(float(cascade_idx) * 37.0, shadow_uv.z * 8192.0)) * 6.2831853);
+
+    for (int i = 0; i < 12; ++i) {
+        vec2 offset = rot * CSM_POISSON_12[i] * base_radius * cascade_scale;
+        shadow_factor += sample_shadow_compare(shadow_uv.xy + offset, cascade_idx, current_depth);
     }
-    
-    return shadow_factor / 9.0;
+
+    float pcf = shadow_factor / 12.0;
+    return mix(1.0, pcf, cascade_edge_fade(shadow_uv.xy));
 }
 
 layout(location = 0) in vec3 vWorldNormal;

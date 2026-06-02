@@ -627,6 +627,7 @@ screen-space sean coherentes al cambiar FOV, resolución o cámara.
 | Post-process | `PostProcessSettings` pasa `camera_proj_x` y `camera_proj_y` al shader | Reconstrucción view-space estable sin depender de aspect ratio fijo |
 | SSAO/GTAO | `post_process.frag` reconstruye posición con la proyección real | AO más estable al variar FOV y resolución |
 | PBR shader lib | `shaders/lib/pbr.glsl` usa Cook-Torrance GGX + Burley/Disney diffuse | Materiales rugosos con respuesta más natural y conservación de energía mejorada |
+| CSM shading | `blender_live.frag` usa PCF Poisson rotado de 12 taps y fade por borde de cascada | Sombras menos cuadriculadas, con menos banding y transiciones más suaves |
 | Xenofall | Limpieza de warnings por campos reservados para glTF | Compilación más limpia para iterar sin ruido |
 | Roadmap AAA | Presupuesto VRAM, G-Buffer, TAA, IBL HD y DDGI quedan priorizados | Preparación para deferred lighting y GI dinámica |
 
@@ -1525,6 +1526,7 @@ sequenceDiagram
 - SSAO/GTAO queda más estable al cambiar FOV, resolución o cámara.
 - `xenofall` actualizado a banner `REACTOR 1.6.0` y warning de campos glTF reservados limpiado.
 - Cook-Torrance en `shaders/lib/pbr.glsl` refinado con diffuse Burley/Disney para materiales rugosos más cinematográficos.
+- CSM en `blender_live.frag` refinado con PCF Poisson rotado de 12 taps, radio por cascada y fade de borde para suavizar artefactos.
 - Base lista para la siguiente implementación grande: G-Buffer 4 attachments, motion vectors/TAA history, IBL prefiltrado HD y DDGI.
 
 ### v1.5.0 — Professional Lighting Foundation (Junio 2026)

@@ -124,7 +124,7 @@ color += bayer_dither(gl_FragCoord.xy);
 |------------------------------------------------|--------|------------------|
 | **Cubemap HDR real** (KTX2 prefilt)            | ❌ (procedural) | Cargar IBL desde `assets/`, prefilt en compute shader, exponer 1 cubemap + 1 BRDF LUT 2D al frag shader vía descriptors. Sustituye `sampleEnv`. |
 | **Normal mapping**                             | ❌ | Añadir slot tangent al vértice (`VertexPBR`) + sampler de normal map, TBN matrix correcto. |
-| **Shadow maps cascaded (CSM)**                 | ❌ | Render-pass adicional con 4 shadow textures + sampling PCF Poisson + bias por cascada. Reemplaza `contact_shadow`. |
+| **Shadow maps cascaded (CSM)**                 | ✅ v1.6 | 4 cascadas depth-only + PCF Poisson rotado en `blender_live.frag`; falta debug view, PCSS/contact-hardening y blend temporal. |
 | **Screen-Space Reflections** (SSR)             | ❌ | Compute shader sobre depth + hierarchical Hi-Z marcha. |
 | **Screen-Space AO** (GTAO)                     | ❌ | Reemplaza `curvature_AO` por compute pass sobre depth + normal G-buffer. |
 | **Volumetric fog froxels**                     | ❌ | Compute shader poblando un volumen 3D + ray-march en la composición. |
