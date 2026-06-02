@@ -653,6 +653,24 @@ cimientos reales para llegar ahí sin rehacer el motor.
 - **Temporal data**: history buffers para TAA, AO, SSR, exposure, velocity y reprojection.
 - **Herramientas de debug**: views para cascades, depth, normals, roughness, AO, motion vectors, overdraw, GPU timings y VRAM.
 
+### Presupuesto VRAM AAA objetivo
+
+Estos números no son "lujo": son la memoria mínima razonable para que REACTOR pueda
+trabajar con iluminación moderna, acumulación temporal y GI dinámica sin hacks.
+El presupuesto real depende de resolución, MSAA, formatos, número de probes y
+calidad seleccionada, pero sirve como objetivo para el perfil cinematográfico.
+
+| Bloque | Memoria objetivo | Para qué sirve |
+|--------|------------------|----------------|
+| G-Buffer completo con 4 attachments | ~200 MB | Base para deferred lighting, decals, GTAO, SSR, motion vectors y material IDs |
+| IBL cubemaps pre-filtrados HD | ~150 MB | Reflejos especulares por roughness, irradiance diffuse y probes colocables |
+| History buffers TAA | ~100 MB | Antialiasing temporal, reproyección de AO/SSR/bloom/exposure y estabilidad subpixel |
+| DDGI probes grid 3D | ~300 MB | Iluminación global difusa dinámica con probes relit y blending espacial |
+| **Total adicional aproximado** | **~750 MB** | Perfil AAA/cinemático por encima de color/depth/swapchain/base assets |
+
+Para controlar esto de forma profesional, REACTOR debe exponer `VK_EXT_memory_budget`,
+contadores por pass y presets: `Performance`, `High`, `Cinematic` y `Offline Preview`.
+
 ### ✅ Lo que ya está cocinado en la base
 
 | Pieza | Dónde vive | Estado |
@@ -679,9 +697,11 @@ existente (Vulkan + descriptors + compute + RT). No hay que tocar `unsafe`.
 
 #### 1. Material PBR completo (Cook-Torrance real)
 
+- **Cook-Torrance BRDF completo**: `specular = D * G * F / (4 * NoL * NoV)`
 - **D**isney/GGX Trowbridge-Reitz **D**(h) microfacet normal distribution
 - **G**eometry term Smith Schlick-GGX (correlated)
 - **F**resnel Schlick con ior y f90
+- **Diffuse BRDF** Burley/Disney con conservación de energía frente al lóbulo specular
 - **Energy compensation** para multi-scattering (Kulla-Conty / Turquin)
 - **Anisotropy** (T/B tangent frame) para pelo, metales cepillados
 - **Clear coat** (capa transparente sobre coches, plásticos)
@@ -722,6 +742,8 @@ Para llevarlo a nivel producción falta:
 
 Actualmente solo Forward. Para AAA con cientos de luces:
 
+- **Memoria objetivo**: ~200 MB para 4 attachments en perfil cinemático
+  (varía por resolución, MSAA y formato).
 - **G-Buffer layout** (R11G11B10F + RGBA8 + RGBA8 + RG16F):
   - `gbuffer0`: Base color (RGB) + AO (A)
   - `gbuffer1`: World normal octahedral (RG) + metallic + roughness
@@ -1489,6 +1511,8 @@ sequenceDiagram
 - Fix de validación Vulkan: bloom se reconstruye junto con offscreen images en resize/swapchain recreate para no dejar descriptors apuntando a samplers/image views destruidos.
 - Depth resolve compute R32F: el depth MSAA se resuelve a una textura single-sample sampleable para que SSAO/GTAO funcione con MSAA 4x sin violar validation layers.
 - Sampler de sombras corregido para PCF manual (`compare_enable(false)`).
+- Presupuesto VRAM AAA documentado: G-Buffer 4 attachments (~200 MB), IBL HD (~150 MB), TAA history (~100 MB) y DDGI probes grid (~300 MB).
+- Roadmap de materiales refinado hacia BRDF Cook-Torrance real con términos D/G/F, diffuse Burley/Disney y conservación de energía.
 - Roadmap AAA actualizado con prioridades P0/P1/P2/P3, datos necesarios y criterios de aceptación.
 
 ### v1.2.0 — UE5-style Core (Mayo 2026)
