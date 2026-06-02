@@ -4,6 +4,7 @@ layout(location = 0) in vec2 fragTexCoord;
 layout(location = 0) out vec4 outColor;
 
 layout(binding = 0) uniform sampler2D screenTexture;
+layout(binding = 1) uniform sampler2D bloomTexture;
 
 layout(push_constant) uniform PostProcessSettings {
     // Vignette
@@ -82,7 +83,36 @@ float interleaved_gradient_noise(vec2 pixel, float frame) {
     return fract(52.9829189 * fract(0.06711056 * pixel.x + 0.00583715 * pixel.y));
 }
 
-// ACES Filmic Tone Mapping curve
+// ── AgX Tone Mapping (Troy Sobotka / Filmic Worlds) ─────────────────────────
+// Cinematic SDR operator — preserves high-light detail and hue better than ACES.
+// Matches Blender's AgX output transform for consistent look between editor and renderer.
+vec3 _agx_contrast(vec3 x) {
+    vec3 x2  = x * x;
+    vec3 x4  = x2 * x2;
+    return + 15.5     * x4 * x2
+           - 40.14    * x4 * x
+           + 31.96    * x4
+           - 6.868    * x2 * x
+           + 0.4298   * x2
+           + 0.1191   * x
+           - 0.00232;
+}
+vec3 agx_tonemap(vec3 color) {
+    const float min_ev = -12.47393;
+    const float max_ev = 4.026069;
+    const mat3 agx_mat = mat3(
+        0.842479062253094,  0.0423282422610123, 0.0423756549057051,
+        0.0784335999999992, 0.878468636469772,  0.0784336,
+        0.0792237451477643, 0.0791661274605434, 0.879142973793104
+    );
+    color = agx_mat * color;
+    color = clamp(log2(max(color, vec3(1e-10))), vec3(min_ev), vec3(max_ev));
+    color = (color - min_ev) / (max_ev - min_ev);
+    color = _agx_contrast(color);
+    return clamp(color, 0.0, 1.0);
+}
+
+// Legacy ACES Filmic (kept for compatibility / user preference)
 vec3 aces_tonemap(vec3 color) {
     float a = 2.51;
     float b = 0.03;
@@ -457,29 +487,10 @@ void main() {
         color = accum / 9.0;
     }
 
-    // 4. Bloom (simulated light bleed from bright areas)
+    // 4. Bloom (GPU Compute mip-chain — Karis average + progressive upsample)
     if ((settings.effect_mask & EFFECT_BLOOM) != 0) {
-        // Sample surrounding bright areas
-        vec3 bloomAccum = vec3(0.0);
-        float samplesCount = 0.0;
-        
-        // Dynamic search area based on blur size setting
-        int radius = int(clamp(settings.bloom_blur_size, 1.0, 6.0));
-        for (int y = -radius; y <= radius; y += 2) {
-            for (int x = -radius; x <= radius; x += 2) {
-                vec3 sampleColor = texture(screenTexture, uv + vec2(x, y) * texelSize).rgb;
-                float luma = luminance(sampleColor);
-                if (luma > settings.bloom_threshold) {
-                    float weight = 1.0 - (length(vec2(x, y)) / (float(radius) + 1.0));
-                    bloomAccum += sampleColor * weight;
-                    samplesCount += weight;
-                }
-            }
-        }
-        
-        if (samplesCount > 0.0) {
-            color += (bloomAccum / samplesCount) * settings.bloom_intensity;
-        }
+        vec3 bloomColor = texture(bloomTexture, uv).rgb;
+        color += bloomColor * settings.bloom_intensity;
     }
 
     // 5. FXAA (Fast Approximate Anti-Aliasing)
@@ -595,14 +606,22 @@ void main() {
         color = 1.0 - color;
     }
 
-    // 16. Tone Mapping & Exposure
+    // 16. Tone Mapping & Exposure (AgX — cinematic SDR, matches Blender output)
     if ((settings.effect_mask & EFFECT_TONEMAP) != 0) {
         color *= settings.exposure;
-        color = aces_tonemap(color);
+        color = agx_tonemap(color);
+        // Subtle saturation recovery post-tonemap (AgX is deliberately neutral)
+        float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+        color = mix(vec3(luma), color, 1.08);
     }
 
     // 17. Gamma Correction
     color = pow(color, vec3(1.0 / settings.gamma));
+
+    // 18. Anti-banding dither (reduces 8-bit quantization artifacts on SDR)
+    float dither = (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 255.0;
+    color += dither;
+
     color = draw_pause_overlay(uv, color);
 
     outColor = vec4(color, 1.0);

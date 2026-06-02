@@ -12,7 +12,8 @@ pub struct Material {
     pub descriptor_pool: Option<vk::DescriptorPool>,
     pub descriptor_layout: Option<vk::DescriptorSetLayout>,
     pub kept_textures: Vec<crate::resources::texture::Texture>,
-    device: Option<ArcDevice>,
+    pub uses_ibl: bool,
+    pub(crate) device: Option<ArcDevice>,
 }
 
 impl Material {
@@ -74,6 +75,7 @@ impl Material {
             descriptor_pool: None,
             descriptor_layout: None,
             kept_textures: Vec::new(),
+            uses_ibl: false,
             device: None,
         })
     }
@@ -109,6 +111,7 @@ impl Material {
             descriptor_pool: None,
             descriptor_layout: None,
             kept_textures: Vec::new(),
+            uses_ibl: false,
             device: None,
         })
     }
@@ -206,6 +209,7 @@ impl Material {
             descriptor_pool: Some(descriptor_pool),
             descriptor_layout: Some(descriptor_layout),
             kept_textures: Vec::new(),
+            uses_ibl: false,
             device: Some(ctx.device.clone()),
         })
     }
@@ -263,6 +267,7 @@ pub struct MaterialBuilder {
     pub frag_code: Vec<u32>,
     pub config: PipelineConfig,
     pub descriptor_layouts: Vec<vk::DescriptorSetLayout>,
+    pub uses_ibl: bool,
 }
 
 impl MaterialBuilder {
@@ -272,6 +277,7 @@ impl MaterialBuilder {
             frag_code,
             config: PipelineConfig::default(),
             descriptor_layouts: Vec::new(),
+            uses_ibl: false,
         }
     }
 
@@ -316,6 +322,11 @@ impl MaterialBuilder {
         self
     }
 
+    pub fn uses_ibl(mut self, uses: bool) -> Self {
+        self.uses_ibl = uses;
+        self
+    }
+
     pub fn build(
         self,
         ctx: &VulkanContext,
@@ -325,7 +336,7 @@ impl MaterialBuilder {
         color_format: vk::Format,
         depth_format: Option<vk::Format>,
     ) -> ReactorResult<Material> {
-        Material::with_config(
+        let mut mat = Material::with_config(
             ctx,
             render_pass,
             &self.vert_code,
@@ -336,6 +347,8 @@ impl MaterialBuilder {
             &self.descriptor_layouts,
             color_format,
             depth_format,
-        )
+        )?;
+        mat.uses_ibl = self.uses_ibl;
+        Ok(mat)
     }
 }

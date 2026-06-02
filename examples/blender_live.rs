@@ -68,6 +68,15 @@ struct BlenderLive {
 
     /// Runtime de Tokio para el servidor de WebSocket.
     runtime: Option<tokio::runtime::Runtime>,
+
+    /// Texturas de fallback y cache de texturas dinámicas
+    fallback_albedo: Option<reactor_vulkan::resources::texture::Texture>,
+    fallback_normal: Option<reactor_vulkan::resources::texture::Texture>,
+    texture_cache: HashMap<String, reactor_vulkan::resources::texture::Texture>,
+
+    /// Códigos SPIR-V de los shaders
+    vert_code: Vec<u32>,
+    frag_code: Vec<u32>,
 }
 
 impl BlenderLive {
@@ -80,6 +89,11 @@ impl BlenderLive {
             cube_mesh: None,
             blender_material: None,
             runtime: None,
+            fallback_albedo: None,
+            fallback_normal: None,
+            texture_cache: HashMap::new(),
+            vert_code: Vec::new(),
+            frag_code: Vec::new(),
         }
     }
 
@@ -206,8 +220,28 @@ impl ReactorApp for BlenderLive {
         )))
         .expect("Failed to load fragment shader");
 
-        // Crear materiales
-        let blender_mat = Arc::new(ctx.create_material(&vert, &frag).expect("Failed to create material"));
+        self.vert_code = vert.clone();
+        self.frag_code = frag.clone();
+
+        // Bake the procedural studio sky cubemap at startup
+        let ibl = reactor_vulkan::graphics::IblBaker::bake_procedural(&ctx.reactor.context, ctx.reactor.allocator.clone())
+            .expect("Failed to bake procedural IBL");
+        let ibl_layout = ibl.descriptor_set_layout;
+        ctx.reactor.ibl_textures = Some(ibl);
+
+        // Crear texturas de fallback sólidas
+        let fallback_albedo = ctx.reactor.create_solid_texture(255, 255, 255, 255)
+            .expect("Failed to create fallback albedo texture");
+        let fallback_normal = ctx.reactor.create_solid_texture(128, 128, 255, 255)
+            .expect("Failed to create fallback normal texture");
+        self.fallback_albedo = Some(fallback_albedo);
+        self.fallback_normal = Some(fallback_normal);
+
+        // Crear materiales con IBL y texturas
+        let albedo_ref = self.fallback_albedo.as_ref().unwrap();
+        let normal_ref = self.fallback_normal.as_ref().unwrap();
+        let blender_mat = Arc::new(ctx.reactor.create_pbr_material(&vert, &frag, ibl_layout, albedo_ref, normal_ref)
+            .expect("Failed to create PBR material"));
         self.blender_material = Some(blender_mat);
 
         // Crear malla
@@ -387,6 +421,77 @@ impl BlenderLive {
                     );
                 }
                 
+                // Sincronizar metálico y rugosidad
+                if let Some(met) = t.metallic {
+                    obj.metallic = met;
+                }
+                if let Some(rough) = t.roughness {
+                    obj.roughness = rough;
+                }
+
+                // Cargar/Actualizar texturas si cambian
+                let mut albedo_updated = false;
+                let mut normal_updated = false;
+                
+                if let Some(ref path) = t.albedo_path {
+                    if !self.texture_cache.contains_key(path) {
+                        if let Ok(tex) = ctx.reactor.load_texture(path) {
+                            self.texture_cache.insert(path.clone(), tex);
+                        }
+                    }
+                    albedo_updated = true;
+                }
+                
+                if let Some(ref path) = t.normal_path {
+                    if !self.texture_cache.contains_key(path) {
+                        if let Ok(tex) = ctx.reactor.load_texture(path) {
+                            self.texture_cache.insert(path.clone(), tex);
+                        }
+                    }
+                    normal_updated = true;
+                }
+
+                if albedo_updated || normal_updated {
+                    if let Some(descriptor_set) = obj.material.descriptor_set {
+                        let albedo_tex = t.albedo_path.as_ref()
+                            .and_then(|p| self.texture_cache.get(p))
+                            .unwrap_or(self.fallback_albedo.as_ref().unwrap());
+                            
+                        let normal_tex = t.normal_path.as_ref()
+                            .and_then(|p| self.texture_cache.get(p))
+                            .unwrap_or(self.fallback_normal.as_ref().unwrap());
+                            
+                        let albedo_info = ash::vk::DescriptorImageInfo::default()
+                            .image_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                            .image_view(albedo_tex.view())
+                            .sampler(albedo_tex.sampler_handle());
+
+                        let normal_info = ash::vk::DescriptorImageInfo::default()
+                            .image_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                            .image_view(normal_tex.view())
+                            .sampler(normal_tex.sampler_handle());
+
+                        let write_albedo = ash::vk::WriteDescriptorSet::default()
+                            .dst_set(descriptor_set)
+                            .dst_binding(0)
+                            .dst_array_element(0)
+                            .descriptor_type(ash::vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                            .image_info(std::slice::from_ref(&albedo_info));
+
+                        let write_normal = ash::vk::WriteDescriptorSet::default()
+                            .dst_set(descriptor_set)
+                            .dst_binding(1)
+                            .dst_array_element(0)
+                            .descriptor_type(ash::vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                            .image_info(std::slice::from_ref(&normal_info));
+
+                        unsafe {
+                            ctx.reactor.context.device.update_descriptor_sets(&[write_albedo, write_normal], &[]);
+                        }
+                        println!("\x1b[35m  📝 Texturas dinámicas actualizadas para '{}'\x1b[0m", t.id);
+                    }
+                }
+                
                 // Mostrar log visual de la sincronización en tiempo real
                 let translation = obj.transform.w_axis;
                 println!(
@@ -397,7 +502,15 @@ impl BlenderLive {
         } else {
             // Entidad nueva — crear un cubo placeholder
             let mesh = self.cube_mesh.clone().expect("cube mesh not initialized");
-            let mat = self.blender_material.clone().expect("blender material not initialized");
+            
+            // Crear un material único para esta entidad
+            let ibl_layout = ctx.reactor.ibl_textures.as_ref().unwrap().descriptor_set_layout;
+            let albedo_ref = self.fallback_albedo.as_ref().unwrap();
+            let normal_ref = self.fallback_normal.as_ref().unwrap();
+            
+            let mat = Arc::new(ctx.reactor.create_pbr_material(&self.vert_code, &self.frag_code, ibl_layout, albedo_ref, normal_ref)
+                .expect("Failed to create entity material"));
+
             let m = t.matrix;
             let transform = Mat4::from_cols_array(&m);
             let mut obj = SceneObject::new(mesh, mat, transform);
@@ -405,6 +518,70 @@ impl BlenderLive {
             // Si viene un color de material, aplicarlo al objeto de la escena
             if let Some(col) = t.color {
                 obj.color = glam::Vec4::from_slice(&col);
+            }
+            obj.metallic = t.metallic.unwrap_or(0.0);
+            obj.roughness = t.roughness.unwrap_or(0.5);
+
+            // Cargar texturas al inicio si vienen indicadas
+            let mut albedo_updated = false;
+            let mut normal_updated = false;
+            
+            if let Some(ref path) = t.albedo_path {
+                if !self.texture_cache.contains_key(path) {
+                    if let Ok(tex) = ctx.reactor.load_texture(path) {
+                        self.texture_cache.insert(path.clone(), tex);
+                    }
+                }
+                albedo_updated = true;
+            }
+            
+            if let Some(ref path) = t.normal_path {
+                if !self.texture_cache.contains_key(path) {
+                    if let Ok(tex) = ctx.reactor.load_texture(path) {
+                        self.texture_cache.insert(path.clone(), tex);
+                    }
+                }
+                normal_updated = true;
+            }
+
+            if albedo_updated || normal_updated {
+                if let Some(descriptor_set) = obj.material.descriptor_set {
+                    let albedo_tex = t.albedo_path.as_ref()
+                        .and_then(|p| self.texture_cache.get(p))
+                        .unwrap_or(self.fallback_albedo.as_ref().unwrap());
+                        
+                    let normal_tex = t.normal_path.as_ref()
+                        .and_then(|p| self.texture_cache.get(p))
+                        .unwrap_or(self.fallback_normal.as_ref().unwrap());
+                        
+                    let albedo_info = ash::vk::DescriptorImageInfo::default()
+                        .image_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                        .image_view(albedo_tex.view())
+                        .sampler(albedo_tex.sampler_handle());
+
+                    let normal_info = ash::vk::DescriptorImageInfo::default()
+                        .image_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                        .image_view(normal_tex.view())
+                        .sampler(normal_tex.sampler_handle());
+
+                    let write_albedo = ash::vk::WriteDescriptorSet::default()
+                        .dst_set(descriptor_set)
+                        .dst_binding(0)
+                        .dst_array_element(0)
+                        .descriptor_type(ash::vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                        .image_info(std::slice::from_ref(&albedo_info));
+
+                    let write_normal = ash::vk::WriteDescriptorSet::default()
+                        .dst_set(descriptor_set)
+                        .dst_binding(1)
+                        .dst_array_element(0)
+                        .descriptor_type(ash::vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                        .image_info(std::slice::from_ref(&normal_info));
+
+                    unsafe {
+                        ctx.reactor.context.device.update_descriptor_sets(&[write_albedo, write_normal], &[]);
+                    }
+                }
             }
             
             let idx = ctx.scene.objects.len();

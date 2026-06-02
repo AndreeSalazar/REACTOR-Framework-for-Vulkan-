@@ -356,6 +356,19 @@ impl Reactor {
                     );
                     active_pipeline = pipeline_handle;
                     active_descriptor_set = vk::DescriptorSet::null(); // Reset active descriptor set on pipeline change
+
+                    if object.material.uses_ibl {
+                        if let Some(ref ibl) = self.ibl_textures {
+                            self.context.device.cmd_bind_descriptor_sets(
+                                command_buffer,
+                                vk::PipelineBindPoint::GRAPHICS,
+                                object.material.pipeline.layout,
+                                1, // Set 1 for IBL Textures
+                                &[ibl.descriptor_set],
+                                &[],
+                            );
+                        }
+                    }
                 }
 
                 if descriptor_set_handle != active_descriptor_set
@@ -389,9 +402,14 @@ impl Reactor {
                         self.camera_pos.x,
                         self.camera_pos.y,
                         self.camera_pos.z,
-                        1.0,
+                        object.metallic, // pack metallic in camera_pos.w
                     ),
-                    light_pos: self.light_pos,
+                    light_pos: glam::Vec4::new(
+                        self.light_pos.x,
+                        self.light_pos.y,
+                        self.light_pos.z,
+                        object.roughness, // pack roughness in light_pos.w
+                    ),
                     color: object.color,
                 };
                 let constants_array = std::slice::from_raw_parts(
@@ -433,13 +451,41 @@ impl Reactor {
             self.context.device.cmd_end_rendering(command_buffer);
 
             if use_post_process {
-                // Transition offscreen target from COLOR_ATTACHMENT_OPTIMAL to SHADER_READ_ONLY_OPTIMAL
-                self.post_process.offscreen_images[image_index as usize].transition_layout(
-                    &self.context,
+                // ── Transition offscreen → SHADER_READ_ONLY with proper compute + fragment sync ──
+                let offscreen_barrier = vk::ImageMemoryBarrier::default()
+                    .old_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                    .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    .src_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                    .dst_access_mask(vk::AccessFlags::SHADER_READ)
+                    .image(self.post_process.offscreen_images[image_index as usize].handle)
+                    .subresource_range(vk::ImageSubresourceRange {
+                        aspect_mask: vk::ImageAspectFlags::COLOR,
+                        base_mip_level: 0,
+                        level_count: 1,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    });
+
+                self.context.device.cmd_pipeline_barrier(
                     command_buffer,
-                    vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                    vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+                    vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER,
+                    vk::DependencyFlags::empty(),
+                    &[],
+                    &[],
+                    &[offscreen_barrier],
                 );
+
+                // ── Bloom Compute Pipeline (mip-chain downsample + upsample) ──
+                if self.post_process.bloom_downsample_pipeline.is_some() {
+                    self.post_process.dispatch_bloom(
+                        self.context.ash_device(),
+                        command_buffer,
+                        image_index as usize,
+                        self.swapchain.extent.width,
+                        self.swapchain.extent.height,
+                    );
+                }
 
                 // Transition swapchain image from UNDEFINED to COLOR_ATTACHMENT_OPTIMAL
                 let swapchain_barrier = vk::ImageMemoryBarrier::default()

@@ -22,7 +22,19 @@
 #include "color.glsl"
 #include "noise.glsl"
 #include "pbr.glsl"
-#include "ibl.glsl"
+
+// Set 0: Texturas del material
+layout(set = 0, binding = 0) uniform sampler2D u_albedo_map;
+layout(set = 0, binding = 1) uniform sampler2D u_normal_map;
+
+// Set 1: Texturas IBL (Image-Based Lighting)
+#define REACTOR_IBL_SET 1
+layout(set = REACTOR_IBL_SET, binding = 0) uniform samplerCube u_ibl_irradiance;
+layout(set = REACTOR_IBL_SET, binding = 1) uniform samplerCube u_ibl_prefiltered;
+layout(set = REACTOR_IBL_SET, binding = 2) uniform sampler2D   u_ibl_brdf_lut;
+layout(set = REACTOR_IBL_SET, binding = 3) uniform IblParams { float max_mip; } ibl_params;
+
+#include "ibl_textures.glsl"
 #include "lighting.glsl"
 #include "tonemap.glsl"
 
@@ -37,8 +49,8 @@ layout(location = 0) out vec4 outColor;
 layout(push_constant) uniform Constants {
     mat4 mvp;
     mat4 model;
-    vec4 camera_pos;
-    vec4 light_pos;
+    vec4 camera_pos; // camera_pos.w contains packed metallic
+    vec4 light_pos;  // light_pos.w contains packed roughness
     vec4 color;
 } push;
 
@@ -57,21 +69,46 @@ float contact_shadow(vec3 P, vec3 N) {
     return mix(1.0, 0.55, saturate(1.0 - h * 1.5) * NoUp);
 }
 
+// Reconstrucción del TBN usando derivadas en espacio de pantalla
+mat3 calculate_TBN(vec3 p, vec3 n, vec2 uv) {
+    vec3 dp1 = dFdx(p);
+    vec3 dp2 = dFdy(p);
+    vec2 duv1 = dFdx(uv);
+    vec2 duv2 = dFdy(uv);
+    
+    vec3 dp2perp = cross(dp2, n);
+    vec3 dp1perp = cross(n, dp1);
+    vec3 t = dp2perp * duv1.x + dp1perp * duv2.x;
+    vec3 b = dp2perp * duv1.y + dp1perp * duv2.y;
+    
+    float invmax = inversesqrt(max(dot(t, t), dot(b, b)));
+    return mat3(t * invmax, b * invmax, n);
+}
+
 void main() {
     // ── Inputs ──────────────────────────────────────────────────────────────
-    vec3 N      = normalize(vWorldNormal);
-    vec3 V      = normalize(vViewDir);
     vec3 P      = vWorldPos;
-    vec3 albedo = max(vColor.rgb, vec3(0.0));
+    vec3 vN     = normalize(vWorldNormal);
+    vec3 V      = normalize(vViewDir);
+    
+    // Mapeo de texturas
+    vec4 tex_albedo = texture(u_albedo_map, vUV);
+    vec3 albedo     = max(tex_albedo.rgb * push.color.rgb, vec3(0.0));
+    
+    // Normal mapping
+    vec3 normalMap = texture(u_normal_map, vUV).rgb;
+    vec3 N = vN;
+    // Si la textura de normales contiene datos (es decir, no es el flat color fallback por defecto)
+    if (length(normalMap - vec3(0.5, 0.5, 1.0)) > 0.01) {
+        mat3 TBN = calculate_TBN(P, vN, vUV);
+        vec3 tangentNormal = normalMap * 2.0 - 1.0;
+        N = normalize(TBN * tangentNormal);
+    }
 
-    // ── Material heurístico (placeholder hasta MaterialUpdated PBR real) ───
-    float y     = luminance(albedo);
-    float sat   = length(albedo - vec3(y));
-    float metallic   = 0.0;
-    float baseRough  = mix(0.55, 0.30, saturate(y) * (1.0 - saturate(sat * 1.2)));
-    float n          = value_noise(P * 3.5);
-    float roughness  = clamp(baseRough + (n - 0.5) * 0.12, 0.04, 1.0);
-    vec3  f0         = mix(REACTOR_F0_DIEL, albedo, metallic);
+    // ── Propiedades PBR reales ──────────────────────────────────────────────
+    float metallic  = clamp(push.camera_pos.w, 0.0, 1.0);
+    float roughness = clamp(push.light_pos.w, 0.04, 1.0);
+    vec3  f0        = mix(REACTOR_F0_DIEL, albedo, metallic);
 
     // ── Oclusión / contact shadow ──────────────────────────────────────────
     float ao = curvature_AO(N);
@@ -88,21 +125,16 @@ void main() {
         albedo, metallic, roughness, f0
     );
 
-    // ── IBL (diffuse + specular split-sum + energy compensation) ───────────
-    vec3 ambient = ibl_eval(N, V, albedo, metallic, roughness, f0, ao);
+    // ── IBL (diffuse + specular split-sum from pre-baked HDR cubemap) ────────
+    vec3 ambient = ibl_eval_textured(N, V, albedo, metallic, roughness, f0, ao, ibl_params.max_mip);
 
     // ── Rim light ──────────────────────────────────────────────────────────
     vec3 rim = light_rim(N, V, vec3(0.65, 0.78, 1.0) * 0.5, 4.0, metallic);
 
-    // ── Composición y grading ──────────────────────────────────────────────
+    // ── Composición ─────────────────────────────────────────────────────────
+    // Salida LINEAR HDR — sin tone mapping aquí.
+    // El post-process pipeline aplica bloom (sobre HDR) → AgX → gamma.
     vec3 color = (lo + ambient + rim) * cs;
-    color = adjust_saturation(color, 1.05);
 
-    // AgX da altas luces más limpias que ACES en preview de materiales.
-    color = agx_default(color);
-
-    // AgX ya devuelve sRGB; sólo aplicar dithering anti-banding.
-    color += bayer_dither(gl_FragCoord.xy);
-
-    outColor = vec4(color, vColor.a);
+    outColor = vec4(color, tex_albedo.a * push.color.a);
 }

@@ -1,0 +1,78 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(binding = 0) uniform sampler2D u_input_texture;
+layout(binding = 1, rgba16f) uniform writeonly image2D u_output_image;
+
+layout(push_constant) uniform BloomParams {
+    vec2 u_texel_size;
+    int u_mip_level;
+    float u_threshold;
+} params;
+
+// Karis average helper to reduce fireflies/specular aliasing
+vec3 karis_average(vec3 color) {
+    float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+    return color / (1.0 + luma);
+}
+
+void main() {
+    ivec2 g_id = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(u_output_image);
+    
+    if (g_id.x >= size.x || g_id.y >= size.y) {
+        return;
+    }
+    
+    vec2 uv = (vec2(g_id) + 0.5) / vec2(size);
+    vec2 texel = params.u_texel_size;
+    float x = texel.x;
+    float y = texel.y;
+    
+    // Sample 13 taps
+    vec3 a = texture(u_input_texture, uv + vec2(-2.0*x,  2.0*y)).rgb;
+    vec3 b = texture(u_input_texture, uv + vec2( 0.0,    2.0*y)).rgb;
+    vec3 c = texture(u_input_texture, uv + vec2( 2.0*x,  2.0*y)).rgb;
+    
+    vec3 d = texture(u_input_texture, uv + vec2(-2.0*x,  0.0)).rgb;
+    vec3 e = texture(u_input_texture, uv + vec2( 0.0,    0.0)).rgb;
+    vec3 f = texture(u_input_texture, uv + vec2( 2.0*x,  0.0)).rgb;
+    
+    vec3 g = texture(u_input_texture, uv + vec2(-2.0*x, -2.0*y)).rgb;
+    vec3 h = texture(u_input_texture, uv + vec2( 0.0,   -2.0*y)).rgb;
+    vec3 i = texture(u_input_texture, uv + vec2( 2.0*x, -2.0*y)).rgb;
+    
+    vec3 j = texture(u_input_texture, uv + vec2(-x,  y)).rgb;
+    vec3 k = texture(u_input_texture, uv + vec2( x,  y)).rgb;
+    vec3 l = texture(u_input_texture, uv + vec2(-x, -y)).rgb;
+    vec3 m = texture(u_input_texture, uv + vec2( x, -y)).rgb;
+    
+    // Weighted average
+    vec3 downsample = vec3(0.0);
+    if (params.u_mip_level == 0) {
+        // Apply Karis average on the first downsample pass to suppress fireflies
+        vec3 group0 = karis_average((a + b + d + e) * 0.25);
+        vec3 group1 = karis_average((b + c + e + f) * 0.25);
+        vec3 group2 = karis_average((d + e + g + h) * 0.25);
+        vec3 group3 = karis_average((e + f + h + i) * 0.25);
+        vec3 group4 = karis_average((j + k + l + m) * 0.25);
+        
+        downsample = (group0 + group1 + group2 + group3) * 0.125 + group4 * 0.5;
+        // Invert Karis average back to HDR
+        float luma = dot(downsample, vec3(0.2126, 0.7152, 0.0722));
+        downsample = downsample / max(1.0 - luma, 0.0001);
+        
+        // Thresholding
+        if (luma < params.u_threshold) {
+            downsample = vec3(0.0);
+        }
+    } else {
+        downsample = (a + c + g + i) * 0.03125 + 
+                     (b + d + f + h) * 0.0625 +
+                     (j + k + l + m) * 0.125 +
+                     e * 0.125;
+    }
+    
+    imageStore(u_output_image, g_id, vec4(max(downsample, vec3(0.0)), 1.0));
+}

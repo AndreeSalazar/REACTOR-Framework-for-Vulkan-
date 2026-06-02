@@ -235,6 +235,7 @@ impl Default for PostProcessSettings {
         settings.enable_effect(PostProcessEffect::SSR);
         settings.enable_effect(PostProcessEffect::PathTracedLighting);
         settings.enable_effect(PostProcessEffect::AnamorphicFlares);
+        settings.enable_effect(PostProcessEffect::Bloom);
         settings
     }
 }
@@ -257,6 +258,7 @@ impl PostProcessSettings {
         settings.enable_effect(PostProcessEffect::Vignette);
         settings.enable_effect(PostProcessEffect::ToneMapping);
         settings.enable_effect(PostProcessEffect::FilmGrain);
+        settings.enable_effect(PostProcessEffect::Bloom);
         settings.enable_effect(PostProcessEffect::SSGI);
         settings.enable_effect(PostProcessEffect::VolumetricFog);
         settings.enable_effect(PostProcessEffect::LutColorGrading);
@@ -265,6 +267,8 @@ impl PostProcessSettings {
         settings.enable_effect(PostProcessEffect::AnamorphicFlares);
         settings.vignette_intensity = 0.4;
         settings.grain_intensity = 0.008;
+        settings.bloom_threshold = 0.75;
+        settings.bloom_intensity = 0.4;
         settings.fog_density = 0.22;
         settings.lut_strength = 0.82;
         settings.flare_intensity = 0.52;
@@ -307,6 +311,17 @@ pub struct PostProcessPipeline {
     pub offscreen_images: Vec<crate::graphics::Image>,
     pub sampler: Option<vk::Sampler>,
 
+    // ── Bloom Mip-Chain (Compute) ──
+    pub bloom_downsample_pipeline: Option<crate::compute::ComputePipeline>,
+    pub bloom_upsample_pipeline: Option<crate::compute::ComputePipeline>,
+    pub bloom_descriptor_layout: Option<vk::DescriptorSetLayout>,
+    pub bloom_descriptor_pool: Option<vk::DescriptorPool>,
+    pub bloom_images: Vec<crate::graphics::Image>,
+    pub bloom_mip_views_sampled: Vec<Vec<vk::ImageView>>,
+    pub bloom_mip_views_storage: Vec<Vec<vk::ImageView>>,
+    pub bloom_downsample_sets: Vec<Vec<vk::DescriptorSet>>,
+    pub bloom_upsample_sets: Vec<Vec<vk::DescriptorSet>>,
+
     device: Option<crate::core::arc_handle::ArcDevice>,
 }
 
@@ -322,6 +337,15 @@ impl PostProcessPipeline {
             descriptor_sets: Vec::new(),
             offscreen_images: Vec::new(),
             sampler: None,
+            bloom_downsample_pipeline: None,
+            bloom_upsample_pipeline: None,
+            bloom_descriptor_layout: None,
+            bloom_descriptor_pool: None,
+            bloom_images: Vec::new(),
+            bloom_mip_views_sampled: Vec::new(),
+            bloom_mip_views_storage: Vec::new(),
+            bloom_downsample_sets: Vec::new(),
+            bloom_upsample_sets: Vec::new(),
             device: None,
         }
     }
@@ -342,6 +366,15 @@ impl PostProcessPipeline {
             descriptor_sets: Vec::new(),
             offscreen_images: Vec::new(),
             sampler: None,
+            bloom_downsample_pipeline: None,
+            bloom_upsample_pipeline: None,
+            bloom_descriptor_layout: None,
+            bloom_descriptor_pool: None,
+            bloom_images: Vec::new(),
+            bloom_mip_views_sampled: Vec::new(),
+            bloom_mip_views_storage: Vec::new(),
+            bloom_downsample_sets: Vec::new(),
+            bloom_upsample_sets: Vec::new(),
             device: None,
         }
     }
@@ -363,13 +396,20 @@ impl PostProcessPipeline {
         self.device = Some(ctx.device.clone());
 
         // 1. Create Descriptor Set Layout
-        let binding = vk::DescriptorSetLayoutBinding::default()
-            .binding(0)
-            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .descriptor_count(1)
-            .stage_flags(vk::ShaderStageFlags::FRAGMENT);
+        let pp_bindings = [
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(1)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+        ];
         let layout_info =
-            vk::DescriptorSetLayoutCreateInfo::default().bindings(std::slice::from_ref(&binding));
+            vk::DescriptorSetLayoutCreateInfo::default().bindings(&pp_bindings);
         let descriptor_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
 
         // 2. Create Pipeline Layout
@@ -493,7 +533,7 @@ impl PostProcessPipeline {
         // 4. Create Descriptor Pool
         let pool_size = vk::DescriptorPoolSize::default()
             .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .descriptor_count(image_count);
+            .descriptor_count(image_count * 2);
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .pool_sizes(std::slice::from_ref(&pool_size))
             .max_sets(image_count);
@@ -515,12 +555,15 @@ impl PostProcessPipeline {
         // 6. Create Offscreen Color Images
         self.recreate_offscreen_images(
             ctx,
-            allocator,
+            allocator.clone(),
             width,
             height,
             image_count,
             swapchain_format,
         )?;
+
+        // 7. Initialize Bloom Compute Pipeline (mip-chain with Karis average)
+        self.init_bloom(ctx, allocator, width, height, image_count)?;
 
         Ok(())
     }
@@ -595,6 +638,505 @@ impl PostProcessPipeline {
 
         Ok(())
     }
+
+    /// Initialize bloom compute pipeline with mip-chain for physical bloom.
+    /// Creates bloom images with multiple mip levels, per-mip image views,
+    /// compute pipelines for downsample/upsample, and all descriptor sets.
+    pub fn init_bloom(
+        &mut self,
+        ctx: &VulkanContext,
+        allocator: Arc<Mutex<Allocator>>,
+        width: u32,
+        height: u32,
+        image_count: u32,
+    ) -> crate::core::error::ReactorResult<()> {
+        let device = ctx.ash_device();
+        let sampler = match self.sampler {
+            Some(s) => s,
+            None => return Ok(()), // No sampler = post-process not ready
+        };
+
+        // Calculate bloom base resolution (half of scene) and mip count
+        let bloom_w = (width / 2).max(1);
+        let bloom_h = (height / 2).max(1);
+        let mip_count = ((bloom_w.min(bloom_h) as f32).log2().floor() as u32)
+            .max(1)
+            .min(6);
+
+        // 1. Create bloom compute descriptor set layout
+        //    binding 0: COMBINED_IMAGE_SAMPLER (input texture)
+        //    binding 1: STORAGE_IMAGE (output image)
+        let bloom_bindings = [
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::COMPUTE),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(1)
+                .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::COMPUTE),
+        ];
+        let bloom_layout_info =
+            vk::DescriptorSetLayoutCreateInfo::default().bindings(&bloom_bindings);
+        let bloom_desc_layout =
+            unsafe { device.create_descriptor_set_layout(&bloom_layout_info, None)? };
+
+        // 2. Create bloom compute pipelines from pre-compiled SPIR-V
+        let down_spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
+            "../../shaders/post/bloom_downsample.spv"
+        )))
+        .unwrap();
+        let up_spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
+            "../../shaders/post/bloom_upsample.spv"
+        )))
+        .unwrap();
+
+        let down_pipeline = crate::compute::ComputePipeline::new(
+            ctx,
+            &down_spv,
+            &[bloom_desc_layout],
+            Some(16), // BloomParams: vec2 + int + float = 16 bytes
+        )?;
+        let up_pipeline = crate::compute::ComputePipeline::new(
+            ctx,
+            &up_spv,
+            &[bloom_desc_layout],
+            Some(12), // UpsampleParams: vec2 + float = 12 bytes
+        )?;
+
+        // 3. Create bloom images (one per swapchain image) with mip levels
+        let mut bloom_images = Vec::with_capacity(image_count as usize);
+        let mut mip_views_sampled: Vec<Vec<vk::ImageView>> =
+            Vec::with_capacity(image_count as usize);
+        let mut mip_views_storage: Vec<Vec<vk::ImageView>> =
+            Vec::with_capacity(image_count as usize);
+
+        for _ in 0..image_count {
+            let bloom_img = Image::new(
+                ctx,
+                allocator.clone(),
+                bloom_w,
+                bloom_h,
+                vk::Format::R16G16B16A16_SFLOAT,
+                vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::STORAGE,
+                vk::ImageAspectFlags::COLOR,
+                mip_count,
+            )?;
+
+            // Create per-mip image views for sampling and storage access
+            let mut sampled_views = Vec::with_capacity(mip_count as usize);
+            let mut storage_views = Vec::with_capacity(mip_count as usize);
+
+            for mip in 0..mip_count {
+                let view_info = vk::ImageViewCreateInfo::default()
+                    .image(bloom_img.handle)
+                    .view_type(vk::ImageViewType::TYPE_2D)
+                    .format(vk::Format::R16G16B16A16_SFLOAT)
+                    .subresource_range(
+                        vk::ImageSubresourceRange::default()
+                            .aspect_mask(vk::ImageAspectFlags::COLOR)
+                            .base_mip_level(mip)
+                            .level_count(1)
+                            .base_array_layer(0)
+                            .layer_count(1),
+                    );
+
+                let sampled_view = unsafe { device.create_image_view(&view_info, None)? };
+                let storage_view = unsafe { device.create_image_view(&view_info, None)? };
+
+                sampled_views.push(sampled_view);
+                storage_views.push(storage_view);
+            }
+
+            mip_views_sampled.push(sampled_views);
+            mip_views_storage.push(storage_views);
+            bloom_images.push(bloom_img);
+        }
+
+        // 4. Create bloom descriptor pool
+        let total_sets = (2 * mip_count - 1) * image_count;
+        let pool_sizes = [
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(total_sets),
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::STORAGE_IMAGE)
+                .descriptor_count(total_sets),
+        ];
+        let bloom_pool_info = vk::DescriptorPoolCreateInfo::default()
+            .pool_sizes(&pool_sizes)
+            .max_sets(total_sets);
+        let bloom_desc_pool = unsafe { device.create_descriptor_pool(&bloom_pool_info, None)? };
+
+        // 5. Allocate and write bloom descriptor sets
+        let mut downsample_sets: Vec<Vec<vk::DescriptorSet>> =
+            Vec::with_capacity(image_count as usize);
+        let mut upsample_sets: Vec<Vec<vk::DescriptorSet>> =
+            Vec::with_capacity(image_count as usize);
+
+        for img_idx in 0..image_count as usize {
+            // ── Downsample descriptor sets (one per mip level) ──
+            let down_layouts = vec![bloom_desc_layout; mip_count as usize];
+            let down_alloc = vk::DescriptorSetAllocateInfo::default()
+                .descriptor_pool(bloom_desc_pool)
+                .set_layouts(&down_layouts);
+            let down_ds = unsafe { device.allocate_descriptor_sets(&down_alloc)? };
+
+            for mip in 0..mip_count as usize {
+                // Binding 0: input texture (scene for mip 0, previous bloom mip otherwise)
+                let input_info = if mip == 0 {
+                    vk::DescriptorImageInfo::default()
+                        .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                        .image_view(self.offscreen_images[img_idx].view)
+                        .sampler(sampler)
+                } else {
+                    vk::DescriptorImageInfo::default()
+                        .image_layout(vk::ImageLayout::GENERAL)
+                        .image_view(mip_views_sampled[img_idx][mip - 1])
+                        .sampler(sampler)
+                };
+
+                // Binding 1: output storage image (current bloom mip)
+                let output_info = vk::DescriptorImageInfo::default()
+                    .image_layout(vk::ImageLayout::GENERAL)
+                    .image_view(mip_views_storage[img_idx][mip]);
+
+                let writes = [
+                    vk::WriteDescriptorSet::default()
+                        .dst_set(down_ds[mip])
+                        .dst_binding(0)
+                        .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                        .image_info(std::slice::from_ref(&input_info)),
+                    vk::WriteDescriptorSet::default()
+                        .dst_set(down_ds[mip])
+                        .dst_binding(1)
+                        .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                        .image_info(std::slice::from_ref(&output_info)),
+                ];
+                unsafe {
+                    device.update_descriptor_sets(&writes, &[]);
+                }
+            }
+            downsample_sets.push(down_ds);
+
+            // ── Upsample descriptor sets (N-1 passes: smallest → largest) ──
+            if mip_count > 1 {
+                let up_count = (mip_count - 1) as usize;
+                let up_layouts = vec![bloom_desc_layout; up_count];
+                let up_alloc = vk::DescriptorSetAllocateInfo::default()
+                    .descriptor_pool(bloom_desc_pool)
+                    .set_layouts(&up_layouts);
+                let up_ds = unsafe { device.allocate_descriptor_sets(&up_alloc)? };
+
+                for pass in 0..up_count {
+                    let src_mip = mip_count as usize - 1 - pass;
+                    let dst_mip = src_mip - 1;
+
+                    let input_info = vk::DescriptorImageInfo::default()
+                        .image_layout(vk::ImageLayout::GENERAL)
+                        .image_view(mip_views_sampled[img_idx][src_mip])
+                        .sampler(sampler);
+
+                    let output_info = vk::DescriptorImageInfo::default()
+                        .image_layout(vk::ImageLayout::GENERAL)
+                        .image_view(mip_views_storage[img_idx][dst_mip]);
+
+                    let writes = [
+                        vk::WriteDescriptorSet::default()
+                            .dst_set(up_ds[pass])
+                            .dst_binding(0)
+                            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                            .image_info(std::slice::from_ref(&input_info)),
+                        vk::WriteDescriptorSet::default()
+                            .dst_set(up_ds[pass])
+                            .dst_binding(1)
+                            .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                            .image_info(std::slice::from_ref(&output_info)),
+                    ];
+                    unsafe {
+                        device.update_descriptor_sets(&writes, &[]);
+                    }
+                }
+                upsample_sets.push(up_ds);
+            } else {
+                upsample_sets.push(Vec::new());
+            }
+        }
+
+        // 6. Write bloom result (mip 0) to post-process descriptor sets at binding 1
+        for img_idx in 0..image_count as usize {
+            let bloom_info = vk::DescriptorImageInfo::default()
+                .image_layout(vk::ImageLayout::GENERAL)
+                .image_view(mip_views_sampled[img_idx][0])
+                .sampler(sampler);
+
+            let write = vk::WriteDescriptorSet::default()
+                .dst_set(self.descriptor_sets[img_idx])
+                .dst_binding(1)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .image_info(std::slice::from_ref(&bloom_info));
+
+            unsafe {
+                device.update_descriptor_sets(&[write], &[]);
+            }
+        }
+
+        // Store all bloom resources
+        self.bloom_downsample_pipeline = Some(down_pipeline);
+        self.bloom_upsample_pipeline = Some(up_pipeline);
+        self.bloom_descriptor_layout = Some(bloom_desc_layout);
+        self.bloom_descriptor_pool = Some(bloom_desc_pool);
+        self.bloom_images = bloom_images;
+        self.bloom_mip_views_sampled = mip_views_sampled;
+        self.bloom_mip_views_storage = mip_views_storage;
+        self.bloom_downsample_sets = downsample_sets;
+        self.bloom_upsample_sets = upsample_sets;
+
+        Ok(())
+    }
+
+    /// Record bloom compute commands: downsample mip-chain then upsample with
+    /// progressive additive blending (COD: Advanced Warfare technique).
+    ///
+    /// Call after the offscreen scene image has been transitioned to SHADER_READ_ONLY_OPTIMAL.
+    pub fn dispatch_bloom(
+        &self,
+        device: &ash::Device,
+        command_buffer: vk::CommandBuffer,
+        image_index: usize,
+        scene_width: u32,
+        scene_height: u32,
+    ) {
+        let mip_count = match self.bloom_mip_views_sampled.get(image_index) {
+            Some(v) if !v.is_empty() => v.len() as u32,
+            _ => return,
+        };
+
+        let bloom_img = &self.bloom_images[image_index];
+
+        // Transition entire bloom image from UNDEFINED → GENERAL for compute
+        let to_general = vk::ImageMemoryBarrier::default()
+            .old_layout(vk::ImageLayout::UNDEFINED)
+            .new_layout(vk::ImageLayout::GENERAL)
+            .src_access_mask(vk::AccessFlags::empty())
+            .dst_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .image(bloom_img.handle)
+            .subresource_range(
+                vk::ImageSubresourceRange::default()
+                    .aspect_mask(vk::ImageAspectFlags::COLOR)
+                    .base_mip_level(0)
+                    .level_count(mip_count)
+                    .base_array_layer(0)
+                    .layer_count(1),
+            );
+
+        unsafe {
+            device.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[to_general],
+            );
+        }
+
+        // ── Downsample passes (full-res → smallest mip) ──
+        let down = self.bloom_downsample_pipeline.as_ref().unwrap();
+        down.bind(command_buffer, device);
+
+        let mut out_w = (scene_width / 2).max(1);
+        let mut out_h = (scene_height / 2).max(1);
+
+        for mip in 0..mip_count as usize {
+            unsafe {
+                device.cmd_bind_descriptor_sets(
+                    command_buffer,
+                    vk::PipelineBindPoint::COMPUTE,
+                    down.layout,
+                    0,
+                    &[self.bloom_downsample_sets[image_index][mip]],
+                    &[],
+                );
+            }
+
+            // Push constants: vec2 texel_size, int mip_level, float threshold
+            let input_w = if mip == 0 { scene_width } else { out_w * 2 };
+            let input_h = if mip == 0 { scene_height } else { out_h * 2 };
+            let texel_x = 1.0f32 / input_w.max(1) as f32;
+            let texel_y = 1.0f32 / input_h.max(1) as f32;
+            let mip_level = mip as i32;
+            let threshold = self.settings.bloom_threshold;
+
+            let mut push = [0u8; 16];
+            push[0..4].copy_from_slice(&texel_x.to_ne_bytes());
+            push[4..8].copy_from_slice(&texel_y.to_ne_bytes());
+            push[8..12].copy_from_slice(&mip_level.to_ne_bytes());
+            push[12..16].copy_from_slice(&threshold.to_ne_bytes());
+
+            unsafe {
+                device.cmd_push_constants(
+                    command_buffer,
+                    down.layout,
+                    vk::ShaderStageFlags::COMPUTE,
+                    0,
+                    &push,
+                );
+                device.cmd_dispatch(
+                    command_buffer,
+                    (out_w + 15) / 16,
+                    (out_h + 15) / 16,
+                    1,
+                );
+            }
+
+            // Memory barrier: this mip write → next pass read
+            let barrier = vk::ImageMemoryBarrier::default()
+                .old_layout(vk::ImageLayout::GENERAL)
+                .new_layout(vk::ImageLayout::GENERAL)
+                .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ)
+                .image(bloom_img.handle)
+                .subresource_range(
+                    vk::ImageSubresourceRange::default()
+                        .aspect_mask(vk::ImageAspectFlags::COLOR)
+                        .base_mip_level(mip as u32)
+                        .level_count(1)
+                        .base_array_layer(0)
+                        .layer_count(1),
+                );
+
+            unsafe {
+                device.cmd_pipeline_barrier(
+                    command_buffer,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::DependencyFlags::empty(),
+                    &[],
+                    &[],
+                    &[barrier],
+                );
+            }
+
+            out_w = (out_w / 2).max(1);
+            out_h = (out_h / 2).max(1);
+        }
+
+        // ── Upsample passes (smallest mip → mip 0) ──
+        if mip_count > 1 {
+            let up = self.bloom_upsample_pipeline.as_ref().unwrap();
+            up.bind(command_buffer, device);
+
+            let upsample_count = (mip_count - 1) as usize;
+            for pass in 0..upsample_count {
+                let dst_mip = mip_count as usize - 2 - pass;
+
+                unsafe {
+                    device.cmd_bind_descriptor_sets(
+                        command_buffer,
+                        vk::PipelineBindPoint::COMPUTE,
+                        up.layout,
+                        0,
+                        &[self.bloom_upsample_sets[image_index][pass]],
+                        &[],
+                    );
+                }
+
+                // Push constants: vec2 texel_size (of input/source), float filter_radius
+                let src_mip = dst_mip + 1;
+                let src_w = ((scene_width / 2) >> src_mip).max(1);
+                let src_h = ((scene_height / 2) >> src_mip).max(1);
+                let texel_x = 1.0f32 / src_w as f32;
+                let texel_y = 1.0f32 / src_h as f32;
+                let filter_radius = 1.0f32;
+
+                let mut push = [0u8; 12];
+                push[0..4].copy_from_slice(&texel_x.to_ne_bytes());
+                push[4..8].copy_from_slice(&texel_y.to_ne_bytes());
+                push[8..12].copy_from_slice(&filter_radius.to_ne_bytes());
+
+                let dst_w = ((scene_width / 2) >> dst_mip).max(1);
+                let dst_h = ((scene_height / 2) >> dst_mip).max(1);
+
+                unsafe {
+                    device.cmd_push_constants(
+                        command_buffer,
+                        up.layout,
+                        vk::ShaderStageFlags::COMPUTE,
+                        0,
+                        &push,
+                    );
+                    device.cmd_dispatch(
+                        command_buffer,
+                        (dst_w + 15) / 16,
+                        (dst_h + 15) / 16,
+                        1,
+                    );
+                }
+
+                // Barrier for next upsample pass
+                let barrier = vk::ImageMemoryBarrier::default()
+                    .old_layout(vk::ImageLayout::GENERAL)
+                    .new_layout(vk::ImageLayout::GENERAL)
+                    .src_access_mask(
+                        vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::SHADER_READ,
+                    )
+                    .dst_access_mask(vk::AccessFlags::SHADER_READ)
+                    .image(bloom_img.handle)
+                    .subresource_range(
+                        vk::ImageSubresourceRange::default()
+                            .aspect_mask(vk::ImageAspectFlags::COLOR)
+                            .base_mip_level(dst_mip as u32)
+                            .level_count(1)
+                            .base_array_layer(0)
+                            .layer_count(1),
+                    );
+
+                unsafe {
+                    device.cmd_pipeline_barrier(
+                        command_buffer,
+                        vk::PipelineStageFlags::COMPUTE_SHADER,
+                        vk::PipelineStageFlags::COMPUTE_SHADER,
+                        vk::DependencyFlags::empty(),
+                        &[],
+                        &[],
+                        &[barrier],
+                    );
+                }
+            }
+        }
+
+        // Final barrier: bloom mip 0 ready for fragment shader sampling
+        let final_barrier = vk::ImageMemoryBarrier::default()
+            .old_layout(vk::ImageLayout::GENERAL)
+            .new_layout(vk::ImageLayout::GENERAL)
+            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ)
+            .image(bloom_img.handle)
+            .subresource_range(
+                vk::ImageSubresourceRange::default()
+                    .aspect_mask(vk::ImageAspectFlags::COLOR)
+                    .base_mip_level(0)
+                    .level_count(1)
+                    .base_array_layer(0)
+                    .layer_count(1),
+            );
+
+        unsafe {
+            device.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[final_barrier],
+            );
+        }
+    }
 }
 
 impl Drop for PostProcessPipeline {
@@ -615,6 +1157,23 @@ impl Drop for PostProcessPipeline {
                 }
                 if let Some(pipe) = self.pipeline.take() {
                     device.destroy_pipeline(pipe, None);
+                }
+                // ── Bloom Compute Resources ──
+                for views in &self.bloom_mip_views_sampled {
+                    for &view in views {
+                        device.destroy_image_view(view, None);
+                    }
+                }
+                for views in &self.bloom_mip_views_storage {
+                    for &view in views {
+                        device.destroy_image_view(view, None);
+                    }
+                }
+                if let Some(pool) = self.bloom_descriptor_pool.take() {
+                    device.destroy_descriptor_pool(pool, None);
+                }
+                if let Some(layout) = self.bloom_descriptor_layout.take() {
+                    device.destroy_descriptor_set_layout(layout, None);
                 }
             }
         }

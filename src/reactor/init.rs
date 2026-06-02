@@ -311,6 +311,7 @@ impl Reactor {
             depth_image_view: Some(depth_image_view),
             depth_memory: Some(depth_memory),
             depth_format,
+            ibl_textures: None,
         })
     }
 }

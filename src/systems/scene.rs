@@ -10,6 +10,8 @@ pub struct SceneObject {
     pub visible: bool,
     pub name: Option<String>,
     pub color: glam::Vec4,
+    pub metallic: f32,
+    pub roughness: f32,
 }
 
 impl SceneObject {
@@ -21,6 +23,8 @@ impl SceneObject {
             visible: true,
             name: None,
             color: glam::Vec4::ONE,
+            metallic: 0.0,
+            roughness: 0.5,
         }
     }
 

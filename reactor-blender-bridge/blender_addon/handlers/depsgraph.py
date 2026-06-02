@@ -16,6 +16,78 @@ import json
 _last_transforms = {}
 
 
+def get_texture_path(input_socket):
+    """Obtiene la ruta absoluta de una textura conectada a un socket."""
+    if input_socket and input_socket.is_linked:
+        link = input_socket.links[0]
+        from_node = link.from_node
+        if from_node.type == 'TEX_IMAGE' and from_node.image:
+            return bpy.path.abspath(from_node.image.filepath)
+    return None
+
+
+def get_normal_texture_path(node):
+    """Obtiene la ruta absoluta del normal map conectado al nodo Principled BSDF."""
+    normal_input = node.inputs.get('Normal')
+    if normal_input and normal_input.is_linked:
+        normal_node = normal_input.links[0].from_node
+        if normal_node.type == 'NORMAL_MAP':
+            color_input = normal_node.inputs.get('Color')
+            if color_input and color_input.is_linked:
+                tex_node = color_input.links[0].from_node
+                if tex_node.type == 'TEX_IMAGE' and tex_node.image:
+                    return bpy.path.abspath(tex_node.image.filepath)
+    return None
+
+
+def get_material_properties(mat):
+    """Extrae las propiedades PBR principales de un material de Blender."""
+    props = {
+        "color": list(mat.diffuse_color),
+        "metallic": 0.0,
+        "roughness": 0.5,
+        "albedo_path": None,
+        "normal_path": None,
+        "emission_color": [0.0, 0.0, 0.0],
+        "emission_strength": 0.0,
+    }
+    
+    if mat.use_nodes and mat.node_tree:
+        node = next((n for n in mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED'), None)
+        if node:
+            # Color base
+            color_input = node.inputs.get('Base Color')
+            if color_input:
+                if color_input.is_linked:
+                    props["albedo_path"] = get_texture_path(color_input)
+                else:
+                    props["color"] = list(color_input.default_value)
+            
+            # Metalicidad
+            metallic_input = node.inputs.get('Metallic')
+            if metallic_input and not metallic_input.is_linked:
+                props["metallic"] = metallic_input.default_value
+            
+            # Rugosidad
+            roughness_input = node.inputs.get('Roughness')
+            if roughness_input and not roughness_input.is_linked:
+                props["roughness"] = roughness_input.default_value
+            
+            # Mapa de normales
+            props["normal_path"] = get_normal_texture_path(node)
+            
+            # Emisión
+            emission_input = node.inputs.get('Emission Color')
+            if emission_input and not emission_input.is_linked:
+                props["emission_color"] = list(emission_input.default_value)[:3]
+            
+            emission_str_input = node.inputs.get('Emission Strength')
+            if emission_str_input and not emission_str_input.is_linked:
+                props["emission_strength"] = emission_str_input.default_value
+            
+    return props
+
+
 def _get_client():
     """Obtiene la instancia global del WebSocket client."""
     from ..operators import connect
@@ -36,9 +108,9 @@ def _on_depsgraph_update(scene, depsgraph):
         # CASO A: Se actualizó un material directamente en Blender
         if isinstance(update.id, bpy.types.Material):
             mat = update.id
-            color_flat = list(mat.diffuse_color)
+            props = get_material_properties(mat)
             
-            # Buscar qué objetos en la escena usan este material y enviar su color
+            # Buscar qué objetos en la escena usan este material y enviar su actualización
             for scene_obj in scene.objects:
                 if scene_obj.type == 'MESH' and len(scene_obj.data.materials) > 0:
                     if scene_obj.data.materials[0] == mat:
@@ -48,12 +120,18 @@ def _on_depsgraph_update(scene, depsgraph):
                             "data": {
                                 "id": scene_obj.name,
                                 "matrix": matrix_flat,
-                                "color": color_flat
+                                "color": props["color"],
+                                "metallic": props["metallic"],
+                                "roughness": props["roughness"],
+                                "albedo_path": props["albedo_path"],
+                                "normal_path": props["normal_path"],
+                                "emission_color": props["emission_color"],
+                                "emission_strength": props["emission_strength"],
                             }
                         }
                         try:
                             client.send(json.dumps(msg))
-                            print(f"[REACTOR] 🎨 Material color actualizado para '{scene_obj.name}' → {color_flat[:3]}")
+                            print(f"[REACTOR] 🎨 Material actualizado para '{scene_obj.name}': color={props['color'][:3]} metallic={props['metallic']} roughness={props['roughness']}")
                         except Exception:
                             pass
             continue
@@ -69,18 +147,28 @@ def _on_depsgraph_update(scene, depsgraph):
                             'CURVE', 'SURFACE', 'FONT', 'LATTICE'}:
             continue
 
-        # Obtener el color del material si está disponible
-        color_flat = None
+        # Obtener las propiedades del material si es una malla
+        props = None
         if obj.type == 'MESH' and len(obj.data.materials) > 0:
             mat = obj.data.materials[0]
             if mat is not None:
-                color_flat = list(mat.diffuse_color)
+                props = get_material_properties(mat)
 
         obj_name = obj.name
         current_matrix = tuple(tuple(row) for row in obj.matrix_world)
         
-        # El estado incluye la matriz y el color para forzar envío si el color cambia
-        current_state = (current_matrix, tuple(color_flat) if color_flat else None)
+        # El estado incluye la matriz y todas las propiedades del material para detectar cambios
+        props_tuple = (
+            tuple(props["color"]),
+            props["metallic"],
+            props["roughness"],
+            props["albedo_path"],
+            props["normal_path"],
+            tuple(props["emission_color"]),
+            props["emission_strength"]
+        ) if props else None
+        
+        current_state = (current_matrix, props_tuple)
 
         if obj_name in _last_transforms and _last_transforms[obj_name] == current_state:
             continue
@@ -97,8 +185,16 @@ def _on_depsgraph_update(scene, depsgraph):
                 "matrix": matrix_flat
             }
         }
-        if color_flat is not None:
-            msg["data"]["color"] = color_flat
+        if props:
+            msg["data"].update({
+                "color": props["color"],
+                "metallic": props["metallic"],
+                "roughness": props["roughness"],
+                "albedo_path": props["albedo_path"],
+                "normal_path": props["normal_path"],
+                "emission_color": props["emission_color"],
+                "emission_strength": props["emission_strength"],
+            })
 
         try:
             client.send(json.dumps(msg))
@@ -127,15 +223,25 @@ def sync_full_scene():
 
         obj_name = obj.name
         
-        # Obtener el color del material
-        color_flat = None
+        props = None
         if obj.type == 'MESH' and len(obj.data.materials) > 0:
             mat = obj.data.materials[0]
             if mat is not None:
-                color_flat = list(mat.diffuse_color)
+                props = get_material_properties(mat)
 
         current_matrix = tuple(tuple(row) for row in obj.matrix_world)
-        _last_transforms[obj_name] = (current_matrix, tuple(color_flat) if color_flat else None)
+        
+        props_tuple = (
+            tuple(props["color"]),
+            props["metallic"],
+            props["roughness"],
+            props["albedo_path"],
+            props["normal_path"],
+            tuple(props["emission_color"]),
+            props["emission_strength"]
+        ) if props else None
+        
+        _last_transforms[obj_name] = (current_matrix, props_tuple)
 
         matrix_flat = blender_to_reactor_matrix(obj.matrix_world)
 
@@ -146,8 +252,16 @@ def sync_full_scene():
                 "matrix": matrix_flat
             }
         }
-        if color_flat is not None:
-            msg["data"]["color"] = color_flat
+        if props:
+            msg["data"].update({
+                "color": props["color"],
+                "metallic": props["metallic"],
+                "roughness": props["roughness"],
+                "albedo_path": props["albedo_path"],
+                "normal_path": props["normal_path"],
+                "emission_color": props["emission_color"],
+                "emission_strength": props["emission_strength"],
+            })
 
         try:
             client.send(json.dumps(msg))

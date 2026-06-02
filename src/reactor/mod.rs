@@ -91,6 +91,9 @@ pub struct Reactor {
     pub depth_image_view: Option<vk::ImageView>,
     pub depth_memory: Option<vk::DeviceMemory>,
     pub depth_format: vk::Format,
+
+    // ── IBL (Image-Based Lighting) ──
+    pub ibl_textures: Option<crate::graphics::IblTextures>,
 }
 
 impl Reactor {

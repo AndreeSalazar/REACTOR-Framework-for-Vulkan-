@@ -1,0 +1,47 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(binding = 0) uniform sampler2D u_input_texture; // Lower mip (smaller)
+layout(binding = 1, rgba16f) uniform image2D u_output_image; // Higher mip (larger, read/write)
+
+layout(push_constant) uniform UpsampleParams {
+    vec2 u_texel_size;
+    float u_filter_radius;
+} params;
+
+void main() {
+    ivec2 g_id = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(u_output_image);
+    
+    if (g_id.x >= size.x || g_id.y >= size.y) {
+        return;
+    }
+    
+    vec2 uv = (vec2(g_id) + 0.5) / vec2(size);
+    
+    // 9-tap tent filter
+    float x = params.u_texel_size.x * params.u_filter_radius;
+    float y = params.u_texel_size.y * params.u_filter_radius;
+    
+    vec3 a = texture(u_input_texture, uv + vec2(-x,  y)).rgb;
+    vec3 b = texture(u_input_texture, uv + vec2(0.0,  y)).rgb;
+    vec3 c = texture(u_input_texture, uv + vec2( x,  y)).rgb;
+    
+    vec3 d = texture(u_input_texture, uv + vec2(-x, 0.0)).rgb;
+    vec3 e = texture(u_input_texture, uv + vec2(0.0, 0.0)).rgb;
+    vec3 f = texture(u_input_texture, uv + vec2( x, 0.0)).rgb;
+    
+    vec3 g = texture(u_input_texture, uv + vec2(-x, -y)).rgb;
+    vec3 h = texture(u_input_texture, uv + vec2(0.0, -y)).rgb;
+    vec3 i = texture(u_input_texture, uv + vec2( x, -y)).rgb;
+    
+    vec3 upsample = e * 4.0 + (b + d + f + h) * 2.0 + (a + c + g + i);
+    upsample *= 1.0 / 16.0;
+    
+    // Read existing color from higher mip and blend with upsampled color
+    vec3 existing = imageLoad(u_output_image, g_id).rgb;
+    vec3 blended = existing + upsample;
+    
+    imageStore(u_output_image, g_id, vec4(blended, 1.0));
+}

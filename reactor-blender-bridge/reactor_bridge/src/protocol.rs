@@ -109,6 +109,18 @@ pub struct TransformUpdated {
     pub matrix: [f32; 16],
     #[serde(default)]
     pub color: Option<[f32; 4]>,
+    #[serde(default)]
+    pub metallic: Option<f32>,
+    #[serde(default)]
+    pub roughness: Option<f32>,
+    #[serde(default)]
+    pub albedo_path: Option<String>,
+    #[serde(default)]
+    pub normal_path: Option<String>,
+    #[serde(default)]
+    pub emission_color: Option<[f32; 3]>,
+    #[serde(default)]
+    pub emission_strength: Option<f32>,
 }
 
 // -----------------------------------------------------------------------------
