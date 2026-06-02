@@ -15,7 +15,7 @@ shaders/
 ├── lib/                     ← snippets reutilizables (`#include` only)
 │   ├── color.glsl           ─ sRGB ⇄ linear, luminance, grading
 │   ├── noise.glsl           ─ hash, value/perlin noise, fbm, dither
-│   ├── pbr.glsl             ─ Cook-Torrance: D_GGX · V_Smith · F_Schlick
+│   ├── pbr.glsl             ─ Cook-Torrance: D_GGX · V_Smith · F_Schlick · Burley diffuse
 │   ├── ibl.glsl             ─ IBL **procedural** (sky cielo/horizonte + 5-tap diffuse)
 │   ├── ibl_textures.glsl    ─ IBL **desde texturas pre-baked** (cubemap HDR + LUT)
 │   ├── lighting.glsl        ─ Directional / Point / Spot + studio 3-point

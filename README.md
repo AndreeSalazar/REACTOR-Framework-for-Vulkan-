@@ -626,8 +626,9 @@ screen-space sean coherentes al cambiar FOV, resolución o cámara.
 | Versionado | Paquete, banner y documentación actualizados a `1.6.0` | Línea clara para trabajar la siguiente fase AAA |
 | Post-process | `PostProcessSettings` pasa `camera_proj_x` y `camera_proj_y` al shader | Reconstrucción view-space estable sin depender de aspect ratio fijo |
 | SSAO/GTAO | `post_process.frag` reconstruye posición con la proyección real | AO más estable al variar FOV y resolución |
+| PBR shader lib | `shaders/lib/pbr.glsl` usa Cook-Torrance GGX + Burley/Disney diffuse | Materiales rugosos con respuesta más natural y conservación de energía mejorada |
 | Xenofall | Limpieza de warnings por campos reservados para glTF | Compilación más limpia para iterar sin ruido |
-| Roadmap AAA | Presupuesto VRAM y Cook-Torrance quedan como objetivos de implementación | Preparación para G-Buffer, TAA history, IBL HD y DDGI |
+| Roadmap AAA | Presupuesto VRAM, G-Buffer, TAA, IBL HD y DDGI quedan priorizados | Preparación para deferred lighting y GI dinámica |
 
 ### v1.5.0 — Professional Lighting Foundation
 
@@ -694,6 +695,7 @@ contadores por pass y presets: `Performance`, `High`, `Cinematic` y `Offline Pre
 | ACES Filmic Tone Mapping | `shaders/shader.frag` + `post_process.frag` | Funcional |
 | Hemispherical Ambient | `shader.frag` | Funcional |
 | Schlick Fresnel + GGX-inspired specular | `shader.frag` | **Simplificado** (no es Cook-Torrance completo) |
+| Cook-Torrance shader lib | `shaders/lib/pbr.glsl` | **v1.6.0**: GGX D, Smith correlated V, Schlick F y Burley/Disney diffuse |
 | Soft shadows analíticos (ray-cylinder) | `shader.frag::getPillarShadow` | **Ad-hoc**: hardcoded para corredor de Xenofall |
 | Contact AO geométrico | `shader.frag::getContactShadow` | **Ad-hoc**: distancias hardcoded |
 | SSAO/GTAO screen-space | `shaders/post/post_process.frag` | **v1.6.0**: depth real + reconstrucción view-space con proyección de cámara + filtro bilateral |
@@ -1522,7 +1524,8 @@ sequenceDiagram
 - Reconstrucción view-space de `post_process.frag` corregida para depender de la matriz de cámara real, no de una aproximación por aspect ratio.
 - SSAO/GTAO queda más estable al cambiar FOV, resolución o cámara.
 - `xenofall` actualizado a banner `REACTOR 1.6.0` y warning de campos glTF reservados limpiado.
-- Base lista para la siguiente implementación grande: G-Buffer 4 attachments, motion vectors/TAA history, IBL prefiltrado HD y BRDF Cook-Torrance completo.
+- Cook-Torrance en `shaders/lib/pbr.glsl` refinado con diffuse Burley/Disney para materiales rugosos más cinematográficos.
+- Base lista para la siguiente implementación grande: G-Buffer 4 attachments, motion vectors/TAA history, IBL prefiltrado HD y DDGI.
 
 ### v1.5.0 — Professional Lighting Foundation (Junio 2026)
 

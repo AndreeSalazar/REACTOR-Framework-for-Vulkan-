@@ -23,8 +23,10 @@
 // =============================================================================
 
 use std::collections::HashMap;
+use std::fs;
 use std::path::Path;
 use std::process::Command;
+use std::time::SystemTime;
 
 /// Filename → ruta canónica de output (relativa al workspace).
 fn shader_aliases() -> HashMap<&'static str, &'static str> {
@@ -51,11 +53,15 @@ fn compile_shader(src: &str, dst: &str) {
 
     println!("cargo:rerun-if-changed={}", src);
 
-    // Skip if output is newer than source.
+    // Skip only if output is newer than the source and shared include library.
     if dst_path.exists() {
-        if let (Ok(src_meta), Ok(dst_meta)) = (src_path.metadata(), dst_path.metadata()) {
-            if let (Ok(src_time), Ok(dst_time)) = (src_meta.modified(), dst_meta.modified()) {
-                if dst_time >= src_time {
+        if let Ok(dst_meta) = dst_path.metadata() {
+            if let Ok(dst_time) = dst_meta.modified() {
+                if let Some(input_time) = newest_shader_input_time(src_path) {
+                    if dst_time >= input_time {
+                        return;
+                    }
+                } else {
                     return;
                 }
             }
@@ -85,6 +91,27 @@ fn compile_shader(src: &str, dst: &str) {
             eprintln!("Could not run glslc (is Vulkan SDK installed?): {}", e);
         }
     }
+}
+
+fn newest_shader_input_time(src_path: &Path) -> Option<SystemTime> {
+    let mut newest = src_path.metadata().ok()?.modified().ok()?;
+    let lib_dir = Path::new("shaders/lib");
+
+    if let Ok(entries) = fs::read_dir(lib_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("glsl") {
+                continue;
+            }
+            if let Ok(time) = entry.metadata().and_then(|meta| meta.modified()) {
+                if time > newest {
+                    newest = time;
+                }
+            }
+        }
+    }
+
+    Some(newest)
 }
 
 fn main() {

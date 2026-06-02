@@ -5,7 +5,7 @@
 //   • D: Trowbridge-Reitz GGX (Disney parametrization, α = roughness²)
 //   • V: Smith height-correlated (Heitz 2014) — ya incluye 1/(4·NoL·NoV)
 //   • F: Schlick estándar + variante "with roughness" para IBL (Lagarde)
-//   • Diffuse: Lambert con kS/kD energy-conserving (Karis)
+//   • Diffuse: Burley/Disney con kS/kD energy-conserving
 //   • Helpers para horizonte oclusivo y AO especular (Lagarde 2014)
 // =============================================================================
 #ifndef REACTOR_LIB_PBR
@@ -39,14 +39,29 @@ vec3 F_Schlick(float VoH, vec3 f0) {
     return f0 + (1.0 - f0) * f;
 }
 
+float F_SchlickScalar(float u, float f0, float f90) {
+    return f0 + (f90 - f0) * pow(1.0 - u, 5.0);
+}
+
 // Schlick con cap por roughness — preferido para IBL (Lagarde 2014).
 vec3 F_SchlickRoughness(float NoV, vec3 f0, float roughness) {
     return f0 + (max(vec3(1.0 - roughness), f0) - f0) * pow(1.0 - NoV, 5.0);
 }
 
-// ── Diffuse term (Lambert) ───────────────────────────────────────────────────
+// ── Diffuse terms ────────────────────────────────────────────────────────────
 vec3 Fd_Lambert(vec3 albedo) {
     return albedo * REACTOR_INV_PI;
+}
+
+// Disney/Burley diffuse. Mantiene la respuesta de materiales rugosos mas
+// natural que Lambert puro y conserva mejor la energia frente al lobulo GGX.
+vec3 Fd_Burley(vec3 albedo, float roughness, float NoV, float NoL, float LoH) {
+    float energyBias   = mix(0.0, 0.5, roughness);
+    float energyFactor = mix(1.0, 1.0 / 1.51, roughness);
+    float f90          = energyBias + 2.0 * roughness * LoH * LoH;
+    float lightScatter = F_SchlickScalar(NoL, 1.0, f90);
+    float viewScatter  = F_SchlickScalar(NoV, 1.0, f90);
+    return albedo * REACTOR_INV_PI * lightScatter * viewScatter * energyFactor;
 }
 
 // ── Sample BRDF para una luz analítica ───────────────────────────────────────
@@ -64,7 +79,9 @@ BrdfSample brdf_eval(vec3 N, vec3 V, vec3 L,
     float NoL = max(dot(N, L), 0.0);
     float NoH = max(dot(N, H), 0.0);
     float VoH = max(dot(V, H), 0.0);
+    float LoH = max(dot(L, H), 0.0);
 
+    roughness = clamp(roughness, 0.04, 1.0);
     float alpha = roughness * roughness;
     float D  = D_GGX(NoH, alpha);
     float Vi = V_SmithGGXCorrelated(NoV, NoL, alpha);
@@ -72,7 +89,7 @@ BrdfSample brdf_eval(vec3 N, vec3 V, vec3 L,
 
     vec3 spec = D * Vi * F;                        // ya incluye 1/(4·NoL·NoV)
     vec3 kd   = (1.0 - F) * (1.0 - metallic);
-    vec3 diff = kd * Fd_Lambert(albedo);
+    vec3 diff = kd * Fd_Burley(albedo, roughness, NoV, NoL, LoH);
 
     BrdfSample s;
     s.diffuse  = diff * NoL;
