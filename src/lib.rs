@@ -34,6 +34,7 @@
 
 // Core modules
 pub mod app;
+pub mod base_shader;
 pub mod builtin_shaders;
 pub mod compute;
 pub mod core;
@@ -57,6 +58,9 @@ pub use app::app::{quick, quick_with, ReactorApp};
 pub use app::config::{ReactorConfig, RendererMode};
 pub use app::pause_config::{
     PauseConfig, PauseConfigPage, PauseConfigResult, PauseConfiguracion, PauseConfiguration,
+};
+pub use base_shader::{
+    BaseMaterialDefaults, BaseShaderAsset, BaseShaderCookbook, BaseShaderPair, BaseShaderStage,
 };
 pub use core::context::VulkanContext;
 pub use core::debug_utils::DebugNamer;
@@ -102,6 +106,11 @@ pub mod prelude {
         // Audio
         AudioClip,
 
+        BaseMaterialDefaults,
+        BaseShaderAsset,
+        BaseShaderCookbook,
+        BaseShaderPair,
+        BaseShaderStage,
         // Utilities
         CPUDetector,
         // Scene / Systems

@@ -488,6 +488,47 @@ impl ReactorContext {
             .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
     }
 
+    /// Devuelve una cocina mutable con todos los shaders base ya cargados.
+    ///
+    /// El juego puede mutarla antes de crear materiales o aplicarla al
+    /// post-process:
+    ///
+    /// ```ignore
+    /// let mut shader = ctx.base_shader_cookbook();
+    /// shader.post_settings.bloom_intensity = 0.9;
+    /// ctx.apply_base_shader(&shader);
+    /// let mat = ctx.create_base_material(&shader)?;
+    /// ```
+    pub fn base_shader_cookbook(&self) -> crate::base_shader::BaseShaderCookbook {
+        crate::base_shader::BaseShaderCookbook::default()
+    }
+
+    /// Aplica el bloque mutable de post-process de la cocina al runtime.
+    pub fn apply_base_shader(&mut self, cookbook: &crate::base_shader::BaseShaderCookbook) {
+        cookbook.apply_to_post_process(&mut self.reactor.post_process);
+    }
+
+    /// Crea un material forward usando la pareja de shaders activa de la cocina.
+    pub fn create_base_material(
+        &self,
+        cookbook: &crate::base_shader::BaseShaderCookbook,
+    ) -> crate::core::error::ReactorResult<crate::resources::material::Material> {
+        self.create_material(&cookbook.forward.vertex, &cookbook.forward.fragment)
+    }
+
+    /// Crea un material texturizado usando la pareja `textured` activa de la cocina.
+    pub fn create_base_textured_material(
+        &self,
+        cookbook: &crate::base_shader::BaseShaderCookbook,
+        texture: &crate::resources::texture::Texture,
+    ) -> crate::core::error::ReactorResult<crate::resources::material::Material> {
+        self.create_textured_material(
+            &cookbook.textured.vertex,
+            &cookbook.textured.fragment,
+            texture,
+        )
+    }
+
     // =========================================================================
     // Model Loading (OBJ)
     // =========================================================================
@@ -743,11 +784,8 @@ impl ReactorContext {
     pub fn default_material(
         &self,
     ) -> crate::core::error::ReactorResult<crate::resources::material::Material> {
-        let vert = crate::builtin_shaders::vert_default();
-        let frag = crate::builtin_shaders::frag_default();
-        self.reactor
-            .create_material(&vert, &frag)
-            .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))
+        let cookbook = self.base_shader_cookbook();
+        self.create_base_material(&cookbook)
     }
 
     /// Spawn-helper: crea un cubo unitario en `position` y lo añade a la escena.
@@ -830,13 +868,7 @@ impl ReactorContext {
                 .create_solid_texture(8, 8, 10, 200)
                 .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))?;
             let mat = self
-                .reactor
-                .create_textured_material(
-                    &crate::builtin_shaders::vert_textured(),
-                    &crate::builtin_shaders::frag_textured(),
-                    &dark_tex,
-                )
-                .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))?
+                .create_base_textured_material(&self.base_shader_cookbook(), &dark_tex)?
                 .with_kept_texture(dark_tex);
             self.blob_shadow_material = Some(std::sync::Arc::new(mat));
         }
@@ -952,13 +984,7 @@ impl ReactorContext {
         );
         let texture = self.load_texture(texture_path)?;
         let mat = self
-            .reactor
-            .create_textured_material(
-                &crate::builtin_shaders::vert_textured(),
-                &crate::builtin_shaders::frag_textured(),
-                &texture,
-            )
-            .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))?
+            .create_base_textured_material(&self.base_shader_cookbook(), &texture)?
             .with_kept_texture(texture);
         let mat_arc = std::sync::Arc::new(mat);
         Ok(self.scene.add_object(mesh, mat_arc, transform))
@@ -981,13 +1007,7 @@ impl ReactorContext {
     ) -> crate::core::error::ReactorResult<crate::resources::material::Material> {
         let texture = self.create_solid_texture(r, g, b, a)?;
         let mat = self
-            .reactor
-            .create_textured_material(
-                &crate::builtin_shaders::vert_textured(),
-                &crate::builtin_shaders::frag_textured(),
-                &texture,
-            )
-            .map_err(|e| crate::core::error::ReactorError::internal(e.to_string()))?
+            .create_base_textured_material(&self.base_shader_cookbook(), &texture)?
             .with_kept_texture(texture);
         Ok(mat)
     }

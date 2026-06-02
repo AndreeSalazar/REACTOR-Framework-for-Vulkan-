@@ -47,6 +47,11 @@ Las **8 rutas canónicas de salida** (`vert.spv`, `frag.spv`,
 `include_bytes!` del runtime las referencia con esa ruta exacta. Toda otra
 fuente compila junto a sí misma.
 
+Desde gameplay, la forma recomendada de consumir estos shaders es
+[`src/base_shader.rs`](../src/base_shader.rs): expone `BaseShaderCookbook`,
+una cocina mutable con todos los SPIR-V embebidos y presets como
+`cinematic_aaa()` o `xenofall_showcase()`.
+
 ---
 
 ## 📚 Cómo usar la lib desde un shader

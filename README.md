@@ -631,6 +631,7 @@ screen-space sean coherentes al cambiar FOV, resolución o cámara.
 | G-Buffer foundation | `src/graphics/gbuffer.rs` + `shaders/deferred/gbuffer.*` | 4 attachments reales para GTAO, SSR, decals y TAA motion vectors |
 | TAA foundation | `src/graphics/temporal.rs` + `shaders/post/taa_resolve.comp` | History ping-pong HDR/depth y resolve temporal con motion vectors/depth rejection |
 | GTAO foundation | `shaders/post/gtao.comp` | AO compute sobre depth + normal octahedral del G-Buffer |
+| Base shader cookbook | `src/base_shader.rs` | Cocina central mutable con todos los shaders embebidos y presets para juegos |
 | Xenofall | Limpieza de warnings por campos reservados para glTF | Compilación más limpia para iterar sin ruido |
 | Roadmap AAA | Presupuesto VRAM, G-Buffer, TAA, IBL HD y DDGI quedan priorizados | Preparación para deferred lighting y GI dinámica |
 
@@ -691,6 +692,24 @@ calidad seleccionada, pero sirve como objetivo para el perfil cinematográfico.
 
 Para controlar esto de forma profesional, REACTOR debe exponer `VK_EXT_memory_budget`,
 contadores por pass y presets: `Performance`, `High`, `Cinematic` y `Offline Preview`.
+
+### Base Shader Cookbook
+
+Los juegos no tienen que cargar `.spv` manualmente. `base_shader.rs` centraliza
+los shaders cocinados del motor y expone una cocina mutable:
+
+```rust
+let mut shader = BaseShaderCookbook::xenofall_showcase();
+shader.post_settings.bloom_intensity = 0.9;
+shader.material.roughness = 0.28;
+ctx.apply_base_shader(&shader);
+
+let mat = ctx.create_base_material(&shader)?;
+```
+
+Esto reemplaza el patrón antiguo de `include_bytes!("../shaders/...")` en cada
+ejemplo. Si un juego necesita un look propio, modifica su `BaseShaderCookbook`
+local sin tocar la base del motor.
 
 ### ✅ Lo que ya está cocinado en la base
 
@@ -1533,6 +1552,7 @@ sequenceDiagram
 - G-Buffer foundation: 4 attachments Vulkan (`albedo/AO`, `normal/material`, `emissive/material ID`, `motion/depth/flags`) con recreación en resize y shaders deferred iniciales.
 - TAA foundation: history buffers HDR/depth ping-pong y compute shader inicial con reproyección por motion vectors, clipping de vecindario y rechazo por depth.
 - GTAO foundation: compute shader sobre depth + normal del G-Buffer con rotación temporal y muestreo multi-dirección.
+- Base shader cookbook: `src/base_shader.rs` centraliza todos los SPIR-V embebidos y permite presets mutables por juego (`default`, `cinematic_aaa`, `xenofall_showcase`).
 - Base lista para la siguiente implementación grande: geometry pass deferred conectada, GTAO compute temporal, SSR Hi-Z, decals y DDGI.
 
 ### v1.5.0 — Professional Lighting Foundation (Junio 2026)

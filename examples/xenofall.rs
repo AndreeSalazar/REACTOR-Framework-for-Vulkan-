@@ -34,7 +34,7 @@
 //
 // =============================================================================
 
-use reactor_vulkan::graphics::post_process::{PostProcessEffect, PostProcessSettings};
+use reactor_vulkan::graphics::post_process::PostProcessEffect;
 use reactor_vulkan::prelude::*;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::keyboard::{KeyCode, PhysicalKey};
@@ -776,10 +776,8 @@ impl Xenofall {
     }
 
     fn apply_render_showcase_profile(&mut self, ctx: &mut ReactorContext) {
-        ctx.reactor.post_process.enabled = true;
-        ctx.reactor.post_process.settings = PostProcessSettings::cinematic();
-
-        let s = &mut ctx.reactor.post_process.settings;
+        let mut shader = BaseShaderCookbook::xenofall_showcase();
+        let s = &mut shader.post_settings;
         s.exposure = 1.08;
         s.gamma = 2.2;
         s.bloom_threshold = 0.62;
@@ -805,6 +803,7 @@ impl Xenofall {
         s.enable_effect(PostProcessEffect::FXAA);
         s.enable_effect(PostProcessEffect::FilmGrain);
         s.enable_effect(PostProcessEffect::ChromaticAberration);
+        ctx.apply_base_shader(&shader);
 
         let sun_dir = Vec3::new(-0.22, -0.86, -0.45).normalize();
         let moon_cold = Vec3::new(0.42, 0.55, 0.82);

@@ -14,25 +14,20 @@
 
 /// SPIR-V del vertex shader por defecto (Position + Normal + UV → fragment).
 pub fn vert_default() -> Vec<u32> {
-    read_spv(include_bytes!("../shaders/vert.spv"))
+    crate::base_shader::BaseShaderAsset::CoreVert.words()
 }
 
 /// SPIR-V del fragment shader por defecto (color vertex con luz simple).
 pub fn frag_default() -> Vec<u32> {
-    read_spv(include_bytes!("../shaders/frag.spv"))
+    crate::base_shader::BaseShaderAsset::CoreFrag.words()
 }
 
 /// SPIR-V del vertex shader con textura.
 pub fn vert_textured() -> Vec<u32> {
-    read_spv(include_bytes!("../shaders/texture_vert.spv"))
+    crate::base_shader::BaseShaderAsset::TextureVert.words()
 }
 
 /// SPIR-V del fragment shader con textura difusa.
 pub fn frag_textured() -> Vec<u32> {
-    read_spv(include_bytes!("../shaders/texture_frag.spv"))
-}
-
-fn read_spv(bytes: &[u8]) -> Vec<u32> {
-    ash::util::read_spv(&mut std::io::Cursor::new(bytes))
-        .expect("Embedded SPIR-V is invalid (this is a REACTOR bug)")
+    crate::base_shader::BaseShaderAsset::TextureFrag.words()
 }
