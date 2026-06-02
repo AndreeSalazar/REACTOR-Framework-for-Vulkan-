@@ -367,7 +367,7 @@ impl Reactor {
                 .image_view(self.depth_image_view.unwrap())
                 .image_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
                 .load_op(vk::AttachmentLoadOp::CLEAR)
-                .store_op(vk::AttachmentStoreOp::DONT_CARE)
+                .store_op(vk::AttachmentStoreOp::STORE)
                 .clear_value(vk::ClearValue {
                     depth_stencil: vk::ClearDepthStencilValue { depth: 1.0, stencil: 0 },
                 });
@@ -676,6 +676,17 @@ impl Reactor {
                 );
 
                 // ── Bloom Compute Pipeline (mip-chain downsample + upsample) ──
+                if self.msaa_samples != vk::SampleCountFlags::TYPE_1 {
+                    self.post_process.dispatch_depth_resolve(
+                        self.context.ash_device(),
+                        command_buffer,
+                        image_index as usize,
+                        self.swapchain.extent.width,
+                        self.swapchain.extent.height,
+                        self.msaa_samples,
+                    );
+                }
+
                 if self.post_process.bloom_downsample_pipeline.is_some() {
                     self.post_process.dispatch_bloom(
                         self.context.ash_device(),
@@ -751,10 +762,6 @@ impl Reactor {
                 let mut post_settings = self.post_process.settings;
                 post_settings.depth_near = self.camera_near.max(0.001);
                 post_settings.depth_far = self.camera_far.max(post_settings.depth_near + 0.001);
-                if self.msaa_samples != vk::SampleCountFlags::TYPE_1 {
-                    post_settings
-                        .disable_effect(crate::graphics::post_process::PostProcessEffect::SSGI);
-                }
                 let settings_bytes = bytemuck::bytes_of(&post_settings);
                 self.context.device.cmd_push_constants(
                     command_buffer,
@@ -1029,7 +1036,7 @@ impl Reactor {
                 .image_view(self.depth_image_view.unwrap())
                 .image_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
                 .load_op(vk::AttachmentLoadOp::CLEAR)
-                .store_op(vk::AttachmentStoreOp::DONT_CARE)
+                .store_op(vk::AttachmentStoreOp::STORE)
                 .clear_value(vk::ClearValue {
                     depth_stencil: vk::ClearDepthStencilValue { depth: 1.0, stencil: 0 },
                 });

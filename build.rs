@@ -95,6 +95,7 @@ fn main() {
     }
 
     // Re-run cuando cambie cualquier helper de la lib.
+    println!("cargo:rerun-if-changed=shaders");
     println!("cargo:rerun-if-changed=shaders/lib");
 
     let aliases = shader_aliases();

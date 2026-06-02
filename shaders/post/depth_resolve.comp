@@ -1,0 +1,28 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(binding = 0) uniform sampler2DMS u_depth_msaa;
+layout(binding = 1, r32f) uniform writeonly image2D u_resolved_depth;
+
+layout(push_constant) uniform DepthResolveParams {
+    int sample_count;
+} params;
+
+void main() {
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(u_resolved_depth);
+
+    if (pixel.x >= size.x || pixel.y >= size.y) {
+        return;
+    }
+
+    float resolved = 1.0;
+    int count = clamp(params.sample_count, 1, 16);
+
+    for (int i = 0; i < count; ++i) {
+        resolved = min(resolved, texelFetch(u_depth_msaa, pixel, i).r);
+    }
+
+    imageStore(u_resolved_depth, pixel, vec4(resolved, 0.0, 0.0, 1.0));
+}

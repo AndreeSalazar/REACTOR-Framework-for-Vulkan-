@@ -623,7 +623,7 @@ cimientos reales para llegar ahí sin rehacer el motor.
 |------|---------------|----------------|
 | CSM real | Shadow pass depth-only, texture array de 4 cascadas, descriptor set de sombras y frustum fitting por cámara | Las sombras dejan de ser un truco de shader y pasan a depender de geometría real |
 | Estabilidad de sombras | Snapping del ortho box al texel del shadow map | Reduce shimmering cuando la cámara se mueve |
-| Depth muestreable | Depth buffer con `SAMPLED` y transición a `SHADER_READ_ONLY_OPTIMAL` antes del post-process | Base para SSAO/GTAO, SSR, DoF, fog y reconstrucción screen-space |
+| Depth muestreable | Depth buffer con `SAMPLED`, resolve compute R32F para MSAA y transición a lectura antes del post-process | Base para SSAO/GTAO, SSR, DoF, fog y reconstrucción screen-space |
 | SSAO/GTAO inicial | `post_process.frag` lee depth real, reconstruye posición aproximada en view-space, estima normales desde depth y aplica filtro bilateral 3x3 | Oclusión de contacto basada en profundidad real, no en luminancia falsa |
 | Post-process HDR | Bloom mip-chain compute, AgX tonemapping, film grain, vignette, FXAA, color grading y flares | Base cinematográfica para composición final |
 | Blender Live Link | Shader mini-PBR con IBL, CSM sampling y materiales texturizados | Permite iterar escenas desde Blender con feedback de iluminación real |
@@ -1487,7 +1487,7 @@ sequenceDiagram
 - SSAO/GTAO inicial real: `post_process.frag` lee depth, reconstruye posición view-space aproximada, estima normales desde depth y suaviza con filtro bilateral 3x3.
 - Post-process descriptor layout ampliado: binding 2 reservado para depth texture.
 - Fix de validación Vulkan: bloom se reconstruye junto con offscreen images en resize/swapchain recreate para no dejar descriptors apuntando a samplers/image views destruidos.
-- Fallback MSAA seguro: cuando el depth buffer es multisampled, SSAO/GTAO se desactiva en ese frame hasta tener un depth resolve single-sample dedicado.
+- Depth resolve compute R32F: el depth MSAA se resuelve a una textura single-sample sampleable para que SSAO/GTAO funcione con MSAA 4x sin violar validation layers.
 - Sampler de sombras corregido para PCF manual (`compare_enable(false)`).
 - Roadmap AAA actualizado con prioridades P0/P1/P2/P3, datos necesarios y criterios de aceptación.
 
