@@ -51,6 +51,8 @@ layout(push_constant) uniform PostProcessSettings {
     float depth_near;
     float depth_far;
     uint effect_mask;
+    float camera_proj_x;
+    float camera_proj_y;
     uint _padding;
 } settings;
 
@@ -141,11 +143,11 @@ float linearize_depth(float depth) {
 }
 
 vec3 reconstruct_view_pos(vec2 uv) {
-    vec2 size = vec2(textureSize(depthTexture, 0));
-    float aspect = size.x / max(size.y, 1.0);
     float viewZ = linearize_depth(sample_depth(uv));
     vec2 ndc = uv * 2.0 - 1.0;
-    return vec3(ndc.x * aspect * viewZ, -ndc.y * viewZ, -viewZ);
+    float projX = sign(settings.camera_proj_x) * max(abs(settings.camera_proj_x), 0.0001);
+    float projY = sign(settings.camera_proj_y) * max(abs(settings.camera_proj_y), 0.0001);
+    return vec3(ndc.x * viewZ / projX, ndc.y * viewZ / projY, -viewZ);
 }
 
 vec3 estimate_screen_normal(vec2 uv, vec2 texelSize) {

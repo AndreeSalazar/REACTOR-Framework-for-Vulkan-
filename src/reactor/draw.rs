@@ -762,6 +762,8 @@ impl Reactor {
                 let mut post_settings = self.post_process.settings;
                 post_settings.depth_near = self.camera_near.max(0.001);
                 post_settings.depth_far = self.camera_far.max(post_settings.depth_near + 0.001);
+                post_settings.camera_proj_x = self.camera_proj.x_axis.x;
+                post_settings.camera_proj_y = self.camera_proj.y_axis.y;
                 let settings_bytes = bytemuck::bytes_of(&post_settings);
                 self.context.device.cmd_push_constants(
                     command_buffer,

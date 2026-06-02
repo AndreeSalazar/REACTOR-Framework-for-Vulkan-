@@ -126,7 +126,7 @@ enum EnemyState {
 }
 
 struct Enemy {
-    scene_indices: Vec<usize>,
+    _scene_indices: Vec<usize>,
     position: Vec3,
     health: i32,
     max_health: i32,
@@ -140,7 +140,7 @@ struct Enemy {
     blob_shadow: Option<usize>,
     /// Escala glTF aplicada por `spawn_gltf_smart` (auto-calculada por REACTOR
     /// a partir de la altura nativa del modelo en Blender).
-    gltf_scale: f32,
+    _gltf_scale: f32,
     /// Transforms locales originales de cada malla para mantener la jerarquía al mover el zombie
     initial_transforms: Vec<(usize, Mat4)>,
 }
@@ -814,7 +814,7 @@ impl Xenofall {
                 }
 
                 self.enemies.push(Enemy {
-                    scene_indices: info.indices,
+                    _scene_indices: info.indices,
                     position: ground_pos,
                     health: hp,
                     max_health: hp,
@@ -825,7 +825,7 @@ impl Xenofall {
                     is_gltf: true,
                     _id: id,
                     blob_shadow: blob,
-                    gltf_scale: info.applied_scale,
+                    _gltf_scale: info.applied_scale,
                     initial_transforms,
                 });
                 self.total_enemies_alive += 1;
@@ -850,7 +850,7 @@ impl Xenofall {
                     let local_xf = p_base_0.inverse() * cube_xf; // which is just Mat4::from_scale(ZOMBIE_CUBE_SCALE)
 
                     self.enemies.push(Enemy {
-                        scene_indices: vec![idx],
+                        _scene_indices: vec![idx],
                         position: ground_pos,
                         health: hp,
                         max_health: hp,
@@ -861,7 +861,7 @@ impl Xenofall {
                         is_gltf: false,
                         _id: id,
                         blob_shadow: blob,
-                        gltf_scale: 1.0,
+                        _gltf_scale: 1.0,
                         initial_transforms: vec![(idx, local_xf)],
                     });
                     self.total_enemies_alive += 1;
@@ -2210,7 +2210,7 @@ fn print_banner() {
     println!("║     ╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝      ╚═════╝          ║");
     println!("║                                                                  ║");
     println!("║     R A I L   S H O O T E R   R O G U E L I T E                  ║");
-    println!("║     REACTOR 1.5.0 · Vulkan · Rumania, Día 47                     ║");
+    println!("║     REACTOR 1.6.0 · Vulkan · Rumania, Día 47                     ║");
     println!("╠══════════════════════════════════════════════════════════════════╣");
     println!("║  Controles:                                                      ║");
     println!("║    Mouse           → Apuntar (el cursor es la mira)              ║");

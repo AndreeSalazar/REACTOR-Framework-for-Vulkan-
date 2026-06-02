@@ -194,8 +194,12 @@ pub struct PostProcessSettings {
     pub depth_near: f32,
     pub depth_far: f32,
     pub effect_mask: u32, // Bitflags for enabled effects
+    pub camera_proj_x: f32,
+    pub camera_proj_y: f32,
     pub _padding: u32,
 }
+
+const _: () = assert!(std::mem::size_of::<PostProcessSettings>() <= 128);
 
 impl Default for PostProcessSettings {
     fn default() -> Self {
@@ -228,6 +232,8 @@ impl Default for PostProcessSettings {
             depth_near: 0.1,
             depth_far: 1000.0,
             effect_mask: 0,
+            camera_proj_x: 1.0,
+            camera_proj_y: -1.0,
             _padding: 0,
         };
         settings.enable_effect(PostProcessEffect::ToneMapping);
