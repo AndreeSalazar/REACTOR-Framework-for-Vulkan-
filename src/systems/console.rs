@@ -125,72 +125,37 @@ impl Log {
 
     /// Success: `  ✓ msg`
     pub fn success(msg: &str) {
-        println!(
-            "{}  ✓{} {}",
-            color::GREEN,
-            color::RESET,
-            msg,
-        );
+        println!("{}  ✓{} {}", color::GREEN, color::RESET, msg,);
     }
 
     /// Warning: `  ⚠ msg`
     pub fn warn(msg: &str) {
-        println!(
-            "{}  ⚠{} {}",
-            color::YELLOW,
-            color::RESET,
-            msg,
-        );
+        println!("{}  ⚠{} {}", color::YELLOW, color::RESET, msg,);
     }
 
     /// Error: `  ✗ msg`
     pub fn error(msg: &str) {
-        println!(
-            "{}  ✗{} {}",
-            color::RED,
-            color::RESET,
-            msg,
-        );
+        println!("{}  ✗{} {}", color::RED, color::RESET, msg,);
     }
 
     /// Game subsystem: `🎮 msg`
     pub fn game(msg: &str) {
-        println!(
-            "{}🎮{} {}",
-            color::MAGENTA,
-            color::RESET,
-            msg,
-        );
+        println!("{}🎮{} {}", color::MAGENTA, color::RESET, msg,);
     }
 
     /// Audio subsystem: `🔊 msg`
     pub fn audio(msg: &str) {
-        println!(
-            "{}🔊{} {}",
-            color::BLUE,
-            color::RESET,
-            msg,
-        );
+        println!("{}🔊{} {}", color::BLUE, color::RESET, msg,);
     }
 
     /// Asset pipeline: `📦 msg`
     pub fn asset(msg: &str) {
-        println!(
-            "{}📦{} {}",
-            color::CYAN,
-            color::RESET,
-            msg,
-        );
+        println!("{}📦{} {}", color::CYAN, color::RESET, msg,);
     }
 
     /// Informational detail: `  · msg`
     pub fn info(msg: &str) {
-        println!(
-            "{}  · {}{}",
-            color::DIM,
-            msg,
-            color::RESET,
-        );
+        println!("{}  · {}{}", color::DIM, msg, color::RESET,);
     }
 
     // ── Section separator ───────────────────────────────────────────────────
@@ -229,13 +194,7 @@ impl Log {
         let inner = W - 2; // space between the two vertical bars
         let bar: String = std::iter::repeat('═').take(inner).collect();
 
-        println!(
-            "{}{}╔{}╗{}",
-            color::BOLD,
-            color::CYAN,
-            bar,
-            color::RESET,
-        );
+        println!("{}{}╔{}╗{}", color::BOLD, color::CYAN, bar, color::RESET,);
 
         let title_vis = visual_width(title);
         let padding = if inner > title_vis + 2 {
@@ -254,13 +213,7 @@ impl Log {
             color::RESET,
         );
 
-        println!(
-            "{}{}╚{}╝{}",
-            color::BOLD,
-            color::CYAN,
-            bar,
-            color::RESET,
-        );
+        println!("{}{}╚{}╝{}", color::BOLD, color::CYAN, bar, color::RESET,);
     }
 
     // ── Table ───────────────────────────────────────────────────────────────
@@ -413,7 +366,7 @@ impl ReactorBanner {
         ray_tracing: bool,
         gpu_name: &str,
     ) {
-        let bc = format!("{}{}", color::DIM, color::CYAN);       // border colour
+        let bc = format!("{}{}", color::DIM, color::CYAN); // border colour
         let tc = format!("{}{}", color::BOLD, color::BRIGHT_CYAN); // title colour
         let r = color::RESET;
         let inner = W - 2;
@@ -439,7 +392,13 @@ impl ReactorBanner {
             let pad = if inner > vis + 3 { inner - vis - 3 } else { 0 };
             println!(
                 "{}║   {}{}{}{}{}║{}",
-                bc, tc, line, r, " ".repeat(pad), bc, r,
+                bc,
+                tc,
+                line,
+                r,
+                " ".repeat(pad),
+                bc,
+                r,
             );
         }
 
@@ -447,8 +406,8 @@ impl ReactorBanner {
         println!("{}║{}{}║{}", bc, " ".repeat(inner), bc, r);
 
         // ── Version tagline ─────────────────────────────────────────────────
-        let version = "Vulkan Engine v1.2.0";
-        let vis = visual_width(version);
+        let version = format!("Vulkan Engine v{}", env!("CARGO_PKG_VERSION"));
+        let vis = visual_width(&version);
         let pad = if inner > vis + 3 { inner - vis - 3 } else { 0 };
         println!(
             "{}║   {}{}{}{}{}║{}",
@@ -483,16 +442,15 @@ impl ReactorBanner {
         }
         // Ray Tracing row (value already has its own colour)
         {
-            let label_str = format!(
-                "{}Ray Tracing:{} {}",
-                color::CYAN, r, rt_label,
-            );
-            let vis = visual_width_of_plain("Ray Tracing: ") + visual_width_of_plain(if ray_tracing { "✅ Enabled" } else { "❌ Disabled" });
+            let label_str = format!("{}Ray Tracing:{} {}", color::CYAN, r, rt_label,);
+            let vis = visual_width_of_plain("Ray Tracing: ")
+                + visual_width_of_plain(if ray_tracing {
+                    "✅ Enabled"
+                } else {
+                    "❌ Disabled"
+                });
             let pad = if inner > vis + 2 { inner - vis - 2 } else { 0 };
-            println!(
-                "{}║  {}{}{}║{}",
-                bc, label_str, " ".repeat(pad), bc, r,
-            );
+            println!("{}║  {}{}{}║{}", bc, label_str, " ".repeat(pad), bc, r,);
         }
 
         // ── Bottom border ───────────────────────────────────────────────────
@@ -549,7 +507,13 @@ impl GameBanner {
             let pad = if inner > vis + 3 { inner - vis - 3 } else { 0 };
             println!(
                 "{}║   {}{}{}{}{}║{}",
-                bc, col, line, r, " ".repeat(pad), bc, r,
+                bc,
+                col,
+                line,
+                r,
+                " ".repeat(pad),
+                bc,
+                r,
             );
         }
 
@@ -557,7 +521,11 @@ impl GameBanner {
 
         // subtitle
         let sub_vis = visual_width(subtitle);
-        let sub_pad = if inner > sub_vis + 3 { inner - sub_vis - 3 } else { 0 };
+        let sub_pad = if inner > sub_vis + 3 {
+            inner - sub_vis - 3
+        } else {
+            0
+        };
         println!(
             "{}║   {}{}{}{}{}║{}",
             bc,
@@ -611,7 +579,9 @@ pub fn gpu_name_short(context: &crate::core::context::VulkanContext) -> String {
     let instance = context.instance.get();
     let properties = unsafe { instance.get_physical_device_properties(context.physical_device) };
 
-    let name_bytes: Vec<u8> = properties.device_name.iter()
+    let name_bytes: Vec<u8> = properties
+        .device_name
+        .iter()
         .map(|&c| c as u8)
         .take_while(|&b| b != 0)
         .collect();

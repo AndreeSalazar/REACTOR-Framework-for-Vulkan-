@@ -164,7 +164,12 @@ impl Reactor {
             .descriptor_count(1)
             .stage_flags(vk::ShaderStageFlags::FRAGMENT);
 
-        let bindings = [albedo_binding, normal_binding, metallic_binding, roughness_binding];
+        let bindings = [
+            albedo_binding,
+            normal_binding,
+            metallic_binding,
+            roughness_binding,
+        ];
         let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
 
         let descriptor_layout = unsafe {
@@ -271,9 +276,10 @@ impl Reactor {
             .image_info(std::slice::from_ref(&roughness_info));
 
         unsafe {
-            self.context
-                .device
-                .update_descriptor_sets(&[write_albedo, write_normal, write_metallic, write_roughness], &[]);
+            self.context.device.update_descriptor_sets(
+                &[write_albedo, write_normal, write_metallic, write_roughness],
+                &[],
+            );
         }
 
         // 5. Build material pipeline

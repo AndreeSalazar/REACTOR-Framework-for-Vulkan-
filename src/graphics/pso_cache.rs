@@ -209,8 +209,7 @@ impl PsoCache {
         let cache_info = if initial_data.is_empty() {
             vk::PipelineCacheCreateInfo::default()
         } else {
-            vk::PipelineCacheCreateInfo::default()
-                .initial_data(&initial_data)
+            vk::PipelineCacheCreateInfo::default().initial_data(&initial_data)
         };
 
         let vk_pipeline_cache = unsafe {

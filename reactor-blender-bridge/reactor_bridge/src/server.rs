@@ -82,7 +82,11 @@ pub async fn spawn(
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("{e}")))?;
     let listener = TcpListener::bind(addr).await?;
     let local = listener.local_addr()?;
-    info!(?local, version = PROTOCOL_VERSION, "REACTOR Bridge listening");
+    info!(
+        ?local,
+        version = PROTOCOL_VERSION,
+        "REACTOR Bridge listening"
+    );
 
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();
 
@@ -173,7 +177,7 @@ async fn run_session(
         match raw {
             WsMessage::Text(text) => {
                 let parsed = Message::from_json(&text);
-                
+
                 // Forward parsed message to channel
                 if let Ok(ref msg) = parsed {
                     if let Some(ref sender) = tx {
@@ -196,7 +200,10 @@ async fn run_session(
                             version: PROTOCOL_VERSION,
                             server: SERVER_NAME.into(),
                             accepted,
-                            capabilities: SERVER_CAPABILITIES.iter().map(|s| s.to_string()).collect(),
+                            capabilities: SERVER_CAPABILITIES
+                                .iter()
+                                .map(|s| s.to_string())
+                                .collect(),
                             reason: if accepted {
                                 None
                             } else {

@@ -152,17 +152,22 @@ impl Reactor {
                 let sun_dir = scene.sun_direction;
                 if let Some(ref mut sm) = self.shadow_map {
                     sm.set_light_direction(sun_dir);
-                    sm.update(self.camera_view, self.camera_proj, self.camera_near, self.camera_far);
+                    sm.update(
+                        self.camera_view,
+                        self.camera_proj,
+                        self.camera_near,
+                        self.camera_far,
+                    );
                 }
-                
+
                 let shadow_uniform = crate::graphics::shadows::ShadowUniformData::from_shadow_map(
-                    self.shadow_map.as_ref().unwrap()
+                    self.shadow_map.as_ref().unwrap(),
                 );
                 self.shadow_uniform_buffers[self.current_frame].write(&[shadow_uniform]);
-                
+
                 let shadow_img = self.shadow_image.unwrap();
                 let shadow_pipe = self.shadow_pipeline.as_ref().unwrap();
-                
+
                 let shadow_start_barrier = vk::ImageMemoryBarrier::default()
                     .old_layout(vk::ImageLayout::UNDEFINED)
                     .new_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
@@ -176,7 +181,7 @@ impl Reactor {
                         base_array_layer: 0,
                         layer_count: 4,
                     });
-                    
+
                 self.context.device.cmd_pipeline_barrier(
                     command_buffer,
                     vk::PipelineStageFlags::TOP_OF_PIPE,
@@ -186,7 +191,7 @@ impl Reactor {
                     &[],
                     &[shadow_start_barrier],
                 );
-                
+
                 for layer in 0..4 {
                     let depth_attachment = vk::RenderingAttachmentInfo::default()
                         .image_view(self.shadow_image_views[layer])
@@ -196,7 +201,7 @@ impl Reactor {
                         .clear_value(vk::ClearValue {
                             depth_stencil: vk::ClearDepthStencilValue { depth: 1.0, stencil: 0 },
                         });
-                        
+
                     let rendering_info = vk::RenderingInfo::default()
                         .render_area(vk::Rect2D {
                             offset: vk::Offset2D { x: 0, y: 0 },
@@ -204,9 +209,11 @@ impl Reactor {
                         })
                         .layer_count(1)
                         .depth_attachment(&depth_attachment);
-                        
-                    self.context.device.cmd_begin_rendering(command_buffer, &rendering_info);
-                    
+
+                    self.context
+                        .device
+                        .cmd_begin_rendering(command_buffer, &rendering_info);
+
                     let viewport = vk::Viewport {
                         x: 0.0,
                         y: 0.0,
@@ -219,32 +226,39 @@ impl Reactor {
                         offset: vk::Offset2D { x: 0, y: 0 },
                         extent: vk::Extent2D { width: 2048, height: 2048 },
                     };
-                    self.context.device.cmd_set_viewport(command_buffer, 0, &[viewport]);
-                    self.context.device.cmd_set_scissor(command_buffer, 0, &[scissor]);
-                    
+                    self.context
+                        .device
+                        .cmd_set_viewport(command_buffer, 0, &[viewport]);
+                    self.context
+                        .device
+                        .cmd_set_scissor(command_buffer, 0, &[scissor]);
+
                     self.context.device.cmd_bind_pipeline(
                         command_buffer,
                         vk::PipelineBindPoint::GRAPHICS,
                         shadow_pipe.pipeline,
                     );
-                    
+
                     let cascade = &self.shadow_map.as_ref().unwrap().cascades[layer];
                     for object in &scene.objects {
                         if !object.visible {
                             continue;
                         }
                         let name = object.name.as_deref().unwrap_or("");
-                        if name.contains("Crosshair") || name.contains("GoScreen") || name.contains("VicScreen") {
+                        if name.contains("Crosshair")
+                            || name.contains("GoScreen")
+                            || name.contains("VicScreen")
+                        {
                             continue;
                         }
-                        
+
                         let light_mvp = cascade.view_proj * object.transform;
-                        
+
                         let push_bytes = std::slice::from_raw_parts(
                             &light_mvp as *const glam::Mat4 as *const u8,
                             std::mem::size_of::<glam::Mat4>(),
                         );
-                        
+
                         self.context.device.cmd_push_constants(
                             command_buffer,
                             shadow_pipe.layout,
@@ -252,17 +266,34 @@ impl Reactor {
                             0,
                             push_bytes,
                         );
-                        
+
                         let vertex_buffers = [object.mesh.vertex_buffer.handle];
                         let offsets = [0];
-                        self.context.device.cmd_bind_vertex_buffers(command_buffer, 0, &vertex_buffers, &offsets);
-                        self.context.device.cmd_bind_index_buffer(command_buffer, object.mesh.index_buffer.handle, 0, vk::IndexType::UINT32);
-                        self.context.device.cmd_draw_indexed(command_buffer, object.mesh.index_count, 1, 0, 0, 0);
+                        self.context.device.cmd_bind_vertex_buffers(
+                            command_buffer,
+                            0,
+                            &vertex_buffers,
+                            &offsets,
+                        );
+                        self.context.device.cmd_bind_index_buffer(
+                            command_buffer,
+                            object.mesh.index_buffer.handle,
+                            0,
+                            vk::IndexType::UINT32,
+                        );
+                        self.context.device.cmd_draw_indexed(
+                            command_buffer,
+                            object.mesh.index_count,
+                            1,
+                            0,
+                            0,
+                            0,
+                        );
                     }
-                    
+
                     self.context.device.cmd_end_rendering(command_buffer);
                 }
-                
+
                 let shadow_end_barrier = vk::ImageMemoryBarrier::default()
                     .old_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
                     .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
@@ -276,7 +307,7 @@ impl Reactor {
                         base_array_layer: 0,
                         layer_count: 4,
                     });
-                    
+
                 self.context.device.cmd_pipeline_barrier(
                     command_buffer,
                     vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
@@ -634,8 +665,10 @@ impl Reactor {
 
                 self.context.device.cmd_pipeline_barrier(
                     command_buffer,
-                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
-                    vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER,
+                    vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                        | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
+                    vk::PipelineStageFlags::COMPUTE_SHADER
+                        | vk::PipelineStageFlags::FRAGMENT_SHADER,
                     vk::DependencyFlags::empty(),
                     &[],
                     &[],
@@ -715,10 +748,14 @@ impl Reactor {
                 );
 
                 // Push settings
-                self.post_process.settings.depth_near = self.camera_near.max(0.001);
-                self.post_process.settings.depth_far =
-                    self.camera_far.max(self.post_process.settings.depth_near + 0.001);
-                let settings_bytes = bytemuck::bytes_of(&self.post_process.settings);
+                let mut post_settings = self.post_process.settings;
+                post_settings.depth_near = self.camera_near.max(0.001);
+                post_settings.depth_far = self.camera_far.max(post_settings.depth_near + 0.001);
+                if self.msaa_samples != vk::SampleCountFlags::TYPE_1 {
+                    post_settings
+                        .disable_effect(crate::graphics::post_process::PostProcessEffect::SSGI);
+                }
+                let settings_bytes = bytemuck::bytes_of(&post_settings);
                 self.context.device.cmd_push_constants(
                     command_buffer,
                     self.post_process.layout.unwrap(),

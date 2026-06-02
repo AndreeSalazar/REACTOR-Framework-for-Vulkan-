@@ -112,7 +112,15 @@ impl ShadowMap {
             // Fallback if matrix is not invertible (e.g. at startup)
             self.light_view = Mat4::look_at_rh(-self.light_direction * 50.0, Vec3::ZERO, Vec3::Y);
             for (i, cascade) in self.cascades.iter_mut().enumerate() {
-                let prev_split = if i == 0 { 0.0 } else { self.config.cascade_splits.get(i - 1).copied().unwrap_or(0.0) };
+                let prev_split = if i == 0 {
+                    0.0
+                } else {
+                    self.config
+                        .cascade_splits
+                        .get(i - 1)
+                        .copied()
+                        .unwrap_or(0.0)
+                };
                 let curr_split = self.config.cascade_splits.get(i).copied().unwrap_or(1.0);
                 cascade.near = near + (far - near) * prev_split;
                 cascade.far = near + (far - near) * curr_split;
@@ -124,14 +132,14 @@ impl ShadowMap {
         }
 
         let ndc_corners = [
-            glam::Vec4::new(-1.0,  1.0,  0.0, 1.0),
-            glam::Vec4::new( 1.0,  1.0,  0.0, 1.0),
-            glam::Vec4::new( 1.0, -1.0,  0.0, 1.0),
-            glam::Vec4::new(-1.0, -1.0,  0.0, 1.0),
-            glam::Vec4::new(-1.0,  1.0,  1.0, 1.0),
-            glam::Vec4::new( 1.0,  1.0,  1.0, 1.0),
-            glam::Vec4::new( 1.0, -1.0,  1.0, 1.0),
-            glam::Vec4::new(-1.0, -1.0,  1.0, 1.0),
+            glam::Vec4::new(-1.0, 1.0, 0.0, 1.0),
+            glam::Vec4::new(1.0, 1.0, 0.0, 1.0),
+            glam::Vec4::new(1.0, -1.0, 0.0, 1.0),
+            glam::Vec4::new(-1.0, -1.0, 0.0, 1.0),
+            glam::Vec4::new(-1.0, 1.0, 1.0, 1.0),
+            glam::Vec4::new(1.0, 1.0, 1.0, 1.0),
+            glam::Vec4::new(1.0, -1.0, 1.0, 1.0),
+            glam::Vec4::new(-1.0, -1.0, 1.0, 1.0),
         ];
 
         let mut world_frustum_corners = [Vec3::ZERO; 8];
@@ -146,7 +154,11 @@ impl ShadowMap {
             let prev_split = if i == 0 {
                 0.0
             } else {
-                self.config.cascade_splits.get(i - 1).copied().unwrap_or(0.0)
+                self.config
+                    .cascade_splits
+                    .get(i - 1)
+                    .copied()
+                    .unwrap_or(0.0)
             };
             let curr_split = self.config.cascade_splits.get(i).copied().unwrap_or(1.0);
 
@@ -203,10 +215,12 @@ impl ShadowMap {
             // Add margin to avoid artifacts and clip objects behind/in front.
             let z_margin = (cascade.far - cascade.near).max(50.0);
             let cascade_proj = Mat4::orthographic_rh(
-                min_x, max_x,
-                min_y, max_y,
+                min_x,
+                max_x,
+                min_y,
+                max_y,
                 -max_z - z_margin,
-                -min_z + z_margin
+                -min_z + z_margin,
             );
 
             cascade.view_proj = cascade_proj * light_view;

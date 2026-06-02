@@ -138,7 +138,9 @@ impl Drop for Reactor {
                 self.context.device.destroy_descriptor_pool(pool, None);
             }
             if let Some(layout) = self.shadow_descriptor_layout.take() {
-                self.context.device.destroy_descriptor_set_layout(layout, None);
+                self.context
+                    .device
+                    .destroy_descriptor_set_layout(layout, None);
             }
             self.shadow_pipeline = None;
             self.shadow_uniform_buffers.clear();

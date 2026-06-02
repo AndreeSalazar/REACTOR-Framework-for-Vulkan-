@@ -68,14 +68,22 @@ impl Swapchain {
             present_modes
                 .iter()
                 .find(|&&p| p == vk::PresentModeKHR::FIFO)
-                .or_else(|| present_modes.iter().find(|&&p| p == vk::PresentModeKHR::MAILBOX))
+                .or_else(|| {
+                    present_modes
+                        .iter()
+                        .find(|&&p| p == vk::PresentModeKHR::MAILBOX)
+                })
                 .unwrap_or(&vk::PresentModeKHR::FIFO)
         } else {
             // VSync disabled: prefer IMMEDIATE (absolute lowest latency, unlocked FPS), then MAILBOX (unlocked FPS, no tearing), then FIFO
             present_modes
                 .iter()
                 .find(|&&p| p == vk::PresentModeKHR::IMMEDIATE)
-                .or_else(|| present_modes.iter().find(|&&p| p == vk::PresentModeKHR::MAILBOX))
+                .or_else(|| {
+                    present_modes
+                        .iter()
+                        .find(|&&p| p == vk::PresentModeKHR::MAILBOX)
+                })
                 .unwrap_or(&vk::PresentModeKHR::FIFO)
         };
 

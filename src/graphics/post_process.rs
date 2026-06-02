@@ -398,6 +398,7 @@ impl PostProcessPipeline {
         image_count: u32,
         swapchain_format: vk::Format,
         depth_view: vk::ImageView,
+        sample_depth: bool,
     ) -> crate::core::error::ReactorResult<()> {
         let device = ctx.ash_device();
         self.device = Some(ctx.device.clone());
@@ -420,8 +421,7 @@ impl PostProcessPipeline {
                 .descriptor_count(1)
                 .stage_flags(vk::ShaderStageFlags::FRAGMENT),
         ];
-        let layout_info =
-            vk::DescriptorSetLayoutCreateInfo::default().bindings(&pp_bindings);
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&pp_bindings);
         let descriptor_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
 
         // 2. Create Pipeline Layout
@@ -573,10 +573,8 @@ impl PostProcessPipeline {
             image_count,
             swapchain_format,
             depth_view,
+            sample_depth,
         )?;
-
-        // 7. Initialize Bloom Compute Pipeline (mip-chain with Karis average)
-        self.init_bloom(ctx, allocator, width, height, image_count)?;
 
         Ok(())
     }
@@ -590,10 +588,12 @@ impl PostProcessPipeline {
         image_count: u32,
         format: vk::Format,
         depth_view: vk::ImageView,
+        sample_depth: bool,
     ) -> crate::core::error::ReactorResult<()> {
         let device = ctx.ash_device();
 
         // Clean old resources
+        self.destroy_bloom_resources(device);
         self.offscreen_images.clear();
         if let Some(sampler) = self.sampler.take() {
             unsafe {
@@ -618,6 +618,34 @@ impl PostProcessPipeline {
         let sampler = unsafe { device.create_sampler(&sampler_info, None)? };
         self.sampler = Some(sampler);
 
+        if self.descriptor_sets.len() != image_count as usize {
+            if let Some(pool) = self.descriptor_pool.take() {
+                unsafe {
+                    device.destroy_descriptor_pool(pool, None);
+                }
+            }
+
+            let descriptor_layout = self.descriptor_layout.ok_or_else(|| {
+                crate::core::error::ReactorError::new(
+                    crate::core::error::ErrorCode::VulkanDescriptorSet,
+                    "post-process descriptor layout is not initialized",
+                )
+            })?;
+            let pool_size = vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(image_count * 3);
+            let pool_info = vk::DescriptorPoolCreateInfo::default()
+                .pool_sizes(std::slice::from_ref(&pool_size))
+                .max_sets(image_count);
+            let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None)? };
+            let layouts = vec![descriptor_layout; image_count as usize];
+            let alloc_info = vk::DescriptorSetAllocateInfo::default()
+                .descriptor_pool(descriptor_pool)
+                .set_layouts(&layouts);
+            self.descriptor_sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
+            self.descriptor_pool = Some(descriptor_pool);
+        }
+
         for i in 0..image_count as usize {
             let img = Image::new(
                 ctx,
@@ -636,9 +664,10 @@ impl PostProcessPipeline {
                 .image_view(img.view)
                 .sampler(sampler);
 
+            let depth_or_fallback_view = if sample_depth { depth_view } else { img.view };
             let depth_info = vk::DescriptorImageInfo::default()
                 .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(depth_view)
+                .image_view(depth_or_fallback_view)
                 .sampler(sampler);
 
             let writes = [
@@ -663,7 +692,39 @@ impl PostProcessPipeline {
             self.offscreen_images.push(img);
         }
 
+        // Bloom descriptors reference the offscreen image views and sampler, so
+        // they must be rebuilt whenever swapchain-sized images are recreated.
+        self.init_bloom(ctx, allocator, width, height, image_count)?;
+
         Ok(())
+    }
+
+    fn destroy_bloom_resources(&mut self, device: &ash::Device) {
+        self.bloom_downsample_sets.clear();
+        self.bloom_upsample_sets.clear();
+        self.bloom_downsample_pipeline = None;
+        self.bloom_upsample_pipeline = None;
+
+        unsafe {
+            for views in self.bloom_mip_views_sampled.drain(..) {
+                for view in views {
+                    device.destroy_image_view(view, None);
+                }
+            }
+            for views in self.bloom_mip_views_storage.drain(..) {
+                for view in views {
+                    device.destroy_image_view(view, None);
+                }
+            }
+            if let Some(pool) = self.bloom_descriptor_pool.take() {
+                device.destroy_descriptor_pool(pool, None);
+            }
+            if let Some(layout) = self.bloom_descriptor_layout.take() {
+                device.destroy_descriptor_set_layout(layout, None);
+            }
+        }
+
+        self.bloom_images.clear();
     }
 
     /// Initialize bloom compute pipeline with mip-chain for physical bloom.
@@ -1012,12 +1073,7 @@ impl PostProcessPipeline {
                     0,
                     &push,
                 );
-                device.cmd_dispatch(
-                    command_buffer,
-                    (out_w + 15) / 16,
-                    (out_h + 15) / 16,
-                    1,
-                );
+                device.cmd_dispatch(command_buffer, (out_w + 15) / 16, (out_h + 15) / 16, 1);
             }
 
             // Memory barrier: this mip write → next pass read
@@ -1096,21 +1152,14 @@ impl PostProcessPipeline {
                         0,
                         &push,
                     );
-                    device.cmd_dispatch(
-                        command_buffer,
-                        (dst_w + 15) / 16,
-                        (dst_h + 15) / 16,
-                        1,
-                    );
+                    device.cmd_dispatch(command_buffer, (dst_w + 15) / 16, (dst_h + 15) / 16, 1);
                 }
 
                 // Barrier for next upsample pass
                 let barrier = vk::ImageMemoryBarrier::default()
                     .old_layout(vk::ImageLayout::GENERAL)
                     .new_layout(vk::ImageLayout::GENERAL)
-                    .src_access_mask(
-                        vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::SHADER_READ,
-                    )
+                    .src_access_mask(vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::SHADER_READ)
                     .dst_access_mask(vk::AccessFlags::SHADER_READ)
                     .image(bloom_img.handle)
                     .subresource_range(
@@ -1168,7 +1217,8 @@ impl PostProcessPipeline {
 
 impl Drop for PostProcessPipeline {
     fn drop(&mut self) {
-        if let Some(device) = &self.device {
+        if let Some(device) = self.device.clone() {
+            self.destroy_bloom_resources(&device);
             unsafe {
                 if let Some(sampler) = self.sampler.take() {
                     device.destroy_sampler(sampler, None);

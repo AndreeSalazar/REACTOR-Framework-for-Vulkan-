@@ -16,7 +16,7 @@
   <a href="https://opensource.org/licenses/TECHNE"><img src="https://img.shields.io/badge/License-TECHNE-yellow.svg" alt="License: TECHNE"/></a>
   <a href="https://www.vulkan.org/"><img src="https://img.shields.io/badge/Vulkan-1.3-red.svg" alt="Vulkan"/></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.70+-orange.svg" alt="Rust"/></a>
-  <img src="https://img.shields.io/badge/Version-1.2.0--rust-green.svg" alt="Version 1.2.0-rust"/>
+  <img src="https://img.shields.io/badge/Version-1.5.0--rust-green.svg" alt="Version 1.5.0-rust"/>
   <img src="https://img.shields.io/badge/Status-Rust%20Only-blueviolet.svg" alt="Status"/>
 </p>
 
@@ -613,6 +613,46 @@ Roadmap abierto:
 Esta es la auditoría honesta del stack de iluminación actual y el camino para
 llegar a calidad **Triple-A profesional** (UE5 Lumen / Frostbite / Decima / RED).
 
+### v1.5.0 — Professional Lighting Foundation
+
+Esta versión marca el salto desde "efectos cinematográficos" hacia una base de
+render profesional verificable. No promete calidad AAA completa todavía: fija
+cimientos reales para llegar ahí sin rehacer el motor.
+
+| Área | Cambio v1.5.0 | Motivo técnico |
+|------|---------------|----------------|
+| CSM real | Shadow pass depth-only, texture array de 4 cascadas, descriptor set de sombras y frustum fitting por cámara | Las sombras dejan de ser un truco de shader y pasan a depender de geometría real |
+| Estabilidad de sombras | Snapping del ortho box al texel del shadow map | Reduce shimmering cuando la cámara se mueve |
+| Depth muestreable | Depth buffer con `SAMPLED` y transición a `SHADER_READ_ONLY_OPTIMAL` antes del post-process | Base para SSAO/GTAO, SSR, DoF, fog y reconstrucción screen-space |
+| SSAO/GTAO inicial | `post_process.frag` lee depth real, reconstruye posición aproximada en view-space, estima normales desde depth y aplica filtro bilateral 3x3 | Oclusión de contacto basada en profundidad real, no en luminancia falsa |
+| Post-process HDR | Bloom mip-chain compute, AgX tonemapping, film grain, vignette, FXAA, color grading y flares | Base cinematográfica para composición final |
+| Blender Live Link | Shader mini-PBR con IBL, CSM sampling y materiales texturizados | Permite iterar escenas desde Blender con feedback de iluminación real |
+
+### Plan v1.5.x — Camino inmediato a calidad profesional
+
+| Prioridad | Objetivo | Archivos principales | Criterio de aceptación |
+|-----------|----------|----------------------|------------------------|
+| P0 | Validar Vulkan layouts y barriers con validation layers limpias | `src/reactor/draw.rs`, `src/graphics/post_process.rs`, `src/reactor/swapchain_recreate.rs` | Cero errores `VK_LAYER_KHRONOS_validation` durante 5 minutos de resize, pausa y cámara libre |
+| P0 | Reconstrucción exacta de view/world position en post | `PostProcessSettings`, `post_process.frag` | Usar `inv_view_proj` o `inv_proj`; AO no cambia de escala al variar FOV |
+| P0 | CSM robusto por hardware | `src/graphics/shadows.rs`, `shaders/live/blender_live.frag` | Cascadas sin popping visible, bias estable en superficies inclinadas, debug view por cascada |
+| P1 | G-Buffer ligero opcional | `src/renderer/`, `src/graphics/image.rs`, `shaders/core/` | Normal/material/depth disponibles para GTAO, SSR, decals y deferred lighting |
+| P1 | GTAO compute temporal | `src/compute/`, `shaders/post/` | AO en compute half-res/full-res con denoise temporal y edge preservation |
+| P1 | Motion vectors + TAA | `src/reactor/draw.rs`, `shaders/post/` | Jitter subpixel estable, history rejection, menos ruido en AO/shadows/bloom |
+| P2 | Clustered Forward+ | `src/renderer/bindless_forward.rs`, `src/compute/` | 256+ luces dinámicas sin techo `MAX_LIGHTS = 16` |
+| P2 | IBL/probes colocables | `src/graphics/ibl.rs`, `src/resources/` | Reflection probes con parallax correction y blending por volumen |
+| P3 | Volumetric froxels | `src/compute/`, `shaders/post/` | Niebla volumétrica con sombras de CSM y scattering direccional |
+| P3 | RT híbrido opcional | `src/raytracing/` | RT shadows/reflections/AO activables cuando la GPU soporta `VK_KHR_ray_tracing_pipeline` |
+
+### Datos que REACTOR necesita para acercarse a AAA
+
+- **Matrices por frame**: `view`, `proj`, `view_proj`, `inv_view`, `inv_proj`, `inv_view_proj`, jitter TAA y previous-frame matrices.
+- **G-Buffer mínimo**: normal en mundo o vista, roughness, metallic, AO/material flags, motion vectors y depth lineal.
+- **Materiales completos**: albedo, normal, ORM, emissive, clear coat, anisotropy, transmission, thickness y alpha mode.
+- **Luces estructuradas**: SSBO de directional/point/spot/area lights, shadow index, radiance física, range y falloff.
+- **Escena espacial**: bounds por mesh, TLAS/BLAS o BVH CPU/GPU, clusters/froxels y visibilidad por frame.
+- **Temporal data**: history buffers para TAA, AO, SSR, exposure, velocity y reprojection.
+- **Herramientas de debug**: views para cascades, depth, normals, roughness, AO, motion vectors, overdraw, GPU timings y VRAM.
+
 ### ✅ Lo que ya está cocinado en la base
 
 | Pieza | Dónde vive | Estado |
@@ -622,13 +662,13 @@ llegar a calidad **Triple-A profesional** (UE5 Lumen / Frostbite / Decima / RED)
 | Schlick Fresnel + GGX-inspired specular | `shader.frag` | **Simplificado** (no es Cook-Torrance completo) |
 | Soft shadows analíticos (ray-cylinder) | `shader.frag::getPillarShadow` | **Ad-hoc**: hardcoded para corredor de Xenofall |
 | Contact AO geométrico | `shader.frag::getContactShadow` | **Ad-hoc**: distancias hardcoded |
-| SSGI aproximado (rebote de luces neón) | `shader.frag::sceneSpaceGlobalIllumination` | **Ad-hoc**: posiciones hardcoded |
+| SSAO/GTAO screen-space | `shaders/post/post_process.frag` | **v1.5.0**: depth real + reconstrucción view-space aproximada + filtro bilateral |
 | SSS aproximado | `shader.frag::subsurfaceScatter` | Funcional pero sin albedo difuso real |
 | Volumetric fog + Mie phase | `shader.frag` | Funcional |
 | Cinematic LUT grading | `shader.frag::cinematicLutGrade` | Funcional |
-| Post-process 13 efectos | `shaders/post_process.frag` | Funcional |
+| Post-process HDR | `shaders/post/post_process.frag` + bloom compute | Funcional: AgX, bloom mip-chain, FXAA, grading, SSAO/GTAO inicial |
 | Pause overlay UI | `post_process.frag::draw_pause_overlay` | Funcional |
-| `ShadowConfig` + `ShadowCascade` + `ShadowMap` structs | `src/graphics/shadows.rs` | **Andamio**: `update()` ignora `camera_view/proj`; `calculate_shadow_factor` comenta "_real implementation would sample shadow map_" — falta wiring |
+| Cascaded Shadow Maps | `src/graphics/shadows.rs`, `src/reactor/init.rs`, `src/reactor/draw.rs`, `shaders/live/blender_live.frag` | **v1.5.0**: shadow pass depth-only, 4 cascadas, frustum fitting, texel snapping y PCF manual |
 | Luces múltiples por uniform buffer | `src/graphics/uniform_buffer.rs` (`MAX_LIGHTS = 16`) | Funcional pero **techo bajo** para AAA |
 | `bindless_pbr.frag` | `shaders/` | **Stub**: solo devuelve `albedo × base_color`, sin lighting |
 
@@ -664,13 +704,14 @@ existente (Vulkan + descriptors + compute + RT). No hay que tocar `unsafe`.
 > **Por qué**: el ambient hemisférico actual es sólo 2 colores constantes. IBL
 > hace que cualquier material reaccione al entorno real.
 
-#### 3. Cascaded Shadow Maps reales (wiring completo)
+#### 3. Cascaded Shadow Maps de producción
 
-El struct existe — falta:
+La base v1.5.0 ya renderiza 4 cascadas depth-only y las muestrea desde el shader.
+Para llevarlo a nivel producción falta:
 
-- Render passes a 4 shadow textures (1 por cascada) con `vkCmdBeginRenderPass`
-- **PSSM** (Practical Split Scheme) con `cascade_splits` ya configurados
-- Sampling en fragment shader con bias por cascada + slope-scaled depth bias
+- **Split scheme híbrido** configurable: linear/log/PSSM con blend entre cascadas
+- Debug view por cascada, heatmap de texel density y visualizador de shadow acne/peter-panning
+- Bias por cascada + slope-scaled depth bias integrado en raster state
 - **PCF Poisson disk** o **PCSS real** (blocker search + penumbra)
 - **Variance / Exponential / Moment Shadow Maps** para soft shadows sin artefactos
 - **Contact-hardening shadows** (PCSS con kernel adaptativo)
@@ -795,7 +836,7 @@ La base existe en `src/raytracing/`. Falta cocinarla con:
 ╭─────────────────────────────────────────────────────╮
 │ FASE 1 — Cimientos PBR + Shadows reales             │
 │ ▸ Cook-Torrance completo en bindless_pbr.frag       │
-│ ▸ CSM wiring (4 cascadas, PCF Poisson)              │
+│ ▸ CSM production pass (blend, PCSS, debug views)   │
 │ ▸ G-Buffer + Deferred opcional                      │
 │ ▸ MAX_LIGHTS dinámico vía SSBO                      │
 ╰──────────────────────┬──────────────────────────────╯
@@ -804,7 +845,7 @@ La base existe en `src/raytracing/`. Falta cocinarla con:
 │ FASE 2 — Ambient + Reflections                      │
 │ ▸ IBL completo (cubemap pre-filt + irrad + BRDF LUT)│
 │ ▸ Reflection probes parallax-corrected              │
-│ ▸ SSR + SSAO/GTAO reales en compute                 │
+│ ▸ SSR + GTAO compute + temporal denoising          │
 ╰──────────────────────┬──────────────────────────────╯
                        ▼
 ╭─────────────────────────────────────────────────────╮
@@ -872,7 +913,7 @@ sin tocar archivos. Cuando editas en Blender, el juego se actualiza en vivo.
 
 ---
 
-### ✅ Estado actual (v1.2.0) — Lo que YA funciona
+### ✅ Estado actual (v1.5.0) — Lo que YA funciona
 
 | Pieza                                | Estado            | Dónde vive                                                                                                         |
 |--------------------------------------|-------------------|--------------------------------------------------------------------------------------------------------------------|
@@ -1435,6 +1476,20 @@ sequenceDiagram
 ---
 
 ## 🔄 Changelog
+
+### v1.5.0 — Professional Lighting Foundation (Junio 2026)
+
+- Versión pública actualizada de `1.2.0` a `1.5.0`.
+- CSM real: shadow map array de 4 cascadas, pase depth-only, pipeline sin color attachment y descriptor set de sombras.
+- Frustum fitting por cámara: `Reactor` sincroniza `camera_view`, `camera_proj`, `camera_near` y `camera_far` para calcular cascadas dinámicas.
+- Estabilización CSM: snapping del bounding ortográfico al texel del shadow map para reducir shimmering.
+- Depth buffer muestreable: `SAMPLED` + transición a `SHADER_READ_ONLY_OPTIMAL` para post-process.
+- SSAO/GTAO inicial real: `post_process.frag` lee depth, reconstruye posición view-space aproximada, estima normales desde depth y suaviza con filtro bilateral 3x3.
+- Post-process descriptor layout ampliado: binding 2 reservado para depth texture.
+- Fix de validación Vulkan: bloom se reconstruye junto con offscreen images en resize/swapchain recreate para no dejar descriptors apuntando a samplers/image views destruidos.
+- Fallback MSAA seguro: cuando el depth buffer es multisampled, SSAO/GTAO se desactiva en ese frame hasta tener un depth resolve single-sample dedicado.
+- Sampler de sombras corregido para PCF manual (`compare_enable(false)`).
+- Roadmap AAA actualizado con prioridades P0/P1/P2/P3, datos necesarios y criterios de aceptación.
 
 ### v1.2.0 — UE5-style Core (Mayo 2026)
 - Workspace Cargo real (reactor-vulkan + reactor-editor).

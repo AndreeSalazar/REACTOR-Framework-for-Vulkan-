@@ -132,32 +132,62 @@ fn create_cube_mesh(ctx: &mut ReactorContext) -> Arc<reactor_vulkan::Mesh> {
     let mut vertices: Vec<Vertex> = Vec::with_capacity(24);
     // +Z (front)
     vertices.extend_from_slice(&face(
-        [[-0.5, -0.5, 0.5], [0.5, -0.5, 0.5], [0.5, 0.5, 0.5], [-0.5, 0.5, 0.5]],
+        [
+            [-0.5, -0.5, 0.5],
+            [0.5, -0.5, 0.5],
+            [0.5, 0.5, 0.5],
+            [-0.5, 0.5, 0.5],
+        ],
         [0.0, 0.0, 1.0],
     ));
     // -Z (back)
     vertices.extend_from_slice(&face(
-        [[0.5, -0.5, -0.5], [-0.5, -0.5, -0.5], [-0.5, 0.5, -0.5], [0.5, 0.5, -0.5]],
+        [
+            [0.5, -0.5, -0.5],
+            [-0.5, -0.5, -0.5],
+            [-0.5, 0.5, -0.5],
+            [0.5, 0.5, -0.5],
+        ],
         [0.0, 0.0, -1.0],
     ));
     // +X (right)
     vertices.extend_from_slice(&face(
-        [[0.5, -0.5, 0.5], [0.5, -0.5, -0.5], [0.5, 0.5, -0.5], [0.5, 0.5, 0.5]],
+        [
+            [0.5, -0.5, 0.5],
+            [0.5, -0.5, -0.5],
+            [0.5, 0.5, -0.5],
+            [0.5, 0.5, 0.5],
+        ],
         [1.0, 0.0, 0.0],
     ));
     // -X (left)
     vertices.extend_from_slice(&face(
-        [[-0.5, -0.5, -0.5], [-0.5, -0.5, 0.5], [-0.5, 0.5, 0.5], [-0.5, 0.5, -0.5]],
+        [
+            [-0.5, -0.5, -0.5],
+            [-0.5, -0.5, 0.5],
+            [-0.5, 0.5, 0.5],
+            [-0.5, 0.5, -0.5],
+        ],
         [-1.0, 0.0, 0.0],
     ));
     // +Y (top)
     vertices.extend_from_slice(&face(
-        [[-0.5, 0.5, 0.5], [0.5, 0.5, 0.5], [0.5, 0.5, -0.5], [-0.5, 0.5, -0.5]],
+        [
+            [-0.5, 0.5, 0.5],
+            [0.5, 0.5, 0.5],
+            [0.5, 0.5, -0.5],
+            [-0.5, 0.5, -0.5],
+        ],
         [0.0, 1.0, 0.0],
     ));
     // -Y (bottom)
     vertices.extend_from_slice(&face(
-        [[-0.5, -0.5, -0.5], [0.5, -0.5, -0.5], [0.5, -0.5, 0.5], [-0.5, -0.5, 0.5]],
+        [
+            [-0.5, -0.5, -0.5],
+            [0.5, -0.5, -0.5],
+            [0.5, -0.5, 0.5],
+            [-0.5, -0.5, 0.5],
+        ],
         [0.0, -1.0, 0.0],
     ));
 
@@ -228,19 +258,30 @@ impl ReactorApp for BlenderLive {
         self.frag_code = frag.clone();
 
         // Bake the procedural studio sky cubemap at startup
-        let ibl = reactor_vulkan::graphics::IblBaker::bake_procedural(&ctx.reactor.context, ctx.reactor.allocator.clone())
-            .expect("Failed to bake procedural IBL");
+        let ibl = reactor_vulkan::graphics::IblBaker::bake_procedural(
+            &ctx.reactor.context,
+            ctx.reactor.allocator.clone(),
+        )
+        .expect("Failed to bake procedural IBL");
         let ibl_layout = ibl.descriptor_set_layout;
         ctx.reactor.ibl_textures = Some(ibl);
 
         // Crear texturas de fallback sólidas
-        let fallback_albedo = ctx.reactor.create_solid_texture(255, 255, 255, 255)
+        let fallback_albedo = ctx
+            .reactor
+            .create_solid_texture(255, 255, 255, 255)
             .expect("Failed to create fallback albedo texture");
-        let fallback_normal = ctx.reactor.create_solid_texture(128, 128, 255, 255)
+        let fallback_normal = ctx
+            .reactor
+            .create_solid_texture(128, 128, 255, 255)
             .expect("Failed to create fallback normal texture");
-        let fallback_metallic = ctx.reactor.create_solid_texture(255, 255, 255, 255)
+        let fallback_metallic = ctx
+            .reactor
+            .create_solid_texture(255, 255, 255, 255)
             .expect("Failed to create fallback metallic texture");
-        let fallback_roughness = ctx.reactor.create_solid_texture(255, 255, 255, 255)
+        let fallback_roughness = ctx
+            .reactor
+            .create_solid_texture(255, 255, 255, 255)
             .expect("Failed to create fallback roughness texture");
         self.fallback_albedo = Some(fallback_albedo);
         self.fallback_normal = Some(fallback_normal);
@@ -252,8 +293,19 @@ impl ReactorApp for BlenderLive {
         let normal_ref = self.fallback_normal.as_ref().unwrap();
         let metallic_ref = self.fallback_metallic.as_ref().unwrap();
         let roughness_ref = self.fallback_roughness.as_ref().unwrap();
-        let blender_mat = Arc::new(ctx.reactor.create_pbr_material(&vert, &frag, ibl_layout, albedo_ref, normal_ref, metallic_ref, roughness_ref)
-            .expect("Failed to create PBR material"));
+        let blender_mat = Arc::new(
+            ctx.reactor
+                .create_pbr_material(
+                    &vert,
+                    &frag,
+                    ibl_layout,
+                    albedo_ref,
+                    normal_ref,
+                    metallic_ref,
+                    roughness_ref,
+                )
+                .expect("Failed to create PBR material"),
+        );
         self.blender_material = Some(blender_mat);
 
         // Crear malla
@@ -265,7 +317,9 @@ impl ReactorApp for BlenderLive {
         ctx.camera.set_rotation(-0.5, -0.6);
 
         // Inicializar Cascade Shadow Maps
-        ctx.reactor.init_shadows().expect("Failed to initialize shadows");
+        ctx.reactor
+            .init_shadows()
+            .expect("Failed to initialize shadows");
 
         // -----------------------------------------------------------------
         // 3. Arrancar el servidor WebSocket del bridge
@@ -274,26 +328,18 @@ impl ReactorApp for BlenderLive {
         self.bridge_rx = Some(rx);
 
         let live_cfg = load_live_config();
-        let cfg = BridgeConfig {
-            host: live_cfg.host,
-            port: live_cfg.port,
-        };
+        let cfg = BridgeConfig { host: live_cfg.host, port: live_cfg.port };
         let rt = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(1)
             .enable_all()
             .build()
             .expect("failed to build tokio runtime for bridge");
 
-        let handle = rt.block_on(async {
-            reactor_bridge::server::spawn(cfg, Some(tx)).await
-        });
+        let handle = rt.block_on(async { reactor_bridge::server::spawn(cfg, Some(tx)).await });
 
         match handle {
             Ok(h) => {
-                println!(
-                    "\x1b[32m  ✓ Bridge server arrancado en {}\x1b[0m",
-                    h.addr
-                );
+                println!("\x1b[32m  ✓ Bridge server arrancado en {}\x1b[0m", h.addr);
                 self.bridge_handle = Some(h);
                 self.runtime = Some(rt);
             }
@@ -357,29 +403,26 @@ impl BlenderLive {
                 );
             }
             Message::Goodbye(g) => {
-                println!(
-                    "\x1b[33m  ← Goodbye: {}\x1b[0m",
-                    g.reason
-                );
+                println!("\x1b[33m  ← Goodbye: {}\x1b[0m", g.reason);
             }
         }
     }
 
     fn apply_transform(&mut self, ctx: &mut ReactorContext, t: TransformUpdated) {
         let name_lower = t.id.to_lowercase();
-        
+
         // ── CASO A: Sincronización de Cámara ──
         if name_lower.contains("camera") {
             let m = Mat4::from_cols_array(&t.matrix);
             let pos = m.w_axis.truncate();
             let forward = -m.z_axis.truncate().normalize();
-            
+
             let yaw = forward.x.atan2(-forward.z);
             let pitch = forward.y.asin();
-            
+
             ctx.camera.position = pos;
             ctx.camera.set_rotation(yaw, pitch);
-            
+
             println!(
                 "\x1b[35m  🎥 Cámara Sincronizada → pos: (x: {:.2}, y: {:.2}, z: {:.2}), yaw: {:.2}, pitch: {:.2}\x1b[0m",
                 pos.x, pos.y, pos.z, yaw, pitch
@@ -391,10 +434,10 @@ impl BlenderLive {
         if name_lower.contains("light") {
             let m = Mat4::from_cols_array(&t.matrix);
             let pos = m.w_axis;
-            
+
             // Actualizar la posición de la luz en el reactor para los push constants
             ctx.reactor.light_pos = pos;
-            
+
             if let Some(&light_idx) = self.light_map.get(&t.id) {
                 if let Some(light) = ctx.lighting.get_light_mut(light_idx) {
                     light.position = pos.truncate();
@@ -404,12 +447,14 @@ impl BlenderLive {
                     );
                 }
             } else {
-                let light_idx = ctx.lighting.add_light(reactor_vulkan::prelude::Light::point(
-                    pos.truncate(),
-                    Vec3::new(1.0, 1.0, 1.0), // Neutral white light
-                    15.0, // High intensity
-                    30.0, // Range
-                ));
+                let light_idx = ctx
+                    .lighting
+                    .add_light(reactor_vulkan::prelude::Light::point(
+                        pos.truncate(),
+                        Vec3::new(1.0, 1.0, 1.0), // Neutral white light
+                        15.0,                     // High intensity
+                        30.0,                     // Range
+                    ));
                 self.light_map.insert(t.id.clone(), light_idx);
                 println!(
                     "\x1b[32m  + Nueva Luz Sincronizada '{}' → pos: (x: {:.2}, y: {:.2}, z: {:.2})\x1b[0m",
@@ -426,7 +471,7 @@ impl BlenderLive {
             if let Some(obj) = ctx.scene.get_mut(idx) {
                 let m = t.matrix;
                 obj.transform = Mat4::from_cols_array(&m);
-                
+
                 // Si viene un color de material, aplicarlo al objeto de la escena
                 if let Some(col) = t.color {
                     obj.color = glam::Vec4::from_slice(&col);
@@ -435,7 +480,7 @@ impl BlenderLive {
                         t.id, col[0], col[1], col[2], col[3]
                     );
                 }
-                
+
                 // Sincronizar metálico y rugosidad
                 if let Some(met) = t.metallic {
                     obj.metallic = met;
@@ -449,7 +494,7 @@ impl BlenderLive {
                 let mut normal_updated = false;
                 let mut metallic_updated = false;
                 let mut roughness_updated = false;
-                
+
                 if let Some(ref path) = t.albedo_path {
                     if !self.texture_cache.contains_key(path) {
                         if let Ok(tex) = ctx.reactor.load_texture(path) {
@@ -458,7 +503,7 @@ impl BlenderLive {
                     }
                     albedo_updated = true;
                 }
-                
+
                 if let Some(ref path) = t.normal_path {
                     if !self.texture_cache.contains_key(path) {
                         if let Ok(tex) = ctx.reactor.load_texture(path) {
@@ -488,22 +533,30 @@ impl BlenderLive {
 
                 if albedo_updated || normal_updated || metallic_updated || roughness_updated {
                     if let Some(descriptor_set) = obj.material.descriptor_set {
-                        let albedo_tex = t.albedo_path.as_ref()
+                        let albedo_tex = t
+                            .albedo_path
+                            .as_ref()
                             .and_then(|p| self.texture_cache.get(p))
                             .unwrap_or(self.fallback_albedo.as_ref().unwrap());
-                            
-                        let normal_tex = t.normal_path.as_ref()
+
+                        let normal_tex = t
+                            .normal_path
+                            .as_ref()
                             .and_then(|p| self.texture_cache.get(p))
                             .unwrap_or(self.fallback_normal.as_ref().unwrap());
 
-                        let metallic_tex = t.metallic_path.as_ref()
+                        let metallic_tex = t
+                            .metallic_path
+                            .as_ref()
                             .and_then(|p| self.texture_cache.get(p))
                             .unwrap_or(self.fallback_metallic.as_ref().unwrap());
 
-                        let roughness_tex = t.roughness_path.as_ref()
+                        let roughness_tex = t
+                            .roughness_path
+                            .as_ref()
                             .and_then(|p| self.texture_cache.get(p))
                             .unwrap_or(self.fallback_roughness.as_ref().unwrap());
-                            
+
                         let albedo_info = ash::vk::DescriptorImageInfo::default()
                             .image_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
                             .image_view(albedo_tex.view())
@@ -553,12 +606,18 @@ impl BlenderLive {
                             .image_info(std::slice::from_ref(&roughness_info));
 
                         unsafe {
-                            ctx.reactor.context.device.update_descriptor_sets(&[write_albedo, write_normal, write_metallic, write_roughness], &[]);
+                            ctx.reactor.context.device.update_descriptor_sets(
+                                &[write_albedo, write_normal, write_metallic, write_roughness],
+                                &[],
+                            );
                         }
-                        println!("\x1b[35m  📝 Texturas dinámicas actualizadas para '{}'\x1b[0m", t.id);
+                        println!(
+                            "\x1b[35m  📝 Texturas dinámicas actualizadas para '{}'\x1b[0m",
+                            t.id
+                        );
                     }
                 }
-                
+
                 // Mostrar log visual de la sincronización en tiempo real
                 let translation = obj.transform.w_axis;
                 println!(
@@ -569,21 +628,37 @@ impl BlenderLive {
         } else {
             // Entidad nueva — crear un cubo placeholder
             let mesh = self.cube_mesh.clone().expect("cube mesh not initialized");
-            
+
             // Crear un material único para esta entidad
-            let ibl_layout = ctx.reactor.ibl_textures.as_ref().unwrap().descriptor_set_layout;
+            let ibl_layout = ctx
+                .reactor
+                .ibl_textures
+                .as_ref()
+                .unwrap()
+                .descriptor_set_layout;
             let albedo_ref = self.fallback_albedo.as_ref().unwrap();
             let normal_ref = self.fallback_normal.as_ref().unwrap();
             let metallic_ref = self.fallback_metallic.as_ref().unwrap();
             let roughness_ref = self.fallback_roughness.as_ref().unwrap();
-            
-            let mat = Arc::new(ctx.reactor.create_pbr_material(&self.vert_code, &self.frag_code, ibl_layout, albedo_ref, normal_ref, metallic_ref, roughness_ref)
-                .expect("Failed to create entity material"));
+
+            let mat = Arc::new(
+                ctx.reactor
+                    .create_pbr_material(
+                        &self.vert_code,
+                        &self.frag_code,
+                        ibl_layout,
+                        albedo_ref,
+                        normal_ref,
+                        metallic_ref,
+                        roughness_ref,
+                    )
+                    .expect("Failed to create entity material"),
+            );
 
             let m = t.matrix;
             let transform = Mat4::from_cols_array(&m);
             let mut obj = SceneObject::new(mesh, mat, transform);
-            
+
             // Si viene un color de material, aplicarlo al objeto de la escena
             if let Some(col) = t.color {
                 obj.color = glam::Vec4::from_slice(&col);
@@ -596,7 +671,7 @@ impl BlenderLive {
             let mut normal_updated = false;
             let mut metallic_updated = false;
             let mut roughness_updated = false;
-            
+
             if let Some(ref path) = t.albedo_path {
                 if !self.texture_cache.contains_key(path) {
                     if let Ok(tex) = ctx.reactor.load_texture(path) {
@@ -605,7 +680,7 @@ impl BlenderLive {
                 }
                 albedo_updated = true;
             }
-            
+
             if let Some(ref path) = t.normal_path {
                 if !self.texture_cache.contains_key(path) {
                     if let Ok(tex) = ctx.reactor.load_texture(path) {
@@ -635,22 +710,30 @@ impl BlenderLive {
 
             if albedo_updated || normal_updated || metallic_updated || roughness_updated {
                 if let Some(descriptor_set) = obj.material.descriptor_set {
-                    let albedo_tex = t.albedo_path.as_ref()
+                    let albedo_tex = t
+                        .albedo_path
+                        .as_ref()
                         .and_then(|p| self.texture_cache.get(p))
                         .unwrap_or(self.fallback_albedo.as_ref().unwrap());
-                        
-                    let normal_tex = t.normal_path.as_ref()
+
+                    let normal_tex = t
+                        .normal_path
+                        .as_ref()
                         .and_then(|p| self.texture_cache.get(p))
                         .unwrap_or(self.fallback_normal.as_ref().unwrap());
 
-                    let metallic_tex = t.metallic_path.as_ref()
+                    let metallic_tex = t
+                        .metallic_path
+                        .as_ref()
                         .and_then(|p| self.texture_cache.get(p))
                         .unwrap_or(self.fallback_metallic.as_ref().unwrap());
 
-                    let roughness_tex = t.roughness_path.as_ref()
+                    let roughness_tex = t
+                        .roughness_path
+                        .as_ref()
                         .and_then(|p| self.texture_cache.get(p))
                         .unwrap_or(self.fallback_roughness.as_ref().unwrap());
-                        
+
                     let albedo_info = ash::vk::DescriptorImageInfo::default()
                         .image_layout(ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
                         .image_view(albedo_tex.view())
@@ -700,15 +783,18 @@ impl BlenderLive {
                         .image_info(std::slice::from_ref(&roughness_info));
 
                     unsafe {
-                        ctx.reactor.context.device.update_descriptor_sets(&[write_albedo, write_normal, write_metallic, write_roughness], &[]);
+                        ctx.reactor.context.device.update_descriptor_sets(
+                            &[write_albedo, write_normal, write_metallic, write_roughness],
+                            &[],
+                        );
                     }
                 }
             }
-            
+
             let idx = ctx.scene.objects.len();
             ctx.scene.objects.push(obj);
             self.entity_map.insert(t.id.clone(), idx);
-            
+
             let translation = transform.w_axis;
             println!(
                 "\x1b[32m  + Nueva Entidad Sincronizada '{}' → scene[{}] pos: (x: {:.2}, y: {:.2}, z: {:.2})\x1b[0m",

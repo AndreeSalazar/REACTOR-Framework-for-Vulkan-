@@ -67,8 +67,8 @@ fn compile_shader(src: &str, dst: &str) {
     let status = Command::new("glslc")
         .args([
             "-I",
-            "shaders/lib",     // permite `#include "pbr.glsl"` desde cualquier shader
-            "-O",              // optimización por defecto
+            "shaders/lib", // permite `#include "pbr.glsl"` desde cualquier shader
+            "-O",          // optimización por defecto
             src,
             "-o",
             dst,
@@ -107,7 +107,9 @@ fn main() {
         let path = entry.path();
 
         // Procesar .vert / .frag / .comp.
-        let Some(ext) = path.extension() else { continue; };
+        let Some(ext) = path.extension() else {
+            continue;
+        };
         let ext_str = ext.to_string_lossy();
         if ext_str != "vert" && ext_str != "frag" && ext_str != "comp" {
             continue;

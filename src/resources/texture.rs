@@ -61,7 +61,15 @@ impl Texture {
         let (width, height) = rgba.dimensions();
         let data = rgba.into_raw();
 
-        Self::from_rgba_with_format(ctx, allocator, &data, width, height, generate_mipmaps, vk::Format::R8G8B8A8_UNORM)
+        Self::from_rgba_with_format(
+            ctx,
+            allocator,
+            &data,
+            width,
+            height,
+            generate_mipmaps,
+            vk::Format::R8G8B8A8_UNORM,
+        )
     }
 
     /// Load texture from embedded bytes (PNG, JPG, etc.)
@@ -147,7 +155,15 @@ impl Texture {
         height: u32,
         generate_mipmaps: bool,
     ) -> ReactorResult<Self> {
-        Self::from_rgba_with_format(ctx, allocator, data, width, height, generate_mipmaps, vk::Format::R8G8B8A8_SRGB)
+        Self::from_rgba_with_format(
+            ctx,
+            allocator,
+            data,
+            width,
+            height,
+            generate_mipmaps,
+            vk::Format::R8G8B8A8_SRGB,
+        )
     }
 
     pub fn from_rgba_with_format(
@@ -165,7 +181,14 @@ impl Texture {
             1
         };
 
-        let image = Image::new_texture_with_format(ctx, allocator.clone(), width, height, format, mip_levels)?;
+        let image = Image::new_texture_with_format(
+            ctx,
+            allocator.clone(),
+            width,
+            height,
+            format,
+            mip_levels,
+        )?;
 
         // Create staging buffer
         let buffer_size = (width * height * 4) as u64;

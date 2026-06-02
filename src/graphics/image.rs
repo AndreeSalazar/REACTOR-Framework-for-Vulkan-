@@ -122,7 +122,14 @@ impl Image {
         height: u32,
         mip_levels: u32,
     ) -> ReactorResult<Self> {
-        Self::new_texture_with_format(ctx, allocator, width, height, vk::Format::R8G8B8A8_SRGB, mip_levels)
+        Self::new_texture_with_format(
+            ctx,
+            allocator,
+            width,
+            height,
+            vk::Format::R8G8B8A8_SRGB,
+            mip_levels,
+        )
     }
 
     pub fn new_texture_with_format(
@@ -192,15 +199,23 @@ impl Image {
                 vk::PipelineStageFlags::TOP_OF_PIPE,
                 vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
             ),
-            (vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL) => (
+            (
+                vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            ) => (
                 vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
                 vk::AccessFlags::SHADER_READ,
-                vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
+                vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS
+                    | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
                 vk::PipelineStageFlags::FRAGMENT_SHADER,
             ),
-            (vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL, vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL) => (
+            (
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            ) => (
                 vk::AccessFlags::SHADER_READ,
-                vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+                vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ
+                    | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
                 vk::PipelineStageFlags::FRAGMENT_SHADER,
                 vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
             ),

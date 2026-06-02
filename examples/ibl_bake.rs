@@ -48,7 +48,9 @@ impl ReactorApp for IblBakeDemo {
             }
             Err(_) => {
                 println!("\x1b[36m  → Baking IBL from procedural studio sky\x1b[0m");
-                println!("\x1b[90m    (tip: set $env:IBL_HDR=\"path.hdr\" para usar uno real)\x1b[0m");
+                println!(
+                    "\x1b[90m    (tip: set $env:IBL_HDR=\"path.hdr\" para usar uno real)\x1b[0m"
+                );
                 IblBaker::bake_procedural(vk_ctx, allocator)
             }
         };
@@ -62,9 +64,15 @@ impl ReactorApp for IblBakeDemo {
                     dt.as_secs_f64() * 1000.0
                 );
                 println!("\x1b[90m    ─ Irradiance:  32×32×6  RGBA16F   ≈ 96 KB\x1b[0m");
-                println!("\x1b[90m    ─ Prefiltered: 128×128×6 (5 mips) RGBA16F ≈ {:.0} KB\x1b[0m", radiance_mb);
+                println!(
+                    "\x1b[90m    ─ Prefiltered: 128×128×6 (5 mips) RGBA16F ≈ {:.0} KB\x1b[0m",
+                    radiance_mb
+                );
                 println!("\x1b[90m    ─ BRDF LUT:    512×512   RG16F     ≈ 512 KB\x1b[0m");
-                println!("\x1b[90m    ─ max_mip_level expuesto: {}\x1b[0m", textures.max_mip_level);
+                println!(
+                    "\x1b[90m    ─ max_mip_level expuesto: {}\x1b[0m",
+                    textures.max_mip_level
+                );
                 println!("\x1b[90m    ─ Descriptor set listo en set = 1 (FRAGMENT)\x1b[0m");
                 println!();
                 println!("\x1b[33m  Bindings del shader que lo consuma:\x1b[0m");
@@ -84,7 +92,10 @@ impl ReactorApp for IblBakeDemo {
     }
 
     fn update(&mut self, ctx: &mut ReactorContext) {
-        if ctx.input().is_key_just_pressed(winit::keyboard::KeyCode::Escape) {
+        if ctx
+            .input()
+            .is_key_just_pressed(winit::keyboard::KeyCode::Escape)
+        {
             ctx.reactor.exit_requested = true;
         }
     }
@@ -95,7 +106,10 @@ fn radiance_vram_mb() -> f32 {
     // × 6 caras × 8 bytes (RGBA16F) = ≈1 MB
     let mut texels = 0u32;
     let mut s = 128u32;
-    for _ in 0..5 { texels += s * s; s /= 2; }
+    for _ in 0..5 {
+        texels += s * s;
+        s /= 2;
+    }
     (texels * 6 * 8) as f32 / 1024.0
 }
 

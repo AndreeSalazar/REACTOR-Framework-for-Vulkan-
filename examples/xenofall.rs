@@ -34,8 +34,8 @@
 //
 // =============================================================================
 
-use reactor_vulkan::prelude::*;
 use reactor_vulkan::graphics::post_process::PostProcessEffect;
+use reactor_vulkan::prelude::*;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::keyboard::{KeyCode, PhysicalKey};
 
@@ -574,7 +574,9 @@ impl Xenofall {
                 GameState::Paused
             }
             GameState::Paused => {
-                println!("\n  \x1b[38;2;180;0;0m▓▓▓ RESUMING - BLOOD PROTOCOL DEACTIVATED ▓▓▓\x1b[0m\n");
+                println!(
+                    "\n  \x1b[38;2;180;0;0m▓▓▓ RESUMING - BLOOD PROTOCOL DEACTIVATED ▓▓▓\x1b[0m\n"
+                );
                 self.pause_config.hide(ctx);
                 GameState::Playing
             }
@@ -844,10 +846,7 @@ impl Xenofall {
                     ));
 
                     // Base parent for cube: position = ground_pos, rotation = IDENTITY
-                    let p_base_0 = Mat4::from_rotation_translation(
-                        Quat::IDENTITY,
-                        ground_pos,
-                    );
+                    let p_base_0 = Mat4::from_rotation_translation(Quat::IDENTITY, ground_pos);
                     let local_xf = p_base_0.inverse() * cube_xf; // which is just Mat4::from_scale(ZOMBIE_CUBE_SCALE)
 
                     self.enemies.push(Enemy {
@@ -1296,7 +1295,11 @@ impl Xenofall {
             } else {
                 Log::success(&format!(
                     "VSync dynamically toggled to: {}",
-                    if ctx.reactor.vsync { "ON (Locked FPS)" } else { "OFF (Unlocked FPS!)" }
+                    if ctx.reactor.vsync {
+                        "ON (Locked FPS)"
+                    } else {
+                        "OFF (Unlocked FPS!)"
+                    }
                 ));
             }
         }
@@ -1311,7 +1314,8 @@ impl Xenofall {
                 ctx.window.set_fullscreen(None);
                 Log::success("Windowed mode activated");
             } else {
-                ctx.window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+                ctx.window
+                    .set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
                 Log::success("Fullscreen mode activated");
             }
         }
@@ -1343,7 +1347,9 @@ impl Xenofall {
         if self.state == GameState::Paused && !pause_opened_this_frame {
             let pause_result = self.pause_config.update(ctx);
             if pause_result.requested_resume {
-                println!("\n  \x1b[38;2;180;0;0m▓▓▓ RESUMING — BLOOD PROTOCOL DEACTIVATED ▓▓▓\x1b[0m\n");
+                println!(
+                    "\n  \x1b[38;2;180;0;0m▓▓▓ RESUMING — BLOOD PROTOCOL DEACTIVATED ▓▓▓\x1b[0m\n"
+                );
                 self.state = GameState::Playing;
             }
             if pause_result.requested_quit {
@@ -1485,8 +1491,9 @@ impl Xenofall {
                         enemy.position += move_dir * enemy.speed * dt;
 
                         // Face toward the player. zombie_basic.glb looks at +Z in bind pose.
-                        let facing = Quat::from_rotation_y(move_dir.x.atan2(move_dir.z) + ZOMBIE_MODEL_YAW_OFFSET)
-                            * Quat::from_rotation_z(sway); // Z-roll waddle
+                        let facing = Quat::from_rotation_y(
+                            move_dir.x.atan2(move_dir.z) + ZOMBIE_MODEL_YAW_OFFSET,
+                        ) * Quat::from_rotation_z(sway); // Z-roll waddle
                         let new_parent_pos = if enemy.is_gltf {
                             Vec3::new(enemy.position.x, bob, enemy.position.z)
                         } else {
@@ -1508,8 +1515,9 @@ impl Xenofall {
                         if dist > 0.1 {
                             let face_dir = to_player.normalize();
                             let tremble = (self.t * 22.0).sin() * 0.02; // fast jitter
-                            let facing = Quat::from_rotation_y(face_dir.x.atan2(face_dir.z) + ZOMBIE_MODEL_YAW_OFFSET)
-                                * Quat::from_rotation_x(tremble);
+                            let facing = Quat::from_rotation_y(
+                                face_dir.x.atan2(face_dir.z) + ZOMBIE_MODEL_YAW_OFFSET,
+                            ) * Quat::from_rotation_x(tremble);
                             let new_parent_pos = if enemy.is_gltf {
                                 Vec3::new(enemy.position.x, tremble * 0.5, enemy.position.z)
                             } else {
@@ -1530,11 +1538,18 @@ impl Xenofall {
                     let fall_angle = t * std::f32::consts::FRAC_PI_2;
                     let sink = t * 0.8;
 
-                    let to_player = Vec3::new(cam_pos.x, enemy.position.y, cam_pos.z) - enemy.position;
-                    let face_dir = if to_player.length_squared() > 1e-6 { to_player.normalize() } else { Vec3::new(0.0, 0.0, 1.0) };
-                    
+                    let to_player =
+                        Vec3::new(cam_pos.x, enemy.position.y, cam_pos.z) - enemy.position;
+                    let face_dir = if to_player.length_squared() > 1e-6 {
+                        to_player.normalize()
+                    } else {
+                        Vec3::new(0.0, 0.0, 1.0)
+                    };
+
                     // Keep correct facing yaw direction when falling.
-                    let facing_yaw = Quat::from_rotation_y(face_dir.x.atan2(face_dir.z) + ZOMBIE_MODEL_YAW_OFFSET);
+                    let facing_yaw = Quat::from_rotation_y(
+                        face_dir.x.atan2(face_dir.z) + ZOMBIE_MODEL_YAW_OFFSET,
+                    );
 
                     let new_parent_pos = if enemy.is_gltf {
                         Vec3::new(enemy.position.x, 0.0, enemy.position.z)
@@ -1542,9 +1557,10 @@ impl Xenofall {
                         enemy.position
                     };
 
-                    let p_base = Mat4::from_translation(new_parent_pos + Vec3::new(0.0, -sink, 0.0))
-                        * Mat4::from_quat(facing_yaw)
-                        * Mat4::from_rotation_x(fall_angle);
+                    let p_base =
+                        Mat4::from_translation(new_parent_pos + Vec3::new(0.0, -sink, 0.0))
+                            * Mat4::from_quat(facing_yaw)
+                            * Mat4::from_rotation_x(fall_angle);
 
                     for &(idx, local_xf) in &enemy.initial_transforms {
                         ctx.set_transform(idx, p_base * local_xf);
@@ -1873,7 +1889,11 @@ impl Xenofall {
             &msaa_str
         };
 
-        let vsync_display = if ctx.reactor.vsync { "ON (Locked)" } else { "OFF (Unlocked)" };
+        let vsync_display = if ctx.reactor.vsync {
+            "ON (Locked)"
+        } else {
+            "OFF (Unlocked)"
+        };
         let fps_display = format!("{:.1}", ctx.fps());
         let vrs_rate = ctx.reactor.pixel_intelligent_rate();
         let pixel_display = if ctx.reactor.pixel_intelligent_enabled() {
@@ -1929,13 +1949,31 @@ impl Xenofall {
         let t_pt = print_toggle("Y", "PT Resolve", is_pt);
         let t_flares = print_toggle("U", "Neon Flares", is_flares);
 
-        println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m", t_vignette, t_bloom);
-        println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m", t_grain, t_chromatic);
-        println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m", t_fxaa, t_sharpen);
+        println!(
+            "  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m",
+            t_vignette, t_bloom
+        );
+        println!(
+            "  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m",
+            t_grain, t_chromatic
+        );
+        println!(
+            "  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m",
+            t_fxaa, t_sharpen
+        );
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}                                          \x1b[38;2;180;0;0m║\x1b[0m", t_tonemap);
-        println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m", t_ssgi, t_fog);
-        println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m", t_lut, t_ssr);
-        println!("  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m", t_pt, t_flares);
+        println!(
+            "  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m",
+            t_ssgi, t_fog
+        );
+        println!(
+            "  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m",
+            t_lut, t_ssr
+        );
+        println!(
+            "  \x1b[38;2;180;0;0m║\x1b[0m    {}          {}    \x1b[38;2;180;0;0m║\x1b[0m",
+            t_pt, t_flares
+        );
         println!("  \x1b[38;2;180;0;0m║                                                                          ║\x1b[0m");
         println!("  \x1b[38;2;180;0;0m║\x1b[0m   \x1b[1m■ VALUE ADJUSTMENTS\x1b[0m                                                    \x1b[38;2;180;0;0m║\x1b[0m");
         println!("  \x1b[38;2;180;0;0m║\x1b[0m    [G] Exposure: \x1b[93m{:<4}\x1b[0m   [B] Bloom Int: \x1b[92m{:<4}\x1b[0m   [N] Grain Int: \x1b[95m{:<4}\x1b[0m        \x1b[38;2;180;0;0m║\x1b[0m", exposure, bloom_intensity, grain_intensity);
@@ -1964,7 +2002,10 @@ impl Xenofall {
                 let card_line = format!("    • {}: {}", clean_name, card.description());
                 let spaces_needed = 74 - card_line.chars().count();
                 let pad = " ".repeat(spaces_needed);
-                println!("  \x1b[38;2;180;0;0m║\x1b[0m{}{}\x1b[38;2;180;0;0m║\x1b[0m", card_line, pad);
+                println!(
+                    "  \x1b[38;2;180;0;0m║\x1b[0m{}{}\x1b[38;2;180;0;0m║\x1b[0m",
+                    card_line, pad
+                );
             }
         }
 
@@ -2080,7 +2121,10 @@ impl ReactorApp for Xenofall {
             self.victory_index = Some(idx);
         }
 
-        Log::asset(&format!("Corredor: {} segmentos cargados", self.floor_indices.len()));
+        Log::asset(&format!(
+            "Corredor: {} segmentos cargados",
+            self.floor_indices.len()
+        ));
         Log::engine(&format!(
             "Pools: {} trazadores, {} impactos listos",
             self.tracer_pool.len(),
@@ -2128,7 +2172,10 @@ impl ReactorApp for Xenofall {
             0
         };
         Log::kv("Precisión", &format!("{}%", acc));
-        Log::kv("Oleadas", &format!("{}/{}", self.current_wave, self.waves.len()));
+        Log::kv(
+            "Oleadas",
+            &format!("{}/{}", self.current_wave, self.waves.len()),
+        );
 
         if !self.build.cards_collected.is_empty() {
             Log::section("Cartas Coleccionadas (Build)");
@@ -2163,7 +2210,7 @@ fn print_banner() {
     println!("║     ╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝      ╚═════╝          ║");
     println!("║                                                                  ║");
     println!("║     R A I L   S H O O T E R   R O G U E L I T E                  ║");
-    println!("║     REACTOR 1.2.0 · Vulkan · Rumania, Día 47                     ║");
+    println!("║     REACTOR 1.5.0 · Vulkan · Rumania, Día 47                     ║");
     println!("╠══════════════════════════════════════════════════════════════════╣");
     println!("║  Controles:                                                      ║");
     println!("║    Mouse           → Apuntar (el cursor es la mira)              ║");

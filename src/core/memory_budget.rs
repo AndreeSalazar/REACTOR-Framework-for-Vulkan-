@@ -94,7 +94,8 @@ impl GpuMemoryBudget {
 
     /// Total free VRAM.
     pub fn total_vram_free(&self) -> u64 {
-        self.total_vram_budget().saturating_sub(self.total_vram_usage())
+        self.total_vram_budget()
+            .saturating_sub(self.total_vram_usage())
     }
 
     /// Total VRAM budget in MB.
@@ -134,7 +135,15 @@ impl GpuMemoryBudget {
 
 impl fmt::Display for GpuMemoryBudget {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "GPU Memory Budget ({})", if self.has_dynamic_budget { "dynamic" } else { "static" })?;
+        writeln!(
+            f,
+            "GPU Memory Budget ({})",
+            if self.has_dynamic_budget {
+                "dynamic"
+            } else {
+                "static"
+            }
+        )?;
         for h in &self.heaps {
             let kind = if h.is_device_local { "VRAM" } else { " RAM" };
             writeln!(
@@ -166,8 +175,8 @@ pub fn query_memory_budget(
     if has_memory_budget_ext {
         // Use VK_EXT_memory_budget for real-time budget data
         let mut budget_props = vk::PhysicalDeviceMemoryBudgetPropertiesEXT::default();
-        let mut mem_props2 = vk::PhysicalDeviceMemoryProperties2::default()
-            .push_next(&mut budget_props);
+        let mut mem_props2 =
+            vk::PhysicalDeviceMemoryProperties2::default().push_next(&mut budget_props);
 
         unsafe {
             instance.get_physical_device_memory_properties2(physical_device, &mut mem_props2);
@@ -187,10 +196,7 @@ pub fn query_memory_budget(
             })
             .collect();
 
-        GpuMemoryBudget {
-            heaps,
-            has_dynamic_budget: true,
-        }
+        GpuMemoryBudget { heaps, has_dynamic_budget: true }
     } else {
         // Fallback: static heap sizes, no usage data
         let heap_count = mem_props.memory_heap_count as usize;
@@ -207,9 +213,6 @@ pub fn query_memory_budget(
             })
             .collect();
 
-        GpuMemoryBudget {
-            heaps,
-            has_dynamic_budget: false,
-        }
+        GpuMemoryBudget { heaps, has_dynamic_budget: false }
     }
 }

@@ -33,9 +33,8 @@ impl DebugNamer {
         instance: &ash::Instance,
         device: &ash::Device,
     ) -> Self {
-        let loader = instance_debug_utils.map(|_| {
-            ash::ext::debug_utils::Device::new(instance, device)
-        });
+        let loader =
+            instance_debug_utils.map(|_| ash::ext::debug_utils::Device::new(instance, device));
         Self { loader }
     }
 

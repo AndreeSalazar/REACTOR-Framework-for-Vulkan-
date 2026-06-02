@@ -21,8 +21,8 @@
 
 use crate::core::error::{ErrorCode, ReactorError, ReactorResult};
 use crate::core::VulkanContext;
-use ash::vk;
 use ash::util::read_spv;
+use ash::vk;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator};
 use gpu_allocator::MemoryLocation;
 use std::io::Cursor;
@@ -181,29 +181,36 @@ impl IblBaker {
         let pool = create_one_shot_command_pool(ctx)?;
 
         // ── 1. Subir equirect HDR como sampler2D ────────────────────────────
-        let equirect_img = upload_equirect_hdr(ctx, allocator.clone(), pool, pixels_rgba_f16, width, height)?;
+        let equirect_img =
+            upload_equirect_hdr(ctx, allocator.clone(), pool, pixels_rgba_f16, width, height)?;
 
         // ── 2. Crear los 3 outputs ──────────────────────────────────────────
         let radiance = create_cubemap(
-            ctx, allocator.clone(),
+            ctx,
+            allocator.clone(),
             IBL_RADIANCE_SIZE,
             1, // 1 mip — fuente para los siguientes pasos
-            vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_SRC,
+            vk::ImageUsageFlags::STORAGE
+                | vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::TRANSFER_SRC,
         )?;
         let irradiance = create_cubemap(
-            ctx, allocator.clone(),
+            ctx,
+            allocator.clone(),
             IBL_IRRADIANCE_SIZE,
             1,
             vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::SAMPLED,
         )?;
         let prefiltered = create_cubemap(
-            ctx, allocator.clone(),
+            ctx,
+            allocator.clone(),
             IBL_PREFILTER_SIZE,
             IBL_PREFILTER_MIPS,
             vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::SAMPLED,
         )?;
         let brdf_lut = create_2d_lut(
-            ctx, allocator.clone(),
+            ctx,
+            allocator.clone(),
             IBL_BRDF_LUT_SIZE,
             vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::SAMPLED,
         )?;
@@ -214,19 +221,27 @@ impl IblBaker {
 
         // ── 4. Recompilar pipelines de cada paso ────────────────────────────
         let p_equirect = ComputePass::new(
-            ctx, SPV_EQUIRECT_TO_CUBE, /*ubo_binding*/ &[combined_image_sampler_b(0), storage_image_b(1)],
+            ctx,
+            SPV_EQUIRECT_TO_CUBE,
+            /*ubo_binding*/ &[combined_image_sampler_b(0), storage_image_b(1)],
             std::mem::size_of::<EquirectPC>() as u32,
         )?;
         let p_irradiance = ComputePass::new(
-            ctx, SPV_IRRADIANCE, &[combined_image_sampler_b(0), storage_image_b(1)],
+            ctx,
+            SPV_IRRADIANCE,
+            &[combined_image_sampler_b(0), storage_image_b(1)],
             std::mem::size_of::<IrradiancePC>() as u32,
         )?;
         let p_prefilter = ComputePass::new(
-            ctx, SPV_PREFILTER, &[combined_image_sampler_b(0), storage_image_b(1)],
+            ctx,
+            SPV_PREFILTER,
+            &[combined_image_sampler_b(0), storage_image_b(1)],
             std::mem::size_of::<PrefilterPC>() as u32,
         )?;
         let p_brdf = ComputePass::new(
-            ctx, SPV_BRDF_LUT, &[storage_image_b(0)],
+            ctx,
+            SPV_BRDF_LUT,
+            &[storage_image_b(0)],
             std::mem::size_of::<BrdfLutPC>() as u32,
         )?;
 
@@ -237,52 +252,118 @@ impl IblBaker {
         let cmd = begin_one_shot(ctx, pool)?;
 
         // 6a. radiance: UNDEFINED → GENERAL (para storage write)
-        transition_cube(ctx, cmd, radiance.image, radiance.mip_levels, radiance.layer_count,
-            vk::ImageLayout::UNDEFINED, vk::ImageLayout::GENERAL,
-            vk::AccessFlags::empty(), vk::AccessFlags::SHADER_WRITE,
-            vk::PipelineStageFlags::TOP_OF_PIPE, vk::PipelineStageFlags::COMPUTE_SHADER);
+        transition_cube(
+            ctx,
+            cmd,
+            radiance.image,
+            radiance.mip_levels,
+            radiance.layer_count,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::GENERAL,
+            vk::AccessFlags::empty(),
+            vk::AccessFlags::SHADER_WRITE,
+            vk::PipelineStageFlags::TOP_OF_PIPE,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+        );
 
         // 6b. equirect → radiance cube
         {
             let set = allocate_set(ctx, bake_desc_pool, p_equirect.layout_set)?;
-            update_set_combined(ctx, set, 0, equirect_img.view, sampler_2d, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
+            update_set_combined(
+                ctx,
+                set,
+                0,
+                equirect_img.view,
+                sampler_2d,
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            );
             update_set_storage_image(ctx, set, 1, radiance.mip_views[0]);
-            p_equirect.dispatch(ctx, cmd, &[set], &EquirectPC {
-                face_size: IBL_RADIANCE_SIZE as i32,
-                num_faces: 6,
-                _pad: [0.0; 2],
-            }, IBL_RADIANCE_SIZE / 8, IBL_RADIANCE_SIZE / 8, 6);
+            p_equirect.dispatch(
+                ctx,
+                cmd,
+                &[set],
+                &EquirectPC {
+                    face_size: IBL_RADIANCE_SIZE as i32,
+                    num_faces: 6,
+                    _pad: [0.0; 2],
+                },
+                IBL_RADIANCE_SIZE / 8,
+                IBL_RADIANCE_SIZE / 8,
+                6,
+            );
         }
 
         // 6c. radiance: GENERAL → SHADER_READ_ONLY (para sample en los siguientes)
-        transition_cube(ctx, cmd, radiance.image, radiance.mip_levels, radiance.layer_count,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            vk::AccessFlags::SHADER_WRITE, vk::AccessFlags::SHADER_READ,
-            vk::PipelineStageFlags::COMPUTE_SHADER, vk::PipelineStageFlags::COMPUTE_SHADER);
+        transition_cube(
+            ctx,
+            cmd,
+            radiance.image,
+            radiance.mip_levels,
+            radiance.layer_count,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            vk::AccessFlags::SHADER_WRITE,
+            vk::AccessFlags::SHADER_READ,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+        );
 
         // 6d. irradiance: UNDEFINED → GENERAL
-        transition_cube(ctx, cmd, irradiance.image, irradiance.mip_levels, irradiance.layer_count,
-            vk::ImageLayout::UNDEFINED, vk::ImageLayout::GENERAL,
-            vk::AccessFlags::empty(), vk::AccessFlags::SHADER_WRITE,
-            vk::PipelineStageFlags::TOP_OF_PIPE, vk::PipelineStageFlags::COMPUTE_SHADER);
+        transition_cube(
+            ctx,
+            cmd,
+            irradiance.image,
+            irradiance.mip_levels,
+            irradiance.layer_count,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::GENERAL,
+            vk::AccessFlags::empty(),
+            vk::AccessFlags::SHADER_WRITE,
+            vk::PipelineStageFlags::TOP_OF_PIPE,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+        );
 
         // 6e. radiance → irradiance
         {
             let set = allocate_set(ctx, bake_desc_pool, p_irradiance.layout_set)?;
-            update_set_combined(ctx, set, 0, radiance.view, sampler_cube, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
+            update_set_combined(
+                ctx,
+                set,
+                0,
+                radiance.view,
+                sampler_cube,
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            );
             update_set_storage_image(ctx, set, 1, irradiance.mip_views[0]);
-            p_irradiance.dispatch(ctx, cmd, &[set], &IrradiancePC {
-                face_size: IBL_IRRADIANCE_SIZE as i32,
-                num_faces: 6,
-                _pad: [0.0; 2],
-            }, IBL_IRRADIANCE_SIZE.div_ceil(8), IBL_IRRADIANCE_SIZE.div_ceil(8), 6);
+            p_irradiance.dispatch(
+                ctx,
+                cmd,
+                &[set],
+                &IrradiancePC {
+                    face_size: IBL_IRRADIANCE_SIZE as i32,
+                    num_faces: 6,
+                    _pad: [0.0; 2],
+                },
+                IBL_IRRADIANCE_SIZE.div_ceil(8),
+                IBL_IRRADIANCE_SIZE.div_ceil(8),
+                6,
+            );
         }
 
         // 6f. prefiltered: UNDEFINED → GENERAL (todas las mips)
-        transition_cube(ctx, cmd, prefiltered.image, prefiltered.mip_levels, prefiltered.layer_count,
-            vk::ImageLayout::UNDEFINED, vk::ImageLayout::GENERAL,
-            vk::AccessFlags::empty(), vk::AccessFlags::SHADER_WRITE,
-            vk::PipelineStageFlags::TOP_OF_PIPE, vk::PipelineStageFlags::COMPUTE_SHADER);
+        transition_cube(
+            ctx,
+            cmd,
+            prefiltered.image,
+            prefiltered.mip_levels,
+            prefiltered.layer_count,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::GENERAL,
+            vk::AccessFlags::empty(),
+            vk::AccessFlags::SHADER_WRITE,
+            vk::PipelineStageFlags::TOP_OF_PIPE,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+        );
 
         // 6g. prefilter — un dispatch por mip
         for mip in 0..IBL_PREFILTER_MIPS {
@@ -290,44 +371,101 @@ impl IblBaker {
             let roughness = mip as f32 / (IBL_PREFILTER_MIPS - 1) as f32;
 
             let set = allocate_set(ctx, bake_desc_pool, p_prefilter.layout_set)?;
-            update_set_combined(ctx, set, 0, radiance.view, sampler_cube, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
+            update_set_combined(
+                ctx,
+                set,
+                0,
+                radiance.view,
+                sampler_cube,
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            );
             update_set_storage_image(ctx, set, 1, prefiltered.mip_views[mip as usize]);
-            p_prefilter.dispatch(ctx, cmd, &[set], &PrefilterPC {
-                mip_size: mip_size as i32,
-                num_faces: 6,
-                roughness,
-                src_face_size: IBL_RADIANCE_SIZE as i32,
-            }, mip_size.div_ceil(8).max(1), mip_size.div_ceil(8).max(1), 6);
+            p_prefilter.dispatch(
+                ctx,
+                cmd,
+                &[set],
+                &PrefilterPC {
+                    mip_size: mip_size as i32,
+                    num_faces: 6,
+                    roughness,
+                    src_face_size: IBL_RADIANCE_SIZE as i32,
+                },
+                mip_size.div_ceil(8).max(1),
+                mip_size.div_ceil(8).max(1),
+                6,
+            );
         }
 
         // 6h. brdf_lut: UNDEFINED → GENERAL → dispatch → SHADER_READ_ONLY
-        transition_2d(ctx, cmd, brdf_lut.image, 1,
-            vk::ImageLayout::UNDEFINED, vk::ImageLayout::GENERAL,
-            vk::AccessFlags::empty(), vk::AccessFlags::SHADER_WRITE,
-            vk::PipelineStageFlags::TOP_OF_PIPE, vk::PipelineStageFlags::COMPUTE_SHADER);
+        transition_2d(
+            ctx,
+            cmd,
+            brdf_lut.image,
+            1,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::GENERAL,
+            vk::AccessFlags::empty(),
+            vk::AccessFlags::SHADER_WRITE,
+            vk::PipelineStageFlags::TOP_OF_PIPE,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+        );
         {
             let set = allocate_set(ctx, bake_desc_pool, p_brdf.layout_set)?;
             update_set_storage_image(ctx, set, 0, brdf_lut.view);
-            p_brdf.dispatch(ctx, cmd, &[set], &BrdfLutPC {
-                size: IBL_BRDF_LUT_SIZE as i32,
-                _pad: 0,
-                _pad2: [0.0; 2],
-            }, IBL_BRDF_LUT_SIZE / 8, IBL_BRDF_LUT_SIZE / 8, 1);
+            p_brdf.dispatch(
+                ctx,
+                cmd,
+                &[set],
+                &BrdfLutPC {
+                    size: IBL_BRDF_LUT_SIZE as i32,
+                    _pad: 0,
+                    _pad2: [0.0; 2],
+                },
+                IBL_BRDF_LUT_SIZE / 8,
+                IBL_BRDF_LUT_SIZE / 8,
+                1,
+            );
         }
 
         // 6i. Outputs finales: GENERAL → SHADER_READ_ONLY_OPTIMAL
-        transition_cube(ctx, cmd, irradiance.image, irradiance.mip_levels, irradiance.layer_count,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            vk::AccessFlags::SHADER_WRITE, vk::AccessFlags::SHADER_READ,
-            vk::PipelineStageFlags::COMPUTE_SHADER, vk::PipelineStageFlags::FRAGMENT_SHADER);
-        transition_cube(ctx, cmd, prefiltered.image, prefiltered.mip_levels, prefiltered.layer_count,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            vk::AccessFlags::SHADER_WRITE, vk::AccessFlags::SHADER_READ,
-            vk::PipelineStageFlags::COMPUTE_SHADER, vk::PipelineStageFlags::FRAGMENT_SHADER);
-        transition_2d(ctx, cmd, brdf_lut.image, 1,
-            vk::ImageLayout::GENERAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            vk::AccessFlags::SHADER_WRITE, vk::AccessFlags::SHADER_READ,
-            vk::PipelineStageFlags::COMPUTE_SHADER, vk::PipelineStageFlags::FRAGMENT_SHADER);
+        transition_cube(
+            ctx,
+            cmd,
+            irradiance.image,
+            irradiance.mip_levels,
+            irradiance.layer_count,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            vk::AccessFlags::SHADER_WRITE,
+            vk::AccessFlags::SHADER_READ,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::PipelineStageFlags::FRAGMENT_SHADER,
+        );
+        transition_cube(
+            ctx,
+            cmd,
+            prefiltered.image,
+            prefiltered.mip_levels,
+            prefiltered.layer_count,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            vk::AccessFlags::SHADER_WRITE,
+            vk::AccessFlags::SHADER_READ,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::PipelineStageFlags::FRAGMENT_SHADER,
+        );
+        transition_2d(
+            ctx,
+            cmd,
+            brdf_lut.image,
+            1,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            vk::AccessFlags::SHADER_WRITE,
+            vk::AccessFlags::SHADER_READ,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::PipelineStageFlags::FRAGMENT_SHADER,
+        );
 
         end_and_submit(ctx, pool, cmd)?;
         // Free internal pools/passes — destrucción RAII al salir del scope.
@@ -343,13 +481,41 @@ impl IblBaker {
         let final_layout = create_final_descriptor_layout(ctx)?;
         let final_pool = create_final_descriptor_pool(ctx)?;
         let final_set = allocate_set(ctx, final_pool, final_layout)?;
-        update_set_combined(ctx, final_set, 0, irradiance.view, sampler_cube, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
-        update_set_combined(ctx, final_set, 1, prefiltered.view, sampler_cube, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
-        update_set_combined(ctx, final_set, 2, brdf_lut.view, sampler_2d, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
+        update_set_combined(
+            ctx,
+            final_set,
+            0,
+            irradiance.view,
+            sampler_cube,
+            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        );
+        update_set_combined(
+            ctx,
+            final_set,
+            1,
+            prefiltered.view,
+            sampler_cube,
+            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        );
+        update_set_combined(
+            ctx,
+            final_set,
+            2,
+            brdf_lut.view,
+            sampler_2d,
+            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        );
 
         let max_mip_level = (IBL_PREFILTER_MIPS - 1) as f32;
-        let (params_buf, params_alloc) = create_uniform_buffer(ctx, allocator.clone(), max_mip_level)?;
-        update_set_uniform_buffer(ctx, final_set, 3, params_buf, std::mem::size_of::<f32>() as u64);
+        let (params_buf, params_alloc) =
+            create_uniform_buffer(ctx, allocator.clone(), max_mip_level)?;
+        update_set_uniform_buffer(
+            ctx,
+            final_set,
+            3,
+            params_buf,
+            std::mem::size_of::<f32>() as u64,
+        );
 
         Ok(IblTextures {
             irradiance,
@@ -387,7 +553,11 @@ impl IblBaker {
 /// + dimensiones.
 fn load_hdr_equirect(path: &Path) -> ReactorResult<(Vec<u16>, u32, u32)> {
     let img = image::open(path).map_err(|e| {
-        ReactorError::with_source(ErrorCode::VulkanImageCreation, "no se pudo abrir HDR equirect", e)
+        ReactorError::with_source(
+            ErrorCode::VulkanImageCreation,
+            "no se pudo abrir HDR equirect",
+            e,
+        )
     })?;
     let rgb32 = img.to_rgb32f();
     let (w, h) = (rgb32.width(), rgb32.height());
@@ -412,16 +582,17 @@ fn procedural_studio_sky(width: u32, height: u32) -> (Vec<u16>, u32, u32) {
     let sun_col = glam::Vec3::new(2.4, 2.2, 1.95);
 
     for y in 0..height {
-        let v = (y as f32 + 0.5) / height as f32;     // 0..1
-        let theta = v * std::f32::consts::PI;          // 0..π
+        let v = (y as f32 + 0.5) / height as f32; // 0..1
+        let theta = v * std::f32::consts::PI; // 0..π
         for x in 0..width {
-            let u = (x as f32 + 0.5) / width as f32;  // 0..1
+            let u = (x as f32 + 0.5) / width as f32; // 0..1
             let phi = u * std::f32::consts::TAU - std::f32::consts::PI; // -π..π
             let dir = glam::Vec3::new(
                 theta.sin() * phi.cos(),
                 theta.cos(),
                 theta.sin() * phi.sin(),
-            ).normalize();
+            )
+            .normalize();
 
             let up = dir.y;
             let t = up.signum() * up.abs().powf(0.6);
@@ -429,7 +600,11 @@ fn procedural_studio_sky(width: u32, height: u32) -> (Vec<u16>, u32, u32) {
             let gnd = sky_hor.lerp(gnd_nad, (-t).clamp(0.0, 1.0));
             let mut col = if up >= 0.0 { sky } else { gnd };
             let ds = dir.dot(sun_dir);
-            let disc = if ds > 0.9995 { (ds - 0.9995) / 0.0005 } else { 0.0 };
+            let disc = if ds > 0.9995 {
+                (ds - 0.9995) / 0.0005
+            } else {
+                0.0
+            };
             let halo = ds.max(0.0).powf(80.0) * 0.35;
             col += sun_col * (disc * 25.0 + halo);
 
@@ -471,25 +646,41 @@ fn upload_equirect_hdr(
         .samples(vk::SampleCountFlags::TYPE_1);
     let image = unsafe { device.create_image(&img_info, None).map_err(verr)? };
     let req = unsafe { device.get_image_memory_requirements(image) };
-    let alloc = allocator.lock().unwrap().allocate(&AllocationCreateDesc {
-        name: "ibl_equirect_hdr",
-        requirements: req,
-        location: MemoryLocation::GpuOnly,
-        linear: false,
-        allocation_scheme: AllocationScheme::GpuAllocatorManaged,
-    }).map_err(verr)?;
-    unsafe { device.bind_image_memory(image, alloc.memory(), alloc.offset()).map_err(verr)? };
+    let alloc = allocator
+        .lock()
+        .unwrap()
+        .allocate(&AllocationCreateDesc {
+            name: "ibl_equirect_hdr",
+            requirements: req,
+            location: MemoryLocation::GpuOnly,
+            linear: false,
+            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
+        })
+        .map_err(verr)?;
+    unsafe {
+        device
+            .bind_image_memory(image, alloc.memory(), alloc.offset())
+            .map_err(verr)?
+    };
 
     let view = unsafe {
-        device.create_image_view(&vk::ImageViewCreateInfo::default()
-            .image(image)
-            .view_type(vk::ImageViewType::TYPE_2D)
-            .format(RGBA16F)
-            .subresource_range(vk::ImageSubresourceRange::default()
-                .aspect_mask(vk::ImageAspectFlags::COLOR)
-                .base_mip_level(0).level_count(1)
-                .base_array_layer(0).layer_count(1)),
-            None).map_err(verr)?
+        device
+            .create_image_view(
+                &vk::ImageViewCreateInfo::default()
+                    .image(image)
+                    .view_type(vk::ImageViewType::TYPE_2D)
+                    .format(RGBA16F)
+                    .subresource_range(
+                        vk::ImageSubresourceRange::default()
+                            .aspect_mask(vk::ImageAspectFlags::COLOR)
+                            .base_mip_level(0)
+                            .level_count(1)
+                            .base_array_layer(0)
+                            .layer_count(1),
+                    ),
+                None,
+            )
+            .map_err(verr)?
     };
 
     // 2. Staging buffer CPU-visible con los píxeles.
@@ -500,14 +691,22 @@ fn upload_equirect_hdr(
         .sharing_mode(vk::SharingMode::EXCLUSIVE);
     let staging = unsafe { device.create_buffer(&staging_info, None).map_err(verr)? };
     let sreq = unsafe { device.get_buffer_memory_requirements(staging) };
-    let mut salloc = allocator.lock().unwrap().allocate(&AllocationCreateDesc {
-        name: "ibl_equirect_staging",
-        requirements: sreq,
-        location: MemoryLocation::CpuToGpu,
-        linear: true,
-        allocation_scheme: AllocationScheme::GpuAllocatorManaged,
-    }).map_err(verr)?;
-    unsafe { device.bind_buffer_memory(staging, salloc.memory(), salloc.offset()).map_err(verr)? };
+    let mut salloc = allocator
+        .lock()
+        .unwrap()
+        .allocate(&AllocationCreateDesc {
+            name: "ibl_equirect_staging",
+            requirements: sreq,
+            location: MemoryLocation::CpuToGpu,
+            linear: true,
+            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
+        })
+        .map_err(verr)?;
+    unsafe {
+        device
+            .bind_buffer_memory(staging, salloc.memory(), salloc.offset())
+            .map_err(verr)?
+    };
     // Copia los píxeles al staging.
     let dst_slice = salloc.mapped_slice_mut().expect("staging not mapped");
     let src_bytes: &[u8] = bytemuck::cast_slice(pixels);
@@ -515,28 +714,55 @@ fn upload_equirect_hdr(
 
     // 3. Copia GPU + transición a SHADER_READ_ONLY.
     let cmd = begin_one_shot(ctx, pool)?;
-    transition_2d(ctx, cmd, image, 1,
-        vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-        vk::AccessFlags::empty(), vk::AccessFlags::TRANSFER_WRITE,
-        vk::PipelineStageFlags::TOP_OF_PIPE, vk::PipelineStageFlags::TRANSFER);
+    transition_2d(
+        ctx,
+        cmd,
+        image,
+        1,
+        vk::ImageLayout::UNDEFINED,
+        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        vk::AccessFlags::empty(),
+        vk::AccessFlags::TRANSFER_WRITE,
+        vk::PipelineStageFlags::TOP_OF_PIPE,
+        vk::PipelineStageFlags::TRANSFER,
+    );
     let region = vk::BufferImageCopy::default()
         .buffer_offset(0)
-        .image_subresource(vk::ImageSubresourceLayers::default()
-            .aspect_mask(vk::ImageAspectFlags::COLOR)
-            .mip_level(0).base_array_layer(0).layer_count(1))
+        .image_subresource(
+            vk::ImageSubresourceLayers::default()
+                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .mip_level(0)
+                .base_array_layer(0)
+                .layer_count(1),
+        )
         .image_extent(extent);
     unsafe {
-        device.cmd_copy_buffer_to_image(cmd, staging, image,
-            vk::ImageLayout::TRANSFER_DST_OPTIMAL, &[region]);
+        device.cmd_copy_buffer_to_image(
+            cmd,
+            staging,
+            image,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            &[region],
+        );
     }
-    transition_2d(ctx, cmd, image, 1,
-        vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        vk::AccessFlags::TRANSFER_WRITE, vk::AccessFlags::SHADER_READ,
-        vk::PipelineStageFlags::TRANSFER, vk::PipelineStageFlags::COMPUTE_SHADER);
+    transition_2d(
+        ctx,
+        cmd,
+        image,
+        1,
+        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        vk::AccessFlags::TRANSFER_WRITE,
+        vk::AccessFlags::SHADER_READ,
+        vk::PipelineStageFlags::TRANSFER,
+        vk::PipelineStageFlags::COMPUTE_SHADER,
+    );
     end_and_submit(ctx, pool, cmd)?;
 
     // Liberar staging.
-    unsafe { device.destroy_buffer(staging, None); }
+    unsafe {
+        device.destroy_buffer(staging, None);
+    }
     let _ = allocator.lock().unwrap().free(salloc);
 
     Ok(IblImage {
@@ -580,41 +806,65 @@ fn create_cubemap(
         .samples(vk::SampleCountFlags::TYPE_1);
     let image = unsafe { device.create_image(&img_info, None).map_err(verr)? };
     let req = unsafe { device.get_image_memory_requirements(image) };
-    let alloc = allocator.lock().unwrap().allocate(&AllocationCreateDesc {
-        name: "ibl_cubemap",
-        requirements: req,
-        location: MemoryLocation::GpuOnly,
-        linear: false,
-        allocation_scheme: AllocationScheme::GpuAllocatorManaged,
-    }).map_err(verr)?;
-    unsafe { device.bind_image_memory(image, alloc.memory(), alloc.offset()).map_err(verr)? };
+    let alloc = allocator
+        .lock()
+        .unwrap()
+        .allocate(&AllocationCreateDesc {
+            name: "ibl_cubemap",
+            requirements: req,
+            location: MemoryLocation::GpuOnly,
+            linear: false,
+            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
+        })
+        .map_err(verr)?;
+    unsafe {
+        device
+            .bind_image_memory(image, alloc.memory(), alloc.offset())
+            .map_err(verr)?
+    };
 
     // View principal: cubemap (sampling)
     let view = unsafe {
-        device.create_image_view(&vk::ImageViewCreateInfo::default()
-            .image(image)
-            .view_type(vk::ImageViewType::CUBE)
-            .format(RGBA16F)
-            .subresource_range(vk::ImageSubresourceRange::default()
-                .aspect_mask(vk::ImageAspectFlags::COLOR)
-                .base_mip_level(0).level_count(mip_levels)
-                .base_array_layer(0).layer_count(6)),
-            None).map_err(verr)?
+        device
+            .create_image_view(
+                &vk::ImageViewCreateInfo::default()
+                    .image(image)
+                    .view_type(vk::ImageViewType::CUBE)
+                    .format(RGBA16F)
+                    .subresource_range(
+                        vk::ImageSubresourceRange::default()
+                            .aspect_mask(vk::ImageAspectFlags::COLOR)
+                            .base_mip_level(0)
+                            .level_count(mip_levels)
+                            .base_array_layer(0)
+                            .layer_count(6),
+                    ),
+                None,
+            )
+            .map_err(verr)?
     };
 
     // Views por mip: 2D array (storage write desde compute)
     let mut mip_views = Vec::with_capacity(mip_levels as usize);
     for mip in 0..mip_levels {
         let v = unsafe {
-            device.create_image_view(&vk::ImageViewCreateInfo::default()
-                .image(image)
-                .view_type(vk::ImageViewType::TYPE_2D_ARRAY)
-                .format(RGBA16F)
-                .subresource_range(vk::ImageSubresourceRange::default()
-                    .aspect_mask(vk::ImageAspectFlags::COLOR)
-                    .base_mip_level(mip).level_count(1)
-                    .base_array_layer(0).layer_count(6)),
-                None).map_err(verr)?
+            device
+                .create_image_view(
+                    &vk::ImageViewCreateInfo::default()
+                        .image(image)
+                        .view_type(vk::ImageViewType::TYPE_2D_ARRAY)
+                        .format(RGBA16F)
+                        .subresource_range(
+                            vk::ImageSubresourceRange::default()
+                                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                                .base_mip_level(mip)
+                                .level_count(1)
+                                .base_array_layer(0)
+                                .layer_count(6),
+                        ),
+                    None,
+                )
+                .map_err(verr)?
         };
         mip_views.push(v);
     }
@@ -654,25 +904,41 @@ fn create_2d_lut(
         .samples(vk::SampleCountFlags::TYPE_1);
     let image = unsafe { device.create_image(&img_info, None).map_err(verr)? };
     let req = unsafe { device.get_image_memory_requirements(image) };
-    let alloc = allocator.lock().unwrap().allocate(&AllocationCreateDesc {
-        name: "ibl_brdf_lut",
-        requirements: req,
-        location: MemoryLocation::GpuOnly,
-        linear: false,
-        allocation_scheme: AllocationScheme::GpuAllocatorManaged,
-    }).map_err(verr)?;
-    unsafe { device.bind_image_memory(image, alloc.memory(), alloc.offset()).map_err(verr)? };
+    let alloc = allocator
+        .lock()
+        .unwrap()
+        .allocate(&AllocationCreateDesc {
+            name: "ibl_brdf_lut",
+            requirements: req,
+            location: MemoryLocation::GpuOnly,
+            linear: false,
+            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
+        })
+        .map_err(verr)?;
+    unsafe {
+        device
+            .bind_image_memory(image, alloc.memory(), alloc.offset())
+            .map_err(verr)?
+    };
 
     let view = unsafe {
-        device.create_image_view(&vk::ImageViewCreateInfo::default()
-            .image(image)
-            .view_type(vk::ImageViewType::TYPE_2D)
-            .format(RG16F)
-            .subresource_range(vk::ImageSubresourceRange::default()
-                .aspect_mask(vk::ImageAspectFlags::COLOR)
-                .base_mip_level(0).level_count(1)
-                .base_array_layer(0).layer_count(1)),
-            None).map_err(verr)?
+        device
+            .create_image_view(
+                &vk::ImageViewCreateInfo::default()
+                    .image(image)
+                    .view_type(vk::ImageViewType::TYPE_2D)
+                    .format(RG16F)
+                    .subresource_range(
+                        vk::ImageSubresourceRange::default()
+                            .aspect_mask(vk::ImageAspectFlags::COLOR)
+                            .base_mip_level(0)
+                            .level_count(1)
+                            .base_array_layer(0)
+                            .layer_count(1),
+                    ),
+                None,
+            )
+            .map_err(verr)?
     };
 
     Ok(IblImage {
@@ -695,25 +961,31 @@ fn create_2d_lut(
 
 fn create_cubemap_sampler(ctx: &VulkanContext, max_lod: f32) -> ReactorResult<vk::Sampler> {
     let info = vk::SamplerCreateInfo::default()
-        .mag_filter(vk::Filter::LINEAR).min_filter(vk::Filter::LINEAR)
+        .mag_filter(vk::Filter::LINEAR)
+        .min_filter(vk::Filter::LINEAR)
         .mipmap_mode(vk::SamplerMipmapMode::LINEAR)
         .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
         .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
         .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-        .anisotropy_enable(false).max_anisotropy(1.0)
-        .compare_enable(false).min_lod(0.0).max_lod(max_lod)
+        .anisotropy_enable(false)
+        .max_anisotropy(1.0)
+        .compare_enable(false)
+        .min_lod(0.0)
+        .max_lod(max_lod)
         .border_color(vk::BorderColor::FLOAT_OPAQUE_BLACK);
     unsafe { ctx.ash_device().create_sampler(&info, None).map_err(verr) }
 }
 
 fn create_2d_sampler(ctx: &VulkanContext) -> ReactorResult<vk::Sampler> {
     let info = vk::SamplerCreateInfo::default()
-        .mag_filter(vk::Filter::LINEAR).min_filter(vk::Filter::LINEAR)
+        .mag_filter(vk::Filter::LINEAR)
+        .min_filter(vk::Filter::LINEAR)
         .mipmap_mode(vk::SamplerMipmapMode::LINEAR)
         .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
         .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
         .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-        .min_lod(0.0).max_lod(1.0);
+        .min_lod(0.0)
+        .max_lod(1.0);
     unsafe { ctx.ash_device().create_sampler(&info, None).map_err(verr) }
 }
 
@@ -733,97 +1005,166 @@ fn storage_image_b(b: u32) -> vk::DescriptorSetLayoutBinding<'static> {
         .stage_flags(vk::ShaderStageFlags::COMPUTE)
 }
 
-fn create_bake_descriptor_pool(ctx: &VulkanContext, max_sets: u32) -> ReactorResult<vk::DescriptorPool> {
+fn create_bake_descriptor_pool(
+    ctx: &VulkanContext,
+    max_sets: u32,
+) -> ReactorResult<vk::DescriptorPool> {
     let sizes = [
-        vk::DescriptorPoolSize::default().ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER).descriptor_count(max_sets * 2),
-        vk::DescriptorPoolSize::default().ty(vk::DescriptorType::STORAGE_IMAGE).descriptor_count(max_sets * 2),
+        vk::DescriptorPoolSize::default()
+            .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(max_sets * 2),
+        vk::DescriptorPoolSize::default()
+            .ty(vk::DescriptorType::STORAGE_IMAGE)
+            .descriptor_count(max_sets * 2),
     ];
     let info = vk::DescriptorPoolCreateInfo::default()
         .max_sets(max_sets)
         .pool_sizes(&sizes);
-    unsafe { ctx.ash_device().create_descriptor_pool(&info, None).map_err(verr) }
+    unsafe {
+        ctx.ash_device()
+            .create_descriptor_pool(&info, None)
+            .map_err(verr)
+    }
 }
 
 fn create_final_descriptor_layout(ctx: &VulkanContext) -> ReactorResult<vk::DescriptorSetLayout> {
     let bindings = [
-        vk::DescriptorSetLayoutBinding::default().binding(0)
-            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER).descriptor_count(1)
+        vk::DescriptorSetLayoutBinding::default()
+            .binding(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(1)
             .stage_flags(vk::ShaderStageFlags::FRAGMENT),
-        vk::DescriptorSetLayoutBinding::default().binding(1)
-            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER).descriptor_count(1)
+        vk::DescriptorSetLayoutBinding::default()
+            .binding(1)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(1)
             .stage_flags(vk::ShaderStageFlags::FRAGMENT),
-        vk::DescriptorSetLayoutBinding::default().binding(2)
-            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER).descriptor_count(1)
+        vk::DescriptorSetLayoutBinding::default()
+            .binding(2)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(1)
             .stage_flags(vk::ShaderStageFlags::FRAGMENT),
-        vk::DescriptorSetLayoutBinding::default().binding(3)
-            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER).descriptor_count(1)
+        vk::DescriptorSetLayoutBinding::default()
+            .binding(3)
+            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+            .descriptor_count(1)
             .stage_flags(vk::ShaderStageFlags::FRAGMENT),
     ];
     let info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
-    unsafe { ctx.ash_device().create_descriptor_set_layout(&info, None).map_err(verr) }
+    unsafe {
+        ctx.ash_device()
+            .create_descriptor_set_layout(&info, None)
+            .map_err(verr)
+    }
 }
 
 fn create_final_descriptor_pool(ctx: &VulkanContext) -> ReactorResult<vk::DescriptorPool> {
     let sizes = [
-        vk::DescriptorPoolSize::default().ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER).descriptor_count(3),
-        vk::DescriptorPoolSize::default().ty(vk::DescriptorType::UNIFORM_BUFFER).descriptor_count(1),
+        vk::DescriptorPoolSize::default()
+            .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(3),
+        vk::DescriptorPoolSize::default()
+            .ty(vk::DescriptorType::UNIFORM_BUFFER)
+            .descriptor_count(1),
     ];
     let info = vk::DescriptorPoolCreateInfo::default()
         .max_sets(1)
         .pool_sizes(&sizes)
         .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET);
-    unsafe { ctx.ash_device().create_descriptor_pool(&info, None).map_err(verr) }
+    unsafe {
+        ctx.ash_device()
+            .create_descriptor_pool(&info, None)
+            .map_err(verr)
+    }
 }
 
-fn allocate_set(ctx: &VulkanContext, pool: vk::DescriptorPool, layout: vk::DescriptorSetLayout)
-    -> ReactorResult<vk::DescriptorSet>
-{
+fn allocate_set(
+    ctx: &VulkanContext,
+    pool: vk::DescriptorPool,
+    layout: vk::DescriptorSetLayout,
+) -> ReactorResult<vk::DescriptorSet> {
     let layouts = [layout];
     let info = vk::DescriptorSetAllocateInfo::default()
-        .descriptor_pool(pool).set_layouts(&layouts);
-    let sets = unsafe { ctx.ash_device().allocate_descriptor_sets(&info).map_err(verr)? };
+        .descriptor_pool(pool)
+        .set_layouts(&layouts);
+    let sets = unsafe {
+        ctx.ash_device()
+            .allocate_descriptor_sets(&info)
+            .map_err(verr)?
+    };
     Ok(sets[0])
 }
 
 fn update_set_combined(
-    ctx: &VulkanContext, set: vk::DescriptorSet, binding: u32,
-    view: vk::ImageView, sampler: vk::Sampler, layout: vk::ImageLayout,
+    ctx: &VulkanContext,
+    set: vk::DescriptorSet,
+    binding: u32,
+    view: vk::ImageView,
+    sampler: vk::Sampler,
+    layout: vk::ImageLayout,
 ) {
     let img = [vk::DescriptorImageInfo::default()
-        .image_layout(layout).image_view(view).sampler(sampler)];
+        .image_layout(layout)
+        .image_view(view)
+        .sampler(sampler)];
     let w = vk::WriteDescriptorSet::default()
-        .dst_set(set).dst_binding(binding).dst_array_element(0)
+        .dst_set(set)
+        .dst_binding(binding)
+        .dst_array_element(0)
         .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
         .image_info(&img);
-    unsafe { ctx.ash_device().update_descriptor_sets(&[w], &[]); }
+    unsafe {
+        ctx.ash_device().update_descriptor_sets(&[w], &[]);
+    }
 }
 
 fn update_set_storage_image(
-    ctx: &VulkanContext, set: vk::DescriptorSet, binding: u32, view: vk::ImageView,
+    ctx: &VulkanContext,
+    set: vk::DescriptorSet,
+    binding: u32,
+    view: vk::ImageView,
 ) {
     let img = [vk::DescriptorImageInfo::default()
-        .image_layout(vk::ImageLayout::GENERAL).image_view(view).sampler(vk::Sampler::null())];
+        .image_layout(vk::ImageLayout::GENERAL)
+        .image_view(view)
+        .sampler(vk::Sampler::null())];
     let w = vk::WriteDescriptorSet::default()
-        .dst_set(set).dst_binding(binding).dst_array_element(0)
+        .dst_set(set)
+        .dst_binding(binding)
+        .dst_array_element(0)
         .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
         .image_info(&img);
-    unsafe { ctx.ash_device().update_descriptor_sets(&[w], &[]); }
+    unsafe {
+        ctx.ash_device().update_descriptor_sets(&[w], &[]);
+    }
 }
 
 fn update_set_uniform_buffer(
-    ctx: &VulkanContext, set: vk::DescriptorSet, binding: u32,
-    buffer: vk::Buffer, size: u64,
+    ctx: &VulkanContext,
+    set: vk::DescriptorSet,
+    binding: u32,
+    buffer: vk::Buffer,
+    size: u64,
 ) {
-    let bi = [vk::DescriptorBufferInfo::default().buffer(buffer).offset(0).range(size)];
+    let bi = [vk::DescriptorBufferInfo::default()
+        .buffer(buffer)
+        .offset(0)
+        .range(size)];
     let w = vk::WriteDescriptorSet::default()
-        .dst_set(set).dst_binding(binding).dst_array_element(0)
+        .dst_set(set)
+        .dst_binding(binding)
+        .dst_array_element(0)
         .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
         .buffer_info(&bi);
-    unsafe { ctx.ash_device().update_descriptor_sets(&[w], &[]); }
+    unsafe {
+        ctx.ash_device().update_descriptor_sets(&[w], &[]);
+    }
 }
 
 fn create_uniform_buffer(
-    ctx: &VulkanContext, allocator: Arc<Mutex<Allocator>>, max_mip: f32,
+    ctx: &VulkanContext,
+    allocator: Arc<Mutex<Allocator>>,
+    max_mip: f32,
 ) -> ReactorResult<(vk::Buffer, Allocation)> {
     let device = ctx.ash_device();
     let size = std::mem::size_of::<f32>() as u64;
@@ -833,14 +1174,22 @@ fn create_uniform_buffer(
         .sharing_mode(vk::SharingMode::EXCLUSIVE);
     let buf = unsafe { device.create_buffer(&info, None).map_err(verr)? };
     let req = unsafe { device.get_buffer_memory_requirements(buf) };
-    let mut alloc = allocator.lock().unwrap().allocate(&AllocationCreateDesc {
-        name: "ibl_params_ubo",
-        requirements: req,
-        location: MemoryLocation::CpuToGpu,
-        linear: true,
-        allocation_scheme: AllocationScheme::GpuAllocatorManaged,
-    }).map_err(verr)?;
-    unsafe { device.bind_buffer_memory(buf, alloc.memory(), alloc.offset()).map_err(verr)? };
+    let mut alloc = allocator
+        .lock()
+        .unwrap()
+        .allocate(&AllocationCreateDesc {
+            name: "ibl_params_ubo",
+            requirements: req,
+            location: MemoryLocation::CpuToGpu,
+            linear: true,
+            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
+        })
+        .map_err(verr)?;
+    unsafe {
+        device
+            .bind_buffer_memory(buf, alloc.memory(), alloc.offset())
+            .map_err(verr)?
+    };
     let slice = alloc.mapped_slice_mut().expect("ubo no mapeado");
     slice[..4].copy_from_slice(&max_mip.to_le_bytes());
     Ok((buf, alloc))
@@ -849,76 +1198,137 @@ fn create_uniform_buffer(
 fn create_one_shot_command_pool(ctx: &VulkanContext) -> ReactorResult<vk::CommandPool> {
     let info = vk::CommandPoolCreateInfo::default()
         .queue_family_index(ctx.queue_family_index)
-        .flags(vk::CommandPoolCreateFlags::TRANSIENT | vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
-    unsafe { ctx.ash_device().create_command_pool(&info, None).map_err(verr) }
+        .flags(
+            vk::CommandPoolCreateFlags::TRANSIENT
+                | vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+        );
+    unsafe {
+        ctx.ash_device()
+            .create_command_pool(&info, None)
+            .map_err(verr)
+    }
 }
 
 fn begin_one_shot(ctx: &VulkanContext, pool: vk::CommandPool) -> ReactorResult<vk::CommandBuffer> {
     let alloc = vk::CommandBufferAllocateInfo::default()
-        .command_pool(pool).level(vk::CommandBufferLevel::PRIMARY).command_buffer_count(1);
-    let cb = unsafe { ctx.ash_device().allocate_command_buffers(&alloc).map_err(verr)?[0] };
-    let begin = vk::CommandBufferBeginInfo::default()
-        .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-    unsafe { ctx.ash_device().begin_command_buffer(cb, &begin).map_err(verr)? };
+        .command_pool(pool)
+        .level(vk::CommandBufferLevel::PRIMARY)
+        .command_buffer_count(1);
+    let cb = unsafe {
+        ctx.ash_device()
+            .allocate_command_buffers(&alloc)
+            .map_err(verr)?[0]
+    };
+    let begin =
+        vk::CommandBufferBeginInfo::default().flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+    unsafe {
+        ctx.ash_device()
+            .begin_command_buffer(cb, &begin)
+            .map_err(verr)?
+    };
     Ok(cb)
 }
 
 fn end_and_submit(
-    ctx: &VulkanContext, _pool: vk::CommandPool, cb: vk::CommandBuffer,
+    ctx: &VulkanContext,
+    _pool: vk::CommandPool,
+    cb: vk::CommandBuffer,
 ) -> ReactorResult<()> {
     let device = ctx.ash_device();
-    unsafe { device.end_command_buffer(cb).map_err(verr)?; }
+    unsafe {
+        device.end_command_buffer(cb).map_err(verr)?;
+    }
     let cbs = [cb];
     let submit = vk::SubmitInfo::default().command_buffers(&cbs);
     unsafe {
-        device.queue_submit(ctx.graphics_queue, &[submit], vk::Fence::null()).map_err(verr)?;
+        device
+            .queue_submit(ctx.graphics_queue, &[submit], vk::Fence::null())
+            .map_err(verr)?;
         device.queue_wait_idle(ctx.graphics_queue).map_err(verr)?;
     }
     Ok(())
 }
 
 fn transition_2d(
-    ctx: &VulkanContext, cmd: vk::CommandBuffer, image: vk::Image, mip_levels: u32,
-    old_l: vk::ImageLayout, new_l: vk::ImageLayout,
-    src_a: vk::AccessFlags, dst_a: vk::AccessFlags,
-    src_s: vk::PipelineStageFlags, dst_s: vk::PipelineStageFlags,
+    ctx: &VulkanContext,
+    cmd: vk::CommandBuffer,
+    image: vk::Image,
+    mip_levels: u32,
+    old_l: vk::ImageLayout,
+    new_l: vk::ImageLayout,
+    src_a: vk::AccessFlags,
+    dst_a: vk::AccessFlags,
+    src_s: vk::PipelineStageFlags,
+    dst_s: vk::PipelineStageFlags,
 ) {
     let b = vk::ImageMemoryBarrier::default()
-        .old_layout(old_l).new_layout(new_l)
+        .old_layout(old_l)
+        .new_layout(new_l)
         .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
         .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
         .image(image)
-        .subresource_range(vk::ImageSubresourceRange::default()
-            .aspect_mask(vk::ImageAspectFlags::COLOR)
-            .base_mip_level(0).level_count(mip_levels)
-            .base_array_layer(0).layer_count(1))
-        .src_access_mask(src_a).dst_access_mask(dst_a);
+        .subresource_range(
+            vk::ImageSubresourceRange::default()
+                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .base_mip_level(0)
+                .level_count(mip_levels)
+                .base_array_layer(0)
+                .layer_count(1),
+        )
+        .src_access_mask(src_a)
+        .dst_access_mask(dst_a);
     unsafe {
-        ctx.ash_device().cmd_pipeline_barrier(cmd, src_s, dst_s,
-            vk::DependencyFlags::empty(), &[], &[], &[b]);
+        ctx.ash_device().cmd_pipeline_barrier(
+            cmd,
+            src_s,
+            dst_s,
+            vk::DependencyFlags::empty(),
+            &[],
+            &[],
+            &[b],
+        );
     }
 }
 
 fn transition_cube(
-    ctx: &VulkanContext, cmd: vk::CommandBuffer, image: vk::Image,
-    mip_levels: u32, layer_count: u32,
-    old_l: vk::ImageLayout, new_l: vk::ImageLayout,
-    src_a: vk::AccessFlags, dst_a: vk::AccessFlags,
-    src_s: vk::PipelineStageFlags, dst_s: vk::PipelineStageFlags,
+    ctx: &VulkanContext,
+    cmd: vk::CommandBuffer,
+    image: vk::Image,
+    mip_levels: u32,
+    layer_count: u32,
+    old_l: vk::ImageLayout,
+    new_l: vk::ImageLayout,
+    src_a: vk::AccessFlags,
+    dst_a: vk::AccessFlags,
+    src_s: vk::PipelineStageFlags,
+    dst_s: vk::PipelineStageFlags,
 ) {
     let b = vk::ImageMemoryBarrier::default()
-        .old_layout(old_l).new_layout(new_l)
+        .old_layout(old_l)
+        .new_layout(new_l)
         .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
         .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
         .image(image)
-        .subresource_range(vk::ImageSubresourceRange::default()
-            .aspect_mask(vk::ImageAspectFlags::COLOR)
-            .base_mip_level(0).level_count(mip_levels)
-            .base_array_layer(0).layer_count(layer_count))
-        .src_access_mask(src_a).dst_access_mask(dst_a);
+        .subresource_range(
+            vk::ImageSubresourceRange::default()
+                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .base_mip_level(0)
+                .level_count(mip_levels)
+                .base_array_layer(0)
+                .layer_count(layer_count),
+        )
+        .src_access_mask(src_a)
+        .dst_access_mask(dst_a);
     unsafe {
-        ctx.ash_device().cmd_pipeline_barrier(cmd, src_s, dst_s,
-            vk::DependencyFlags::empty(), &[], &[], &[b]);
+        ctx.ash_device().cmd_pipeline_barrier(
+            cmd,
+            src_s,
+            dst_s,
+            vk::DependencyFlags::empty(),
+            &[],
+            &[],
+            &[b],
+        );
     }
 }
 
@@ -941,56 +1351,103 @@ impl ComputePass {
         push_size: u32,
     ) -> ReactorResult<Self> {
         let device = ctx.ash_device();
-        let code = read_spv(&mut Cursor::new(spv)).map_err(|e| ReactorError::with_source(
-            ErrorCode::VulkanImageCreation, "spv inválido", e))?;
-        let sm = unsafe { device.create_shader_module(
-            &vk::ShaderModuleCreateInfo::default().code(&code), None).map_err(verr)? };
+        let code = read_spv(&mut Cursor::new(spv)).map_err(|e| {
+            ReactorError::with_source(ErrorCode::VulkanImageCreation, "spv inválido", e)
+        })?;
+        let sm = unsafe {
+            device
+                .create_shader_module(&vk::ShaderModuleCreateInfo::default().code(&code), None)
+                .map_err(verr)?
+        };
 
-        let layout_set = unsafe { device.create_descriptor_set_layout(
-            &vk::DescriptorSetLayoutCreateInfo::default().bindings(bindings), None).map_err(verr)? };
+        let layout_set = unsafe {
+            device
+                .create_descriptor_set_layout(
+                    &vk::DescriptorSetLayoutCreateInfo::default().bindings(bindings),
+                    None,
+                )
+                .map_err(verr)?
+        };
 
         let layouts = [layout_set];
         let push_ranges = [vk::PushConstantRange {
-            stage_flags: vk::ShaderStageFlags::COMPUTE, offset: 0, size: push_size,
+            stage_flags: vk::ShaderStageFlags::COMPUTE,
+            offset: 0,
+            size: push_size,
         }];
-        let layout = unsafe { device.create_pipeline_layout(
-            &vk::PipelineLayoutCreateInfo::default().set_layouts(&layouts).push_constant_ranges(&push_ranges),
-            None).map_err(verr)? };
+        let layout = unsafe {
+            device
+                .create_pipeline_layout(
+                    &vk::PipelineLayoutCreateInfo::default()
+                        .set_layouts(&layouts)
+                        .push_constant_ranges(&push_ranges),
+                    None,
+                )
+                .map_err(verr)?
+        };
 
         let stage = vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::COMPUTE)
             .module(sm)
             .name(unsafe { std::ffi::CStr::from_bytes_with_nul_unchecked(b"main\0") });
-        let pipeline_info = vk::ComputePipelineCreateInfo::default().stage(stage).layout(layout);
-        let pipelines = unsafe { device.create_compute_pipelines(vk::PipelineCache::null(),
-            &[pipeline_info], None).map_err(|(_, e)| ReactorError::from(e))? };
-        unsafe { device.destroy_shader_module(sm, None); }
+        let pipeline_info = vk::ComputePipelineCreateInfo::default()
+            .stage(stage)
+            .layout(layout);
+        let pipelines = unsafe {
+            device
+                .create_compute_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
+                .map_err(|(_, e)| ReactorError::from(e))?
+        };
+        unsafe {
+            device.destroy_shader_module(sm, None);
+        }
 
-        Ok(Self { pipeline: pipelines[0], layout, layout_set, device: device.clone() })
+        Ok(Self {
+            pipeline: pipelines[0],
+            layout,
+            layout_set,
+            device: device.clone(),
+        })
     }
 
     fn dispatch<T: Copy>(
-        &self, ctx: &VulkanContext, cmd: vk::CommandBuffer,
-        sets: &[vk::DescriptorSet], pc: &T,
-        gx: u32, gy: u32, gz: u32,
+        &self,
+        ctx: &VulkanContext,
+        cmd: vk::CommandBuffer,
+        sets: &[vk::DescriptorSet],
+        pc: &T,
+        gx: u32,
+        gy: u32,
+        gz: u32,
     ) {
         let device = ctx.ash_device();
         unsafe {
             device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, self.pipeline);
-            device.cmd_bind_descriptor_sets(cmd, vk::PipelineBindPoint::COMPUTE,
-                self.layout, 0, sets, &[]);
-            let bytes = std::slice::from_raw_parts(
-                pc as *const T as *const u8, std::mem::size_of::<T>());
+            device.cmd_bind_descriptor_sets(
+                cmd,
+                vk::PipelineBindPoint::COMPUTE,
+                self.layout,
+                0,
+                sets,
+                &[],
+            );
+            let bytes =
+                std::slice::from_raw_parts(pc as *const T as *const u8, std::mem::size_of::<T>());
             device.cmd_push_constants(cmd, self.layout, vk::ShaderStageFlags::COMPUTE, 0, bytes);
             device.cmd_dispatch(cmd, gx, gy, gz);
             // Barrier global storage-write → storage-read para el siguiente paso.
             let mb = vk::MemoryBarrier::default()
                 .src_access_mask(vk::AccessFlags::SHADER_WRITE)
                 .dst_access_mask(vk::AccessFlags::SHADER_READ);
-            device.cmd_pipeline_barrier(cmd,
+            device.cmd_pipeline_barrier(
+                cmd,
                 vk::PipelineStageFlags::COMPUTE_SHADER,
                 vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER,
-                vk::DependencyFlags::empty(), &[mb], &[], &[]);
+                vk::DependencyFlags::empty(),
+                &[mb],
+                &[],
+                &[],
+            );
         }
     }
 }
@@ -1000,7 +1457,8 @@ impl Drop for ComputePass {
         unsafe {
             self.device.destroy_pipeline(self.pipeline, None);
             self.device.destroy_pipeline_layout(self.layout, None);
-            self.device.destroy_descriptor_set_layout(self.layout_set, None);
+            self.device
+                .destroy_descriptor_set_layout(self.layout_set, None);
         }
     }
 }
@@ -1011,11 +1469,19 @@ impl Drop for ComputePass {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct EquirectPC { face_size: i32, num_faces: i32, _pad: [f32; 2] }
+struct EquirectPC {
+    face_size: i32,
+    num_faces: i32,
+    _pad: [f32; 2],
+}
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct IrradiancePC { face_size: i32, num_faces: i32, _pad: [f32; 2] }
+struct IrradiancePC {
+    face_size: i32,
+    num_faces: i32,
+    _pad: [f32; 2],
+}
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -1028,12 +1494,19 @@ struct PrefilterPC {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct BrdfLutPC { size: i32, _pad: i32, _pad2: [f32; 2] }
+struct BrdfLutPC {
+    size: i32,
+    _pad: i32,
+    _pad2: [f32; 2],
+}
 
 // =============================================================================
 // Convert helpers
 // =============================================================================
 
 fn verr<E: std::fmt::Display>(e: E) -> ReactorError {
-    ReactorError::new(ErrorCode::VulkanImageCreation, format!("IBL Vulkan error: {}", e))
+    ReactorError::new(
+        ErrorCode::VulkanImageCreation,
+        format!("IBL Vulkan error: {}", e),
+    )
 }

@@ -17,8 +17,8 @@ use tracing_subscriber::EnvFilter;
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     // Logging configurable por env REACTOR_BRIDGE_LOG (info por defecto).
-    let filter = EnvFilter::try_from_env("REACTOR_BRIDGE_LOG")
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter =
+        EnvFilter::try_from_env("REACTOR_BRIDGE_LOG").unwrap_or_else(|_| EnvFilter::new("info"));
     tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_target(false)

@@ -281,6 +281,7 @@ impl Reactor {
             swapchain.images.len() as u32,
             swapchain.format,
             depth_image_view,
+            msaa_samples == vk::SampleCountFlags::TYPE_1,
         )?;
 
         Ok(Self {
@@ -336,14 +337,16 @@ impl Reactor {
     /// Inicializa toda la infraestructura para Cascaded Shadow Maps (CSM)
     pub fn init_shadows(&mut self) -> ReactorResult<()> {
         use ash::vk;
-        
-        let shadow_map = crate::graphics::shadows::ShadowMap::new(crate::graphics::shadows::ShadowConfig::default());
-        
+
+        let shadow_map = crate::graphics::shadows::ShadowMap::new(
+            crate::graphics::shadows::ShadowConfig::default(),
+        );
+
         let width = 2048;
         let height = 2048;
         let format = vk::Format::D32_SFLOAT;
         let device = self.context.ash_device();
-        
+
         // 1. Crear Imagen Texture Array de 4 capas
         let image_info = vk::ImageCreateInfo::default()
             .image_type(vk::ImageType::TYPE_2D)
@@ -361,16 +364,24 @@ impl Reactor {
         let requirements = unsafe { device.get_image_memory_requirements(shadow_image) };
 
         let memory_props = unsafe {
-            self.context.instance.get_physical_device_memory_properties(self.context.physical_device)
+            self.context
+                .instance
+                .get_physical_device_memory_properties(self.context.physical_device)
         };
         let memory_type_index = (0..memory_props.memory_type_count)
             .find(|&i| {
                 let suitable = (requirements.memory_type_bits & (1 << i)) != 0;
                 let memory_type = memory_props.memory_types[i as usize];
-                suitable && memory_type.property_flags.contains(vk::MemoryPropertyFlags::DEVICE_LOCAL)
+                suitable
+                    && memory_type
+                        .property_flags
+                        .contains(vk::MemoryPropertyFlags::DEVICE_LOCAL)
             })
             .ok_or_else(|| {
-                ReactorError::new(ErrorCode::VulkanMemoryAllocation, "Failed to find memory type for shadow map")
+                ReactorError::new(
+                    ErrorCode::VulkanMemoryAllocation,
+                    "Failed to find memory type for shadow map",
+                )
             })?;
 
         let alloc_info = vk::MemoryAllocateInfo::default()
@@ -437,7 +448,8 @@ impl Reactor {
                 .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT),
         ];
         let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
-        let shadow_descriptor_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
+        let shadow_descriptor_layout =
+            unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
 
         // 5. Crear Pool de Descriptores de Sombras
         let pool_sizes = [
@@ -464,32 +476,36 @@ impl Reactor {
         let mut shadow_uniform_buffers = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
         for i in 0..MAX_FRAMES_IN_FLIGHT {
             let size = std::mem::size_of::<crate::graphics::shadows::ShadowUniformData>() as u64;
-            let buffer = crate::graphics::buffer::Buffer::new_uniform(&self.context, self.allocator.clone(), size)?;
-            
+            let buffer = crate::graphics::buffer::Buffer::new_uniform(
+                &self.context,
+                self.allocator.clone(),
+                size,
+            )?;
+
             let image_info = vk::DescriptorImageInfo::default()
                 .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
                 .image_view(shadow_array_view)
                 .sampler(shadow_sampler);
-                
+
             let buffer_info = vk::DescriptorBufferInfo::default()
                 .buffer(buffer.handle)
                 .offset(0)
                 .range(size);
-                
+
             let write_image = vk::WriteDescriptorSet::default()
                 .dst_set(shadow_descriptor_sets[i])
                 .dst_binding(0)
                 .dst_array_element(0)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                 .image_info(std::slice::from_ref(&image_info));
-                
+
             let write_buffer = vk::WriteDescriptorSet::default()
                 .dst_set(shadow_descriptor_sets[i])
                 .dst_binding(1)
                 .dst_array_element(0)
                 .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
                 .buffer_info(std::slice::from_ref(&buffer_info));
-                
+
             unsafe {
                 device.update_descriptor_sets(&[write_image, write_buffer], &[]);
             }
@@ -499,11 +515,25 @@ impl Reactor {
         // 8. Cargar y Crear Pipeline de Sombras (Depth-only)
         let shadow_vert_spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
             "../../shaders/shadow_vert.spv"
-        ))).map_err(|e| ReactorError::with_source(ErrorCode::VulkanShaderCompilation, "Failed to load shadow_vert spv", e))?;
-        
+        )))
+        .map_err(|e| {
+            ReactorError::with_source(
+                ErrorCode::VulkanShaderCompilation,
+                "Failed to load shadow_vert spv",
+                e,
+            )
+        })?;
+
         let shadow_frag_spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
             "../../shaders/shadow_frag.spv"
-        ))).map_err(|e| ReactorError::with_source(ErrorCode::VulkanShaderCompilation, "Failed to load shadow_frag spv", e))?;
+        )))
+        .map_err(|e| {
+            ReactorError::with_source(
+                ErrorCode::VulkanShaderCompilation,
+                "Failed to load shadow_frag spv",
+                e,
+            )
+        })?;
 
         let config = crate::graphics::pipeline::PipelineConfig {
             cull_mode: vk::CullModeFlags::BACK,
@@ -537,7 +567,7 @@ impl Reactor {
         self.shadow_descriptor_pool = Some(shadow_descriptor_pool);
         self.shadow_descriptor_sets = shadow_descriptor_sets;
         self.shadow_uniform_buffers = shadow_uniform_buffers;
-        
+
         println!("✅ CSM Shadow Maps initialized: 4 cascades @ 2048x2048");
 
         Ok(())

@@ -102,6 +102,7 @@ impl Reactor {
             self.swapchain.images.len() as u32,
             self.swapchain.format,
             self.depth_image_view.unwrap(),
+            self.msaa_samples == vk::SampleCountFlags::TYPE_1,
         )?;
 
         Ok(())

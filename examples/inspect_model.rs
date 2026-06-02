@@ -18,11 +18,19 @@ fn main() {
             println!("Images count: {}", images.len());
 
             for (i, tex) in doc.textures().enumerate() {
-                println!("Texture #{} Index: {}, Source Image: {}", i, tex.index(), tex.source().index());
+                println!(
+                    "Texture #{} Index: {}, Source Image: {}",
+                    i,
+                    tex.index(),
+                    tex.source().index()
+                );
             }
 
             for (i, img) in images.iter().enumerate() {
-                println!("Image #{} Format: {:?}, Dimensions: {}x{}", i, img.format, img.width, img.height);
+                println!(
+                    "Image #{} Format: {:?}, Dimensions: {}x{}",
+                    i, img.format, img.width, img.height
+                );
             }
 
             let mut min_x = f32::MAX;

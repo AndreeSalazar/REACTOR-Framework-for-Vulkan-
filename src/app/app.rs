@@ -1342,10 +1342,17 @@ impl<A: ReactorApp> ApplicationHandler for AppRunner<A> {
 
         crate::systems::console::ReactorBanner::print_init(
             &config.title,
-            &format!("{}×{}", window.inner_size().width, window.inner_size().height),
+            &format!(
+                "{}×{}",
+                window.inner_size().width,
+                window.inner_size().height
+            ),
             &format!("{:?}", reactor.msaa_samples),
             reactor.ray_tracing.is_some(),
-            &format!("{}", crate::systems::console::gpu_name_short(&reactor.context)),
+            &format!(
+                "{}",
+                crate::systems::console::gpu_name_short(&reactor.context)
+            ),
         );
 
         let aspect = window.inner_size().width as f32 / window.inner_size().height.max(1) as f32;
