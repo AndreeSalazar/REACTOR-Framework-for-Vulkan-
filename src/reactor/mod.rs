@@ -113,6 +113,12 @@ pub struct Reactor {
     pub shadow_descriptor_pool: Option<vk::DescriptorPool>,
     pub shadow_descriptor_sets: Vec<vk::DescriptorSet>,
     pub shadow_uniform_buffers: Vec<crate::graphics::buffer::Buffer>,
+
+    // ── Screen-Space Decals ──
+    pub decals: Vec<crate::resources::decal::Decal>,
+    pub decal_pipeline: Option<crate::graphics::pipeline::Pipeline>,
+    pub decal_descriptor_layout: Option<vk::DescriptorSetLayout>,
+    pub decal_cube_mesh: Option<crate::resources::mesh::Mesh>,
 }
 
 impl Reactor {
@@ -137,6 +143,12 @@ impl Drop for Reactor {
 
             self.gbuffer = None;
             self.temporal_history = None;
+            self.decals.clear();
+            self.decal_cube_mesh = None;
+            if let Some(layout) = self.decal_descriptor_layout.take() {
+                self.context.device.destroy_descriptor_set_layout(layout, None);
+            }
+            self.decal_pipeline = None;
 
             // ── Shadows ──
             if let Some(pool) = self.shadow_descriptor_pool.take() {

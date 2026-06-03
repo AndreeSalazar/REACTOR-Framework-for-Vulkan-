@@ -312,7 +312,7 @@ impl Reactor {
             temporal_history.storage_writes_supported
         );
 
-        Ok(Self {
+        let mut reactor = Self {
             context,
             swapchain,
             allocator,
@@ -359,7 +359,89 @@ impl Reactor {
             shadow_descriptor_pool: None,
             shadow_descriptor_sets: Vec::new(),
             shadow_uniform_buffers: Vec::new(),
-        })
+            decals: Vec::new(),
+            decal_pipeline: None,
+            decal_descriptor_layout: None,
+            decal_cube_mesh: None,
+        };
+
+        reactor.init_decals()?;
+        Ok(reactor)
+    }
+}
+
+impl Reactor {
+    /// Inicializa el pipeline de proyección de decals en espacio de pantalla (MRT).
+    pub fn init_decals(&mut self) -> ReactorResult<()> {
+        let device = self.context.ash_device();
+
+        // 1. Crear el Layout de Descriptores para Decals
+        let bindings = [
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(1)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(2)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(3)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+        ];
+
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+        let decal_descriptor_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
+
+        // 2. Cargar código de shaders desde el cookbook/asset manager
+        let vert_words = crate::base_shader::BaseShaderAsset::ShadowVert.words();
+        let frag_words = crate::base_shader::BaseShaderAsset::DecalFrag.words();
+
+        let config = crate::graphics::pipeline::PipelineConfig {
+            cull_mode: vk::CullModeFlags::NONE, // Procesar ambas caras del cubo de proyección
+            depth_write: false,
+            depth_test: true,
+            blend_enable: true,
+            ..Default::default()
+        };
+
+        // Renderizar directamente sobre el target de color offscreen (formato swapchain)
+        let color_formats = [
+            self.swapchain.format,
+        ];
+
+        let decal_pipeline = crate::graphics::pipeline::Pipeline::with_config_multi_color(
+            &self.context.device,
+            None,
+            &vert_words,
+            &frag_words,
+            self.swapchain.extent.width,
+            self.swapchain.extent.height,
+            &config,
+            &[decal_descriptor_layout],
+            &color_formats,
+            Some(self.depth_format),
+        )?;
+
+        self.decal_descriptor_layout = Some(decal_descriptor_layout);
+        self.decal_pipeline = Some(decal_pipeline);
+
+        let (vertices, indices) = crate::resources::primitives::Primitives::cube();
+        let decal_cube_mesh = self.create_mesh(&vertices, &indices)?;
+        self.decal_cube_mesh = Some(decal_cube_mesh);
+
+        log::info!("✅ Screen-Space MRT Decals pipeline initialized successfully");
+
+        Ok(())
     }
 }
 

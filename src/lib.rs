@@ -74,6 +74,7 @@ pub use reactor::Reactor;
 pub use resources::font::FontAsset;
 pub use resources::material::Material;
 pub use resources::mesh::Mesh;
+pub use resources::decal::Decal;
 pub use resources::vertex::Vertex;
 pub use scene::camera::Camera;
 pub use scene::transform::Transform;
@@ -130,6 +131,7 @@ pub mod prelude {
         Material,
         // Resources
         Mesh,
+        Decal,
         PauseConfig,
         PauseConfigPage,
         PauseConfigResult,

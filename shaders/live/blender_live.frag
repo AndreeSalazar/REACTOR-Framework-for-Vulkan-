@@ -358,7 +358,32 @@ void main() {
     vec3 fillRad = vec3(0.55, 0.65, 0.85);
     vec3 backRad = vec3(1.6, 1.55, 1.50);
 
-    if (use_aniso) {
+    bool is_hair = (anisotropy > 0.85);
+
+    if (is_hair) {
+        // Modelo Kajiya-Kay para cabello (RenderMan Style) con especular primario y secundario desplazados
+        float shift = 0.08;
+        float sec_roughness = clamp(roughness * 1.6, 0.04, 1.0);
+        vec3 sec_color = mix(vec3(1.0), albedo, 0.6); // Reflejo interno coloreado
+        
+        lo += brdf_eval_hair(T, N, V, keyDir, albedo, roughness, shift, sec_roughness, sec_color) * keyRad;
+        lo += brdf_eval_hair(T, N, V, fillDir, albedo, roughness, shift, sec_roughness, sec_color) * fillRad;
+        lo += brdf_eval_hair(T, N, V, backDir, albedo, roughness, shift, sec_roughness, sec_color) * backRad;
+        
+        // Point light dinámica
+        vec3 pointL = normalize(push.light_pos.xyz - P);
+        float dist = length(push.light_pos.xyz - P);
+        float atten = 1.0 / (dist * dist + 1.0);
+        vec3 point_radiance = vec3(1.0, 1.0, 1.0) * 12.0 * shadow_factor * atten;
+        lo += brdf_eval_hair(T, N, V, pointL, albedo, roughness, shift, sec_roughness, sec_color) * point_radiance;
+        
+        // Sun light dinámica
+        if (shadow.shadow_enabled != 0) {
+            vec3 L_sun = -normalize(shadow.light_direction.xyz);
+            vec3 sun_radiance = vec3(2.5, 2.4, 2.2) * shadow_factor;
+            lo += brdf_eval_hair(T, N, V, L_sun, albedo, roughness, shift, sec_roughness, sec_color) * sun_radiance;
+        }
+    } else if (use_aniso) {
         lo += light_eval_directional_anisotropic(N, V, keyDir, T, B, keyRad, albedo, metallic, roughness, anisotropy, f0);
         lo += light_eval_directional_anisotropic(N, V, fillDir, T, B, fillRad, albedo, metallic, roughness, anisotropy, f0);
         lo += light_eval_directional_anisotropic(N, V, backDir, T, B, backRad, albedo, metallic, roughness, anisotropy, f0);

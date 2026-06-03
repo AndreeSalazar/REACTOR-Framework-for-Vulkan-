@@ -45,6 +45,8 @@ pub use gltf_loader::{
 };
 
 // Legacy / actualmente funcional
+pub mod decal;
+pub use decal::Decal;
 pub use asset_manager::{AssetHandle, AssetManager, AssetState, AssetStats};
 pub use material::{Material, MaterialBuilder};
 pub use mesh::Mesh;
@@ -53,3 +55,4 @@ pub use pbr_material::{IBLEnvironment, IBLUniformData, PBRMaterial, PBRTextures,
 pub use primitives::Primitives;
 pub use texture::Texture;
 pub use vertex::{InstanceData, Vertex, VertexPBR};
+

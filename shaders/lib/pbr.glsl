@@ -186,4 +186,40 @@ vec3 brdf_shade_anisotropic(vec3 N, vec3 V, vec3 L, vec3 T, vec3 B, vec3 radianc
     return (s.diffuse + s.specular) * radiance;
 }
 
+// ── Sombreado de Cabello Kajiya-Kay (RenderMan / Scheuermann Style) ──────────
+vec3 brdf_eval_hair(vec3 T, vec3 N, vec3 V, vec3 L, vec3 albedo, float roughness,
+                     float shift, float secondary_roughness, vec3 secondary_color) {
+    vec3 H = normalize(V + L);
+    float NoL = max(dot(N, L), 0.0);
+    
+    // Desplazamiento de la tangente en dirección de la normal para simular
+    // la orientación de las escamas del cabello (Marschner-lite/Scheuermann)
+    vec3 t1 = normalize(T + N * shift);
+    vec3 t2 = normalize(T - N * shift);
+    
+    // Especular Primario (brillo en la superficie exterior, color de luz blanca)
+    float dotTH1 = dot(t1, H);
+    float sinTH1 = sqrt(max(0.0, 1.0 - dotTH1 * dotTH1));
+    float alpha1 = roughness * roughness;
+    float spec_power1 = 2.0 / max(alpha1 * alpha1, 0.001) - 2.0;
+    float spec1 = pow(sinTH1, max(1.0, spec_power1));
+    
+    // Especular Secundario (luz transmitida y reflejada internamente, coloreada por el cabello)
+    float dotTH2 = dot(t2, H);
+    float sinTH2 = sqrt(max(0.0, 1.0 - dotTH2 * dotTH2));
+    float alpha2 = secondary_roughness * secondary_roughness;
+    float spec_power2 = 2.0 / max(alpha2 * alpha2, 0.001) - 2.0;
+    float spec2 = pow(sinTH2, max(1.0, spec_power2));
+    
+    // Difusa Wrap de Kajiya-Kay
+    float dotTL = dot(T, L);
+    float sinTL = sqrt(max(0.0, 1.0 - dotTL * dotTL));
+    vec3 diffuse = albedo * sinTL * REACTOR_INV_PI;
+    
+    // Atenuar por sombra normalizada
+    vec3 specular = vec3(spec1) + secondary_color * spec2;
+    return (diffuse + specular) * NoL;
+}
+
 #endif
+
