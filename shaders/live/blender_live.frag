@@ -46,6 +46,13 @@ layout(set = 2, binding = 1) uniform ShadowData {
     float normal_bias;
     float pcf_radius;
     uint shadow_enabled;
+    // PCSS — blocker search + penumbra variable.
+    // light_size_uv en UV-space (0 = PCF puro; 0.005-0.025 = soft realista).
+    float pcss_light_size;
+    uint  pcss_samples;          // muestras de blocker search (8/16/24)
+    // Debug visualization: 0=off, 1=cascade tint, 2=texel density, 3=penumbra heat
+    uint  shadow_debug_mode;
+    uint  _padding;
 } shadow;
 
 #include "ibl_textures.glsl"
@@ -76,27 +83,55 @@ float cascade_edge_fade(vec2 uv) {
     return smoothstep(0.003, 0.035, min_edge);
 }
 
-// Cálculo de factor de sombra con PCF Poisson rotado y Cascaded Shadow Maps (CSM)
-float calculate_shadow(vec3 world_pos, vec3 normal) {
+// ── PCSS: blocker search ──────────────────────────────────────────────────────
+// Devuelve la profundidad media de los ocluyentes encontrados en un disco de
+// radio `search_radius_uv` alrededor del receptor. Si no hay ocluyentes (toda
+// la zona está iluminada) devuelve -1 para indicar "skip PCF, totalmente lit".
+float pcss_blocker_search(vec2 uv, int cascade_idx, float z_receiver,
+                          float search_radius_uv, int sample_count,
+                          mat2 rot, float cascade_scale)
+{
+    float blocker_sum = 0.0;
+    float blocker_cnt = 0.0;
+    // Reusamos los 12 taps de Poisson pero permitimos hasta `sample_count`.
+    int n = min(sample_count, 12);
+    for (int i = 0; i < n; ++i) {
+        vec2 offset = rot * CSM_POISSON_12[i] * search_radius_uv * cascade_scale;
+        vec2 s_uv = uv + offset;
+        if (any(lessThan(s_uv, vec2(0.0))) || any(greaterThan(s_uv, vec2(1.0)))) continue;
+        float depth = texture(u_shadow_map, vec3(s_uv, float(cascade_idx))).r;
+        if (depth < z_receiver) {
+            blocker_sum += depth;
+            blocker_cnt += 1.0;
+        }
+    }
+    if (blocker_cnt < 0.5) return -1.0;
+    return blocker_sum / blocker_cnt;
+}
+
+// Cálculo de factor de sombra con PCSS (blocker search + penumbra variable)
+// o PCF Poisson rotado clásico si pcss_light_size == 0.
+// Devuelve sombra en .x, cascade index en .y, penumbra width en .z (para debug).
+vec3 calculate_shadow_debug(vec3 world_pos, vec3 normal) {
     if (shadow.shadow_enabled == 0) {
-        return 1.0;
+        return vec3(1.0, 0.0, 0.0);
     }
 
     int cascade_idx = 3;
     vec4 shadow_coord = vec4(0.0);
-    
+
     for (int i = 0; i < 4; i++) {
         vec4 proj_coord = shadow.cascade_view_proj[i] * vec4(world_pos, 1.0);
         vec3 ndc = proj_coord.xyz / proj_coord.w;
         vec3 uv = ndc * 0.5 + 0.5;
-        
+
         if (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0 && ndc.z >= 0.0 && ndc.z <= 1.0) {
             cascade_idx = i;
             shadow_coord = vec4(uv.xy, float(cascade_idx), ndc.z);
             break;
         }
     }
-    
+
     if (cascade_idx == 3 && (shadow_coord.x < 0.0 || shadow_coord.x > 1.0 || shadow_coord.y < 0.0 || shadow_coord.y > 1.0)) {
         vec4 proj_coord = shadow.cascade_view_proj[3] * vec4(world_pos, 1.0);
         vec3 ndc = proj_coord.xyz / proj_coord.w;
@@ -116,23 +151,97 @@ float calculate_shadow(vec3 world_pos, vec3 normal) {
     if (shadow_uv.z > 1.0 || shadow_uv.z < 0.0 ||
         any(lessThan(shadow_uv.xy, vec2(0.0))) ||
         any(greaterThan(shadow_uv.xy, vec2(1.0)))) {
-        return 1.0;
+        return vec3(1.0, float(cascade_idx), 0.0);
     }
 
     float current_depth = shadow_uv.z - bias;
-    float shadow_factor = 0.0;
     vec2 texel_size = 1.0 / vec2(textureSize(u_shadow_map, 0).xy);
-    vec2 base_radius = max(vec2(shadow.pcf_radius), texel_size);
     float cascade_scale = mix(1.35, 2.65, float(cascade_idx) / 3.0);
     mat2 rot = rotate2d(hash12(gl_FragCoord.xy + vec2(float(cascade_idx) * 37.0, shadow_uv.z * 8192.0)) * 6.2831853);
 
+    // ── PCSS path: blocker search → penumbra variable → PCF escalado ──────────
+    float pcf_radius_uv = max(shadow.pcf_radius, texel_size.x);
+    float penumbra_uv = pcf_radius_uv;
+    bool pcss_enabled = shadow.pcss_light_size > 0.0001;
+
+    if (pcss_enabled) {
+        // 1. Blocker search en un disco de tamaño proporcional al light_size.
+        float search_radius = shadow.pcss_light_size * (1.0 + float(cascade_idx) * 0.5);
+        int sample_count = int(max(shadow.pcss_samples, 4u));
+        float avg_blocker = pcss_blocker_search(
+            shadow_uv.xy, cascade_idx, current_depth,
+            search_radius, sample_count, rot, cascade_scale
+        );
+
+        if (avg_blocker < 0.0) {
+            // No hay ocluyentes — totalmente iluminado, salimos pronto.
+            return vec3(1.0, float(cascade_idx), 0.0);
+        }
+
+        // 2. Penumbra (PCSS classic):
+        //    penumbra = (z_receiver - z_blocker) / z_blocker * light_size
+        float penumbra_ratio = (current_depth - avg_blocker) / max(avg_blocker, 1e-5);
+        penumbra_uv = clamp(penumbra_ratio * shadow.pcss_light_size, texel_size.x, pcf_radius_uv * 8.0);
+    }
+
+    // ── PCF final con radio = penumbra ────────────────────────────────────────
+    float shadow_factor = 0.0;
     for (int i = 0; i < 12; ++i) {
-        vec2 offset = rot * CSM_POISSON_12[i] * base_radius * cascade_scale;
+        vec2 offset = rot * CSM_POISSON_12[i] * penumbra_uv * cascade_scale;
         shadow_factor += sample_shadow_compare(shadow_uv.xy + offset, cascade_idx, current_depth);
     }
 
     float pcf = shadow_factor / 12.0;
-    return mix(1.0, pcf, cascade_edge_fade(shadow_uv.xy));
+    float final_shadow = mix(1.0, pcf, cascade_edge_fade(shadow_uv.xy));
+    return vec3(final_shadow, float(cascade_idx), penumbra_uv);
+}
+
+// Wrapper compatible con la API anterior (un solo float).
+float calculate_shadow(vec3 world_pos, vec3 normal) {
+    return calculate_shadow_debug(world_pos, normal).x;
+}
+
+// ── Debug view de cascadas ────────────────────────────────────────────────────
+// Modos:
+//   0 = off
+//   1 = tinte de cascada (rojo/verde/azul/amarillo)
+//   2 = texel density (gradient — escala log del tamaño de texel en world)
+//   3 = penumbra heat (PCSS — azul=duro, rojo=blando)
+vec3 apply_shadow_debug_tint(vec3 color, vec3 shadow_dbg, vec3 world_pos) {
+    if (shadow.shadow_debug_mode == 0u) return color;
+
+    int cascade_idx = int(shadow_dbg.y + 0.5);
+    if (shadow.shadow_debug_mode == 1u) {
+        vec3 tints[4] = vec3[](
+            vec3(1.0, 0.35, 0.35),
+            vec3(0.35, 1.0, 0.35),
+            vec3(0.35, 0.55, 1.0),
+            vec3(1.0, 0.95, 0.35)
+        );
+        vec3 tint = tints[clamp(cascade_idx, 0, 3)];
+        return mix(color, color * tint, 0.55);
+    }
+    if (shadow.shadow_debug_mode == 2u) {
+        // Texel density: estima cuántos texels world-space caben en un fragment.
+        vec4 proj = shadow.cascade_view_proj[cascade_idx] * vec4(world_pos, 1.0);
+        vec2 uv = (proj.xy / proj.w) * 0.5 + 0.5;
+        vec2 duvdx = dFdx(uv);
+        vec2 duvdy = dFdy(uv);
+        float density = max(length(duvdx), length(duvdy)) *
+                        float(textureSize(u_shadow_map, 0).x);
+        // density < 1 = sobre-sample (verde); >1 = sub-sample / aliasing (rojo).
+        float t = clamp(log2(max(density, 1e-3)) * 0.25 + 0.5, 0.0, 1.0);
+        vec3 heat = mix(vec3(0.1, 0.95, 0.2), vec3(1.0, 0.15, 0.1), t);
+        return mix(color, heat, 0.6);
+    }
+    if (shadow.shadow_debug_mode == 3u) {
+        // Penumbra heat (sólo significativo con PCSS).
+        float penumbra = shadow_dbg.z;
+        float t = clamp(penumbra * 35.0, 0.0, 1.0);
+        vec3 heat = mix(vec3(0.1, 0.25, 1.0), vec3(1.0, 0.3, 0.15), t);
+        return mix(color, heat, 0.55);
+    }
+    return color;
 }
 
 layout(location = 0) in vec3 vWorldNormal;
