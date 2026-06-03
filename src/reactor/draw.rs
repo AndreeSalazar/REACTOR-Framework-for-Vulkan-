@@ -766,6 +766,14 @@ impl Reactor {
                 post_settings.depth_far = self.camera_far.max(post_settings.depth_near + 0.001);
                 post_settings.camera_proj_x = self.camera_proj.x_axis.x;
                 post_settings.camera_proj_y = self.camera_proj.y_axis.y;
+
+                // Transform sun direction to view space for contact shadows
+                let sun_dir_world = -scene.sun_direction; // pointing towards light
+                let sun_dir_view = self.camera_view.transform_vector3(sun_dir_world).normalize();
+                post_settings.light_dir_x = sun_dir_view.x;
+                post_settings.light_dir_y = sun_dir_view.y;
+                post_settings.light_dir_z = sun_dir_view.z;
+
                 let settings_bytes = bytemuck::bytes_of(&post_settings);
                 self.context.device.cmd_push_constants(
                     command_buffer,

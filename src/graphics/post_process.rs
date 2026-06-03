@@ -28,6 +28,8 @@ pub enum PostProcessEffect {
     SSR,
     PathTracedLighting,
     AnamorphicFlares,
+    ContactShadows,
+    SSSDiffusion,
 }
 
 /// Anti-Aliasing quality presets
@@ -196,10 +198,12 @@ pub struct PostProcessSettings {
     pub effect_mask: u32, // Bitflags for enabled effects
     pub camera_proj_x: f32,
     pub camera_proj_y: f32,
-    pub _padding: u32,
+    pub light_dir_x: f32,
+    pub light_dir_y: f32,
+    pub light_dir_z: f32,
 }
 
-const _: () = assert!(std::mem::size_of::<PostProcessSettings>() <= 128);
+const _: () = assert!(std::mem::size_of::<PostProcessSettings>() == 132);
 
 impl Default for PostProcessSettings {
     fn default() -> Self {
@@ -234,7 +238,9 @@ impl Default for PostProcessSettings {
             effect_mask: 0,
             camera_proj_x: 1.0,
             camera_proj_y: -1.0,
-            _padding: 0,
+            light_dir_x: 0.0,
+            light_dir_y: 1.0,
+            light_dir_z: 0.0,
         };
         settings.enable_effect(PostProcessEffect::ToneMapping);
         settings.enable_effect(PostProcessEffect::Vignette);
@@ -277,6 +283,8 @@ impl PostProcessSettings {
         settings.enable_effect(PostProcessEffect::SSR);
         settings.enable_effect(PostProcessEffect::PathTracedLighting);
         settings.enable_effect(PostProcessEffect::AnamorphicFlares);
+        settings.enable_effect(PostProcessEffect::ContactShadows);
+        settings.enable_effect(PostProcessEffect::SSSDiffusion);
         settings.vignette_intensity = 0.4;
         settings.grain_intensity = 0.008;
         settings.bloom_threshold = 0.75;

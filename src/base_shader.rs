@@ -603,6 +603,8 @@ impl BaseShaderCookbook {
             PostProcessEffect::LutColorGrading,
             PostProcessEffect::ToneMapping,
             PostProcessEffect::AnamorphicFlares,
+            PostProcessEffect::ContactShadows,
+            PostProcessEffect::SSSDiffusion,
         ] {
             cookbook.post_settings.enable_effect(effect);
         }

@@ -803,6 +803,8 @@ impl Xenofall {
         s.enable_effect(PostProcessEffect::FXAA);
         s.enable_effect(PostProcessEffect::FilmGrain);
         s.enable_effect(PostProcessEffect::ChromaticAberration);
+        s.enable_effect(PostProcessEffect::ContactShadows);
+        s.enable_effect(PostProcessEffect::SSSDiffusion);
         ctx.apply_base_shader(&shader);
 
         let sun_dir = Vec3::new(-0.22, -0.86, -0.45).normalize();
