@@ -614,6 +614,8 @@ impl BaseShaderCookbook {
             PostProcessEffect::DepthOfField,
             PostProcessEffect::AutoExposure,
             PostProcessEffect::TAA,
+            PostProcessEffect::MotionBlur,
+            PostProcessEffect::GTAO,
         ] {
             cookbook.post_settings.enable_effect(effect);
         }

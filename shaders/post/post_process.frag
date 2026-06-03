@@ -67,6 +67,9 @@ layout(push_constant) uniform PostProcessSettings {
     // Depth of Field (Feature A)
     float dof_focus_distance;
     float dof_aperture;
+
+    // Motion Blur (Feature F)
+    float motion_blur_strength;
 } settings;
 
 // Effect indices (matching PostProcessEffect enum)
@@ -91,6 +94,8 @@ layout(push_constant) uniform PostProcessSettings {
 #define EFFECT_SSS_DIFFUSION      (1u << 21)
 #define EFFECT_DEPTH_OF_FIELD     (1u << 22)
 #define EFFECT_AUTO_EXPOSURE      (1u << 23)
+#define EFFECT_MOTION_BLUR        (1u << 24)
+#define EFFECT_GTAO               (1u << 25)
 
 float luminance(vec3 color) {
     return dot(color, vec3(0.2126, 0.7152, 0.0722));
@@ -551,6 +556,68 @@ vec3 lut_color_grade(vec3 color) {
     return mix(color, graded, settings.lut_strength);
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// Motion Blur — velocity-based directional blur from G-Buffer motion vectors
+// Uses 12-tap ray along the velocity direction, depth-aware weighting
+// to prevent background bleeding, and velocity clamping for stability.
+// ═══════════════════════════════════════════════════════════════════
+vec3 motion_blur(vec2 uv, vec2 texelSize, vec3 centerColor) {
+    // Sample motion vector (stored as screen-space velocity in RG channels)
+    vec2 velocity = texture(motionTexture, uv).rg;
+
+    // Scale by user strength parameter and clamp maximum radius (max 32 pixels)
+    float maxRadius = 32.0 * settings.motion_blur_strength;
+    float velLen = length(velocity);
+    if (velLen < 0.0005) {
+        return centerColor; // Negligible motion — early exit
+    }
+    velocity = velocity * min(velLen, maxRadius * texelSize.x) / velLen;
+
+    float centerDepth = texture(depthTexture, uv).r;
+    float centerLinDepth = linearize_depth(centerDepth);
+
+    // Directional blur: 12 taps along velocity vector, symmetric around center
+    const int NUM_TAPS = 12;
+    vec3 accumulated = centerColor;
+    float totalWeight = 1.0;
+
+    for (int i = 1; i <= NUM_TAPS; ++i) {
+        float t = float(i) / float(NUM_TAPS);
+
+        // Sample forward and backward along velocity
+        vec2 uvFwd = uv + velocity * t;
+        vec2 uvBwd = uv - velocity * t;
+
+        // Clamp to screen bounds
+        uvFwd = clamp(uvFwd, vec2(0.001), vec2(0.999));
+        uvBwd = clamp(uvBwd, vec2(0.001), vec2(0.999));
+
+        // Depth-aware weighting: reject samples at very different depths
+        float depthFwd = linearize_depth(texture(depthTexture, uvFwd).r);
+        float depthBwd = linearize_depth(texture(depthTexture, uvBwd).r);
+
+        float wFwd = 1.0 / (1.0 + abs(depthFwd - centerLinDepth) * 5.0);
+        float wBwd = 1.0 / (1.0 + abs(depthBwd - centerLinDepth) * 5.0);
+
+        // Velocity-consistency weighting: prefer samples with similar velocity
+        vec2 velFwd = texture(motionTexture, uvFwd).rg;
+        vec2 velBwd = texture(motionTexture, uvBwd).rg;
+        wFwd *= max(0.1, 1.0 - length(velFwd - velocity) * 8.0);
+        wBwd *= max(0.1, 1.0 - length(velBwd - velocity) * 8.0);
+
+        // Attenuation toward edges of blur kernel
+        float falloff = 1.0 - t * 0.3;
+        wFwd *= falloff;
+        wBwd *= falloff;
+
+        accumulated += texture(screenTexture, uvFwd).rgb * wFwd;
+        accumulated += texture(screenTexture, uvBwd).rgb * wBwd;
+        totalWeight += wFwd + wBwd;
+    }
+
+    return accumulated / totalWeight;
+}
+
 vec3 path_traced_lighting_resolve(vec2 uv, vec2 texelSize, vec3 color) {
     vec3 normal = estimate_screen_normal(uv, texelSize);
     float centerLum = luminance(color);
@@ -866,10 +933,15 @@ void main() {
         color = screen_space_gi(uv, texelSize, color);
     }
 
-    // 7.5. Micro-Contact Shadows (depth-buffer raymarching toward light)
+    // 7.5. Micro-contact shadows from depth-buffer
     if ((settings.effect_mask & EFFECT_CONTACT_SHADOWS) != 0) {
         float contactShadow = contact_shadow_trace(uv, texelSize);
         color *= contactShadow;
+    }
+
+    // 7.55. Screen-Space Motion Blur (velocity-based directional blur)
+    if ((settings.effect_mask & EFFECT_MOTION_BLUR) != 0) {
+        color = motion_blur(uv, texelSize, color);
     }
 
     // 7.6. Screen-Space Subsurface Scattering (skin diffusion)
