@@ -103,11 +103,17 @@ impl Reactor {
                 })?
         };
 
-        let mut mat = MaterialBuilder::new(vert_code.to_vec(), frag_code.to_vec())
+        let mut builder = MaterialBuilder::new(vert_code.to_vec(), frag_code.to_vec())
             .msaa(self.msaa_samples)
             .fragment_shading_rate(self.context.supports_fragment_shading_rate())
             .descriptor_layout(empty_layout)    // set = 0 (vacío)
-            .descriptor_layout(ibl_set_layout)  // set = 1 (IBL textures)
+            .descriptor_layout(ibl_set_layout); // set = 1 (IBL textures)
+
+        if let Some(shadow_layout) = self.shadow_descriptor_layout {
+            builder = builder.descriptor_layout(shadow_layout); // set = 2 (Sombras)
+        }
+
+        let mut mat = builder
             .uses_ibl(true)
             .build(
                 &self.context,
@@ -283,11 +289,17 @@ impl Reactor {
         }
 
         // 5. Build material pipeline
-        let mut mat = MaterialBuilder::new(vert_code.to_vec(), frag_code.to_vec())
+        let mut builder = MaterialBuilder::new(vert_code.to_vec(), frag_code.to_vec())
             .msaa(self.msaa_samples)
             .fragment_shading_rate(self.context.supports_fragment_shading_rate())
             .descriptor_layout(descriptor_layout)  // set = 0
-            .descriptor_layout(ibl_set_layout)     // set = 1
+            .descriptor_layout(ibl_set_layout);     // set = 1
+
+        if let Some(shadow_layout) = self.shadow_descriptor_layout {
+            builder = builder.descriptor_layout(shadow_layout); // set = 2 (Sombras)
+        }
+
+        let mut mat = builder
             .uses_ibl(true)
             .build(
                 &self.context,

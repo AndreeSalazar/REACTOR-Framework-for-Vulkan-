@@ -577,6 +577,7 @@ impl Reactor {
                     camera_pos: glam::Vec4,
                     light_pos: glam::Vec4,
                     color: glam::Vec4,
+                    emission: glam::Vec4,
                 }
                 let push = PushConstants {
                     mvp,
@@ -594,6 +595,7 @@ impl Reactor {
                         object.roughness, // pack roughness in light_pos.w
                     ),
                     color: object.color,
+                    emission: object.emission,
                 };
                 let constants_array = std::slice::from_raw_parts(
                     &push as *const PushConstants as *const u8,

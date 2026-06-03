@@ -254,6 +254,11 @@ impl ReactorApp for BlenderLive {
         let ibl_layout = ibl.descriptor_set_layout;
         ctx.reactor.ibl_textures = Some(ibl);
 
+        // Inicializar Cascade Shadow Maps
+        ctx.reactor
+            .init_shadows()
+            .expect("Failed to initialize shadows");
+
         // Crear texturas de fallback sólidas
         let fallback_albedo = ctx
             .reactor
@@ -301,11 +306,6 @@ impl ReactorApp for BlenderLive {
         // Cámara
         ctx.camera.position = Vec3::new(3.0, 3.0, 5.0);
         ctx.camera.set_rotation(-0.5, -0.6);
-
-        // Inicializar Cascade Shadow Maps
-        ctx.reactor
-            .init_shadows()
-            .expect("Failed to initialize shadows");
 
         // -----------------------------------------------------------------
         // 3. Arrancar el servidor WebSocket del bridge
@@ -473,6 +473,24 @@ impl BlenderLive {
                 }
                 if let Some(rough) = t.roughness {
                     obj.roughness = rough;
+                }
+
+                if t.emission_color.is_some() || t.emission_strength.is_some() {
+                    let em_col = t.emission_color.unwrap_or([0.0, 0.0, 0.0]);
+                    let em_str = t.emission_strength.unwrap_or(0.0);
+                    obj.emission = glam::Vec4::new(em_col[0], em_col[1], em_col[2], em_str);
+                    println!(
+                        "\x1b[35m  🔥 Emisión/SSS Actualizada para '{}' → color: ({:.2}, {:.2}, {:.2}), peso: {:.2}\x1b[0m",
+                        t.id, em_col[0], em_col[1], em_col[2], em_str
+                    );
+                }
+
+                let name_lower = t.id.to_lowercase();
+                if name_lower.contains("skin") || name_lower.contains("piel") || name_lower.contains("head") || name_lower.contains("body") || name_lower.contains("translucent") || name_lower.contains("cabeza") || name_lower.contains("cuerpo") {
+                    if obj.emission.w == 0.0 {
+                        obj.emission.w = 0.6;
+                        println!("\x1b[32m  🧬 SSS Translucidez activada automáticamente para '{}' (peso: 0.6)\x1b[0m", t.id);
+                    }
                 }
 
                 // Cargar/Actualizar texturas si cambian
@@ -649,6 +667,17 @@ impl BlenderLive {
             }
             obj.metallic = t.metallic.unwrap_or(0.0);
             obj.roughness = t.roughness.unwrap_or(0.5);
+
+            let em_col = t.emission_color.unwrap_or([0.0, 0.0, 0.0]);
+            let em_str = t.emission_strength.unwrap_or(0.0);
+            obj.emission = glam::Vec4::new(em_col[0], em_col[1], em_col[2], em_str);
+
+            let name_lower = t.id.to_lowercase();
+            if name_lower.contains("skin") || name_lower.contains("piel") || name_lower.contains("head") || name_lower.contains("body") || name_lower.contains("translucent") || name_lower.contains("cabeza") || name_lower.contains("cuerpo") {
+                if obj.emission.w == 0.0 {
+                    obj.emission.w = 0.6;
+                }
+            }
 
             // Cargar texturas al inicio si vienen indicadas
             let mut albedo_updated = false;

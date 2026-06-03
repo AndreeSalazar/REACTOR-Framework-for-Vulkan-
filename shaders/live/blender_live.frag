@@ -258,6 +258,7 @@ layout(push_constant) uniform Constants {
     vec4 camera_pos; // camera_pos.w contains packed metallic
     vec4 light_pos;  // light_pos.w contains packed roughness
     vec4 color;
+    vec4 emission;   // emission.xyz = color, emission.w = strength/translucency
 } push;
 
 // AO geométrico por curvatura — convexidades claras, cavidades oscuras.
@@ -289,6 +290,16 @@ mat3 calculate_TBN(vec3 p, vec3 n, vec2 uv) {
     
     float invmax = inversesqrt(max(dot(t, t), dot(b, b)));
     return mat3(t * invmax, b * invmax, n);
+}
+// Subsurface Scattering (SSS) / Translucency backlit approximation
+vec3 evaluate_sss(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 sssColor, float weight) {
+    if (weight <= 0.001) return vec3(0.0);
+    // Backlit scattering: light coming from behind the surface
+    vec3 SSS_L = L + N * 0.42; // wrap normal to allow SSS slightly to the front
+    float backlit = max(dot(V, -SSS_L), 0.0);
+    // Exponential falloff for realistic translucent dispersion
+    float sssFactor = pow(backlit, 8.0) * weight;
+    return lightColor * sssColor * sssFactor * 0.45;
 }
 
 void main() {
@@ -364,10 +375,37 @@ void main() {
     // ── Rim light ──────────────────────────────────────────────────────────
     vec3 rim = light_rim(N, V, vec3(0.65, 0.78, 1.0) * 0.5, 4.0, metallic);
 
-    // ── Composición ─────────────────────────────────────────────────────────
+    // ── Composición ────────────────-----------------------------------------
+    // SSS translucency color (blood/warm flesh spectrum for organic materials)
+    // If emission color is non-zero, treat push.emission.w as emissive strength.
+    // If emission color is zero, treat push.emission.w as SSS weight.
+    float emission_strength = 0.0;
+    float sss_weight = 0.0;
+    if (length(push.emission.rgb) > 0.01) {
+        emission_strength = push.emission.w;
+    } else {
+        sss_weight = push.emission.w;
+    }
+
+    vec3 sss_accum = vec3(0.0);
+    if (sss_weight > 0.001) {
+        vec3 sss_color = albedo * vec3(1.0, 0.35, 0.22);
+        sss_accum += evaluate_sss(N, V, keyDir, keyRad, sss_color, sss_weight);
+        if (shadow.shadow_enabled != 0) {
+            vec3 L_sun = -normalize(shadow.light_direction.xyz);
+            vec3 sun_radiance = vec3(2.5, 2.4, 2.2) * shadow_factor;
+            sss_accum += evaluate_sss(N, V, L_sun, sun_radiance, sss_color, sss_weight);
+        }
+        vec3 pointL = normalize(push.light_pos.xyz - P);
+        float dist = length(push.light_pos.xyz - P);
+        float atten = 1.0 / (dist * dist + 1.0);
+        sss_accum += evaluate_sss(N, V, pointL, vec3(1.0, 1.0, 1.0) * 12.0 * shadow_factor * atten, sss_color, sss_weight);
+    }
+
     // Salida LINEAR HDR — sin tone mapping aquí.
     // El post-process pipeline aplica bloom (sobre HDR) → AgX → gamma.
-    vec3 color = (lo + ambient + rim) * cs;
+    vec3 emissive = push.emission.rgb * emission_strength;
+    vec3 color = (lo + ambient + rim) * cs + sss_accum + emissive;
 
     outColor = vec4(color, tex_albedo.a * push.color.a);
 }

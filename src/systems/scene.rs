@@ -12,6 +12,7 @@ pub struct SceneObject {
     pub color: glam::Vec4,
     pub metallic: f32,
     pub roughness: f32,
+    pub emission: glam::Vec4, // .xyz = color, .w = SSS strength/thickness
 }
 
 impl SceneObject {
@@ -25,6 +26,7 @@ impl SceneObject {
             color: glam::Vec4::ONE,
             metallic: 0.0,
             roughness: 0.5,
+            emission: glam::Vec4::ZERO,
         }
     }
 
