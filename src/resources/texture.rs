@@ -147,6 +147,43 @@ impl Texture {
         Self::solid_color(ctx, allocator, 128, 128, 255, 255)
     }
 
+    /// Create a neutral 2D LUT color grading texture (256x16)
+    pub fn neutral_lut(
+        ctx: &VulkanContext,
+        allocator: Arc<Mutex<Allocator>>,
+    ) -> ReactorResult<Self> {
+        let width = 256;
+        let height = 16;
+        let mut data = Vec::with_capacity((width * height * 4) as usize);
+        for row in 0..16 {
+            for col in 0..256 {
+                let x = (col % 16) as f32 / 15.0;
+                let y = row as f32 / 15.0;
+                let z = (col / 16) as f32 / 15.0;
+
+                let r = (x * 255.0).round() as u8;
+                let g = (y * 255.0).round() as u8;
+                let b = (z * 255.0).round() as u8;
+                let a = 255;
+
+                data.push(r);
+                data.push(g);
+                data.push(b);
+                data.push(a);
+            }
+        }
+
+        Self::from_rgba_with_format(
+            ctx,
+            allocator,
+            &data,
+            width,
+            height,
+            false,
+            vk::Format::R8G8B8A8_UNORM,
+        )
+    }
+
     pub fn from_rgba(
         ctx: &VulkanContext,
         allocator: Arc<Mutex<Allocator>>,

@@ -830,15 +830,29 @@ impl Reactor {
                     .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
                     .image_view(color_view)
                     .sampler(sampler);
+
+                let motion_view = self.gbuffer.as_ref().map(|gb| gb.motion_depth_flags.view).unwrap_or(color_view);
+                let motion_info = vk::DescriptorImageInfo::default()
+                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    .image_view(motion_view)
+                    .sampler(sampler);
+
+                let writes = [
+                    vk::WriteDescriptorSet::default()
+                        .dst_set(self.post_process.descriptor_sets[image_index as usize])
+                        .dst_binding(0)
+                        .dst_array_element(0)
+                        .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                        .image_info(std::slice::from_ref(&image_info)),
+                    vk::WriteDescriptorSet::default()
+                        .dst_set(self.post_process.descriptor_sets[image_index as usize])
+                        .dst_binding(5)
+                        .dst_array_element(0)
+                        .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                        .image_info(std::slice::from_ref(&motion_info)),
+                ];
                     
-                let write = vk::WriteDescriptorSet::default()
-                    .dst_set(self.post_process.descriptor_sets[image_index as usize])
-                    .dst_binding(0)
-                    .dst_array_element(0)
-                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .image_info(std::slice::from_ref(&image_info));
-                    
-                self.context.device.update_descriptor_sets(&[write], &[]);
+                self.context.device.update_descriptor_sets(&writes, &[]);
 
                 // Bind descriptor set (the offscreen texture)
                 self.context.device.cmd_bind_descriptor_sets(

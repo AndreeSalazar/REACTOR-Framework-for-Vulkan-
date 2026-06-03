@@ -27,6 +27,12 @@ use crate::graphics::post_process::{
     AAQualityPreset, AASettings, PostProcessEffect, PostProcessPipeline, PostProcessSettings,
 };
 use crate::graphics::shadows::ShadowConfig;
+use ash::vk;
+use crate::core::context::VulkanContext;
+use crate::core::error::ReactorResult;
+use crate::graphics::pipeline::{Pipeline, PipelineConfig};
+use crate::compute::pipeline::ComputePipeline;
+
 
 // =============================================================================
 // Stage / Family — clasificación de cada SPIR-V
@@ -799,6 +805,79 @@ impl BaseShaderCookbook {
             self.shadow_config.soft_shadows
         ));
         out
+    }
+
+    /// Crea un pipeline de computación usando reflection para extraer descriptor set layouts
+    pub fn create_compute_pipeline(
+        &self,
+        ctx: &VulkanContext,
+        asset: BaseShaderAsset,
+    ) -> ReactorResult<(ComputePipeline, Vec<vk::DescriptorSetLayout>)> {
+        let mut compiler = crate::graphics::shader_compiler::ShaderCompiler::new();
+        let compiled = compiler.load_spirv_words(
+            &asset.words(),
+            crate::graphics::shader_compiler::ShaderStage::Compute,
+            "main",
+        )?;
+
+        let layouts = compiled.reflection.create_descriptor_set_layouts(&ctx.device)?;
+        let push_constant_size = compiled.reflection.push_constants.first().map(|pc| pc.size);
+
+        let compute_pipeline = ComputePipeline::new(
+            ctx,
+            &asset.words(),
+            &layouts,
+            push_constant_size,
+        )?;
+
+        Ok((compute_pipeline, layouts))
+    }
+
+    /// Crea un pipeline gráfico usando reflection automática para vertex e inputs
+    pub fn create_graphics_pipeline(
+        &self,
+        ctx: &VulkanContext,
+        render_pass: Option<vk::RenderPass>,
+        vert_asset: BaseShaderAsset,
+        frag_asset: BaseShaderAsset,
+        width: u32,
+        height: u32,
+        config: &PipelineConfig,
+        color_formats: &[vk::Format],
+        depth_format: Option<vk::Format>,
+    ) -> ReactorResult<(Pipeline, Vec<vk::DescriptorSetLayout>)> {
+        let mut compiler = crate::graphics::shader_compiler::ShaderCompiler::new();
+        let vert_compiled = compiler.load_spirv_words(
+            &vert_asset.words(),
+            crate::graphics::shader_compiler::ShaderStage::Vertex,
+            "main",
+        )?;
+        let frag_compiled = compiler.load_spirv_words(
+            &frag_asset.words(),
+            crate::graphics::shader_compiler::ShaderStage::Fragment,
+            "main",
+        )?;
+
+        let mut merged_reflection = vert_compiled.reflection.clone();
+        merged_reflection.merge_stages(&frag_compiled.reflection);
+
+        let layouts = merged_reflection.create_descriptor_set_layouts(&ctx.device)?;
+
+        let pipeline = Pipeline::with_config_and_cache_multi_color(
+            &ctx.device,
+            render_pass,
+            &vert_asset.words(),
+            &frag_asset.words(),
+            width,
+            height,
+            config,
+            &layouts,
+            color_formats,
+            depth_format,
+            vk::PipelineCache::null(),
+        )?;
+
+        Ok((pipeline, layouts))
     }
 }
 

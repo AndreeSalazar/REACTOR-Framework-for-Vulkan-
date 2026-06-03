@@ -33,6 +33,8 @@ pub enum PostProcessEffect {
     SSSDiffusion,
     DepthOfField,
     AutoExposure,
+    MotionBlur,
+    GTAO,
 }
 
 /// Anti-Aliasing quality presets
@@ -208,9 +210,12 @@ pub struct PostProcessSettings {
     // Depth of Field (Feature A)
     pub dof_focus_distance: f32,
     pub dof_aperture: f32,
+
+    // Motion Blur (Feature F)
+    pub motion_blur_strength: f32,
 }
 
-const _: () = assert!(std::mem::size_of::<PostProcessSettings>() == 140);
+const _: () = assert!(std::mem::size_of::<PostProcessSettings>() == 144);
 
 impl Default for PostProcessSettings {
     fn default() -> Self {
@@ -250,6 +255,7 @@ impl Default for PostProcessSettings {
             light_dir_z: 0.0,
             dof_focus_distance: 8.0,  // Focus 8 units away by default
             dof_aperture: 0.04,        // Subtle default blur strength
+            motion_blur_strength: 0.6,  // Moderate motion blur strength
         };
         settings.enable_effect(PostProcessEffect::ToneMapping);
         settings.enable_effect(PostProcessEffect::Vignette);
@@ -296,6 +302,8 @@ impl PostProcessSettings {
         settings.enable_effect(PostProcessEffect::SSSDiffusion);
         settings.enable_effect(PostProcessEffect::DepthOfField);
         settings.enable_effect(PostProcessEffect::AutoExposure);
+        settings.enable_effect(PostProcessEffect::MotionBlur);
+        settings.enable_effect(PostProcessEffect::GTAO);
         settings.vignette_intensity = 0.4;
         settings.grain_intensity = 0.008;
         settings.bloom_threshold = 0.75;
@@ -371,6 +379,7 @@ pub struct PostProcessPipeline {
     pub taa_descriptor_pool: Option<vk::DescriptorPool>,
     pub taa_descriptor_sets: Vec<vk::DescriptorSet>,
 
+    pub lut_texture: Option<crate::resources::texture::Texture>,
     pub device: Option<crate::core::arc_handle::ArcDevice>,
 }
 
@@ -409,6 +418,7 @@ impl PostProcessPipeline {
             taa_descriptor_layout: None,
             taa_descriptor_pool: None,
             taa_descriptor_sets: Vec::new(),
+            lut_texture: None,
             device: None,
         }
     }
@@ -452,6 +462,7 @@ impl PostProcessPipeline {
             taa_descriptor_layout: None,
             taa_descriptor_pool: None,
             taa_descriptor_sets: Vec::new(),
+            lut_texture: None,
             device: None,
         }
     }
@@ -477,6 +488,10 @@ impl PostProcessPipeline {
         let device = ctx.ash_device();
         self.device = Some(ctx.device.clone());
 
+        // Initialize neutral LUT texture
+        let lut_texture = crate::resources::texture::Texture::neutral_lut(ctx, allocator.clone())?;
+        self.lut_texture = Some(lut_texture);
+
         // 1. Create Descriptor Set Layout
         let pp_bindings = [
             vk::DescriptorSetLayoutBinding::default()
@@ -499,6 +514,16 @@ impl PostProcessPipeline {
                 .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
                 .descriptor_count(1)
                 .stage_flags(vk::ShaderStageFlags::FRAGMENT | vk::ShaderStageFlags::COMPUTE),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(4)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(5)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT),
         ];
         let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&pp_bindings);
         let descriptor_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
@@ -625,7 +650,7 @@ impl PostProcessPipeline {
         let pool_sizes = [
             vk::DescriptorPoolSize::default()
                 .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .descriptor_count(image_count * 3),
+                .descriptor_count(image_count * 5),
             vk::DescriptorPoolSize::default()
                 .ty(vk::DescriptorType::STORAGE_BUFFER)
                 .descriptor_count(image_count),
@@ -733,7 +758,7 @@ impl PostProcessPipeline {
             let pool_sizes = [
                 vk::DescriptorPoolSize::default()
                     .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .descriptor_count(image_count * 3),
+                    .descriptor_count(image_count * 5),
                 vk::DescriptorPoolSize::default()
                     .ty(vk::DescriptorType::STORAGE_BUFFER)
                     .descriptor_count(image_count),
@@ -819,6 +844,11 @@ impl PostProcessPipeline {
                 .offset(0)
                 .range(4);
 
+            let lut_info = vk::DescriptorImageInfo::default()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(self.lut_texture.as_ref().unwrap().view())
+                .sampler(self.lut_texture.as_ref().unwrap().sampler_handle());
+
             let writes = [
                 vk::WriteDescriptorSet::default()
                     .dst_set(self.descriptor_sets[i])
@@ -838,6 +868,12 @@ impl PostProcessPipeline {
                     .dst_array_element(0)
                     .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
                     .buffer_info(std::slice::from_ref(&buffer_info)),
+                vk::WriteDescriptorSet::default()
+                    .dst_set(self.descriptor_sets[i])
+                    .dst_binding(4)
+                    .dst_array_element(0)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .image_info(std::slice::from_ref(&lut_info)),
             ];
 
             unsafe {

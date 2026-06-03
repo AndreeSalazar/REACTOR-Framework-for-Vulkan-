@@ -11,6 +11,9 @@ layout(binding = 3) readonly buffer ExposureBuffer {
     float current_exposure;
 };
 
+layout(binding = 4) uniform sampler2D lutTexture;
+layout(binding = 5) uniform sampler2D motionTexture;
+
 layout(push_constant) uniform PostProcessSettings {
     // Vignette
     float vignette_intensity;
@@ -527,20 +530,25 @@ vec3 volumetric_fog(vec2 uv, vec3 color) {
 }
 
 vec3 lut_color_grade(vec3 color) {
-    float luma = luminance(color);
-    vec3 shadows = vec3(0.78, 0.88, 1.12);
-    vec3 mids = vec3(0.96, 1.02, 1.03);
-    vec3 highs = vec3(1.14, 1.02, 0.88);
+    vec3 clampedColor = clamp(color, 0.0, 1.0);
+    float blueColor = clampedColor.b * 15.0; // 16 slices - 1
 
-    vec3 grade = mix(shadows, mids, smoothstep(0.05, 0.45, luma));
-    grade = mix(grade, highs, smoothstep(0.45, 0.95, luma));
+    float quad1 = floor(blueColor);
+    float quad2 = ceil(blueColor);
 
-    vec3 graded = color * grade;
-    float gradedLuma = luminance(graded);
-    graded = mix(vec3(gradedLuma), graded, 1.10);
-    graded = (graded - 0.5) * 1.08 + 0.5;
-    graded += vec3(0.012, -0.004, 0.006);
-    return mix(color, max(graded, 0.0), settings.lut_strength);
+    vec2 texPos1;
+    texPos1.y = (clampedColor.g * 15.0 + 0.5) / 16.0;
+    texPos1.x = (quad1 * 16.0 + clampedColor.r * 15.0 + 0.5) / 256.0;
+
+    vec2 texPos2;
+    texPos2.y = (clampedColor.g * 15.0 + 0.5) / 16.0;
+    texPos2.x = (quad2 * 16.0 + clampedColor.r * 15.0 + 0.5) / 256.0;
+
+    vec3 newColor1 = texture(lutTexture, texPos1).rgb;
+    vec3 newColor2 = texture(lutTexture, texPos2).rgb;
+
+    vec3 graded = mix(newColor1, newColor2, fract(blueColor));
+    return mix(color, graded, settings.lut_strength);
 }
 
 vec3 path_traced_lighting_resolve(vec2 uv, vec2 texelSize, vec3 color) {
