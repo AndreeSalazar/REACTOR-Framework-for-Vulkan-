@@ -61,4 +61,33 @@ vec3 ibl_eval_textured(vec3 N, vec3 V,
     return diff + spec;
 }
 
+// ── Anisotropic textured IBL ────────────────────────────────────────────────
+vec3 ibl_eval_textured_anisotropic(vec3 N, vec3 V, vec3 T, vec3 B,
+                                   vec3 albedo, float metallic, float roughness, float anisotropy, vec3 f0,
+                                   float ao, float max_mip) {
+    float NoV     = max(dot(N, V), 0.0);
+    vec3  R       = reflect(-V, N);
+    
+    if (abs(anisotropy) > 0.01) {
+        vec3 anisoDirection = anisotropy >= 0.0 ? B : T;
+        float anisoStretch = abs(anisotropy) * (1.0 - roughness);
+        vec3 R_aniso = R - N * dot(R, N);
+        R = normalize(mix(R, normalize(cross(anisoDirection, R_aniso)), anisoStretch));
+    }
+    
+    vec3  irr     = ibl_sample_irradiance(N);
+    vec3  preSpec = ibl_sample_specular(R, roughness, max_mip);
+    vec2  brdf    = ibl_sample_brdf(NoV, roughness);
+
+    vec3  Fr_ibl  = F_SchlickRoughness(NoV, f0, roughness);
+    vec3  kd_ibl  = (1.0 - Fr_ibl) * (1.0 - metallic);
+
+    vec3 spec = preSpec * (Fr_ibl * brdf.x + brdf.y);
+    spec *= energy_compensation(f0, brdf);
+    spec *= specular_AO(NoV, ao, roughness);
+
+    vec3 diff = kd_ibl * albedo * irr * ao;
+    return diff + spec;
+}
+
 #endif

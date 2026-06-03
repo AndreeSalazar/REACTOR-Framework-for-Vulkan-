@@ -123,4 +123,67 @@ vec3 energy_compensation(vec3 f0, vec2 envBRDF) {
     return 1.0 + f0 * (1.0 / envBRDF.y - 1.0);
 }
 
+// ── Anisotropic GGX (Disney / RenderMan / Cyberpunk 2077 Style) ──────────────
+
+float Lambda_GGX_Anisotropic(float NoV, float ToV, float BoV, float ax, float ay) {
+    float v_x = ax * ToV;
+    float v_y = ay * BoV;
+    return sqrt(v_x * v_x + v_y * v_y + NoV * NoV);
+}
+
+float V_SmithGGXCorrelated_Anisotropic(float NoV, float NoL, float ToV, float ToL, float BoV, float BoL, float ax, float ay) {
+    float lambdaV = NoL * Lambda_GGX_Anisotropic(NoV, ToV, BoV, ax, ay);
+    float lambdaL = NoV * Lambda_GGX_Anisotropic(NoL, ToL, BoL, ax, ay);
+    return 0.5 / max(lambdaV + lambdaL, REACTOR_EPS);
+}
+
+float D_GGX_Anisotropic(float NoH, float ToH, float BoH, float ax, float ay) {
+    float d = ToH * ToH / (ax * ax) + BoH * BoH / (ay * ay) + NoH * NoH;
+    return 1.0 / max(REACTOR_PI * ax * ay * d * d, REACTOR_EPS);
+}
+
+BrdfSample brdf_eval_anisotropic(vec3 N, vec3 V, vec3 L, vec3 T, vec3 B,
+                                 vec3 albedo, float metallic, float roughness, float anisotropy, vec3 f0) {
+    vec3  H   = normalize(V + L);
+    float NoV = max(dot(N, V), 0.0);
+    float NoL = max(dot(N, L), 0.0);
+    float NoH = max(dot(N, H), 0.0);
+    float VoH = max(dot(V, H), 0.0);
+    float LoH = max(dot(L, H), 0.0);
+
+    float ToV = dot(T, V);
+    float ToL = dot(T, L);
+    float ToH = dot(T, H);
+    float BoV = dot(B, V);
+    float BoL = dot(B, L);
+    float BoH = dot(B, H);
+
+    roughness = clamp(roughness, 0.04, 1.0);
+    float alpha = roughness * roughness;
+    
+    // Anisotropy mapping from Disney model
+    float aspect = sqrt(1.0 - anisotropy * 0.9);
+    float ax = max(alpha / aspect, 0.001);
+    float ay = max(alpha * aspect, 0.001);
+
+    float D  = D_GGX_Anisotropic(NoH, ToH, BoH, ax, ay);
+    float Vi = V_SmithGGXCorrelated_Anisotropic(NoV, NoL, ToV, ToL, BoV, BoL, ax, ay);
+    vec3  F  = F_Schlick(VoH, f0);
+
+    vec3 spec = D * Vi * F;
+    vec3 kd   = (1.0 - F) * (1.0 - metallic);
+    vec3 diff = kd * Fd_Burley(albedo, roughness, NoV, NoL, LoH);
+
+    BrdfSample s;
+    s.diffuse  = diff * NoL;
+    s.specular = spec * NoL;
+    return s;
+}
+
+vec3 brdf_shade_anisotropic(vec3 N, vec3 V, vec3 L, vec3 T, vec3 B, vec3 radiance,
+                            vec3 albedo, float metallic, float roughness, float anisotropy, vec3 f0) {
+    BrdfSample s = brdf_eval_anisotropic(N, V, L, T, B, albedo, metallic, roughness, anisotropy, f0);
+    return (s.diffuse + s.specular) * radiance;
+}
+
 #endif

@@ -492,6 +492,10 @@ impl BlenderLive {
                         println!("\x1b[32m  🧬 SSS Translucidez activada automáticamente para '{}' (peso: 0.6)\x1b[0m", t.id);
                     }
                 }
+                if name_lower.contains("hair") || name_lower.contains("cabello") || name_lower.contains("pelo") || name_lower.contains("metal_brushed") || name_lower.contains("brushed") || name_lower.contains("satin") || name_lower.contains("seda") || name_lower.contains("aniso") {
+                    obj.anisotropy = 0.75;
+                    println!("\x1b[32m  🪮 Anisotropía activada automáticamente para '{}' (anisotropy: 0.75)\x1b[0m", t.id);
+                }
 
                 // Cargar/Actualizar texturas si cambian
                 let mut albedo_updated = false;
@@ -677,6 +681,9 @@ impl BlenderLive {
                 if obj.emission.w == 0.0 {
                     obj.emission.w = 0.6;
                 }
+            }
+            if name_lower.contains("hair") || name_lower.contains("cabello") || name_lower.contains("pelo") || name_lower.contains("metal_brushed") || name_lower.contains("brushed") || name_lower.contains("satin") || name_lower.contains("seda") || name_lower.contains("aniso") {
+                obj.anisotropy = 0.75;
             }
 
             // Cargar texturas al inicio si vienen indicadas

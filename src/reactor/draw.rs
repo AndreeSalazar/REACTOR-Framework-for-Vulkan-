@@ -626,7 +626,12 @@ impl Reactor {
                         self.light_pos.z,
                         object.roughness, // pack roughness in light_pos.w
                     ),
-                    color: object.color,
+                    color: glam::Vec4::new(
+                        object.color.x,
+                        object.color.y,
+                        object.color.z,
+                        object.anisotropy, // pack anisotropy in color.w
+                    ),
                     emission: object.emission,
                 };
                 let constants_array = std::slice::from_raw_parts(

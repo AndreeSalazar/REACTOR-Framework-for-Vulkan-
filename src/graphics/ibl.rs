@@ -571,15 +571,80 @@ fn load_hdr_equirect(path: &Path) -> ReactorResult<(Vec<u16>, u32, u32)> {
     Ok((out, w, h))
 }
 
+const SKY_RAYLEIGH_COEFF: glam::Vec3 = glam::Vec3::new(5.802e-6, 1.3558e-5, 3.31e-5);
+const SKY_MIE_COEFF: f32 = 21.0e-6;
+const SKY_MIE_G: f32 = 0.78;
+
+fn sky_phase_rayleigh(cos_theta: f32) -> f32 {
+    3.0 / (16.0 * std::f32::consts::PI) * (1.0 + cos_theta * cos_theta)
+}
+
+fn sky_phase_mie(cos_theta: f32, g: f32) -> f32 {
+    let g2 = g * g;
+    let denom = 1.0 + g2 - 2.0 * g * cos_theta;
+    1.0 / (4.0 * std::f32::consts::PI) * (1.0 - g2) / (denom * denom.sqrt())
+}
+
+fn sky_transmittance(cos_zenith: f32, turbidity: f32) -> glam::Vec3 {
+    let depth = 1.0 / (cos_zenith + 0.05).max(0.001);
+    let optical_depth_rayleigh = SKY_RAYLEIGH_COEFF * depth;
+    let optical_depth_mie = glam::Vec3::splat(SKY_MIE_COEFF) * depth * turbidity;
+    glam::Vec3::new(
+        (-optical_depth_rayleigh.x - optical_depth_mie.x).exp(),
+        (-optical_depth_rayleigh.y - optical_depth_mie.y).exp(),
+        (-optical_depth_rayleigh.z - optical_depth_mie.z).exp(),
+    )
+}
+
+fn rust_evaluate_atmosphere(view_dir: glam::Vec3, sun_dir: glam::Vec3, turbidity: f32) -> glam::Vec3 {
+    let v = view_dir.normalize();
+    let s = sun_dir.normalize();
+
+    let cos_theta = v.dot(s);
+    let cos_zenith_v = v.y.max(0.0);
+    let cos_zenith_s = s.y.max(0.0);
+
+    let t_view = sky_transmittance(cos_zenith_v, turbidity);
+    let t_sun = sky_transmittance(cos_zenith_s, turbidity);
+
+    let beta_r = SKY_RAYLEIGH_COEFF * turbidity;
+    let beta_m = glam::Vec3::splat(SKY_MIE_COEFF) * turbidity;
+
+    let phase_r = sky_phase_rayleigh(cos_theta);
+    let phase_m = sky_phase_mie(cos_theta, SKY_MIE_G);
+
+    let scatter_r = beta_r * phase_r;
+    let scatter_m = beta_m * phase_m;
+
+    let beta_sum = beta_r + beta_m;
+    let inscatter = glam::Vec3::new(
+        (scatter_r.x + scatter_m.x) / beta_sum.x.max(1e-5),
+        (scatter_r.y + scatter_m.y) / beta_sum.y.max(1e-5),
+        (scatter_r.z + scatter_m.z) / beta_sum.z.max(1e-5),
+    );
+    
+    let mut sky_color = inscatter * (glam::Vec3::ONE - t_view) * t_sun;
+
+    // Direct sun disc
+    let sun_intensity = 24.0;
+    let sun_angular_diameter_cos = 0.9992;
+    if cos_theta > sun_angular_diameter_cos {
+        let sun_edge_blend = ((cos_theta - sun_angular_diameter_cos) / 0.0005).clamp(0.0, 1.0);
+        sky_color += t_view * sun_intensity * sun_edge_blend;
+    }
+
+    // Horizon glow
+    let horizon_glow = (1.0 - cos_zenith_v).powi(4);
+    sky_color += glam::Vec3::new(0.02, 0.04, 0.08) * t_view * horizon_glow;
+
+    sky_color.max(glam::Vec3::ZERO)
+}
+
 /// Sky procedural sencillo (gradiente cielo/horizonte/suelo + disco solar).
 /// Devuelve píxeles RGBA16F en proyección equirectangular.
 fn procedural_studio_sky(width: u32, height: u32) -> (Vec<u16>, u32, u32) {
     let mut out = Vec::with_capacity((width * height * 4) as usize);
     let sun_dir = glam::Vec3::new(-0.45, 0.85, 0.40).normalize();
-    let sky_zen = glam::Vec3::new(0.42, 0.58, 0.85);
-    let sky_hor = glam::Vec3::new(0.88, 0.92, 0.98);
-    let gnd_nad = glam::Vec3::new(0.10, 0.10, 0.12);
-    let sun_col = glam::Vec3::new(2.4, 2.2, 1.95);
 
     for y in 0..height {
         let v = (y as f32 + 0.5) / height as f32; // 0..1
@@ -594,19 +659,14 @@ fn procedural_studio_sky(width: u32, height: u32) -> (Vec<u16>, u32, u32) {
             )
             .normalize();
 
-            let up = dir.y;
-            let t = up.signum() * up.abs().powf(0.6);
-            let sky = sky_hor.lerp(sky_zen, t.clamp(0.0, 1.0));
-            let gnd = sky_hor.lerp(gnd_nad, (-t).clamp(0.0, 1.0));
-            let mut col = if up >= 0.0 { sky } else { gnd };
-            let ds = dir.dot(sun_dir);
-            let disc = if ds > 0.9995 {
-                (ds - 0.9995) / 0.0005
+            let col = if dir.y < 0.0 {
+                let t = (-dir.y * 2.0).clamp(0.0, 1.0);
+                let ground = glam::Vec3::new(0.04, 0.04, 0.05);
+                let horizon_sky = rust_evaluate_atmosphere(glam::Vec3::new(dir.x, 0.0, dir.z), sun_dir, 2.0);
+                horizon_sky.lerp(ground, t)
             } else {
-                0.0
+                rust_evaluate_atmosphere(dir, sun_dir, 2.0)
             };
-            let halo = ds.max(0.0).powf(80.0) * 0.35;
-            col += sun_col * (disc * 25.0 + halo);
 
             out.push(half::f16::from_f32(col.x).to_bits());
             out.push(half::f16::from_f32(col.y).to_bits());

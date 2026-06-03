@@ -109,6 +109,7 @@ pub enum BaseShaderAsset {
     ShadowFrag,
     PostProcessVert,
     PostProcessFrag,
+    DecalFrag,
     GBufferVert,
     GBufferFrag,
     BloomDownsample,
@@ -138,6 +139,7 @@ impl BaseShaderAsset {
         Self::ShadowFrag,
         Self::PostProcessVert,
         Self::PostProcessFrag,
+        Self::DecalFrag,
         Self::GBufferVert,
         Self::GBufferFrag,
         Self::BloomDownsample,
@@ -164,6 +166,7 @@ impl BaseShaderAsset {
             Self::ShadowFrag => "live.shadow.frag",
             Self::PostProcessVert => "post.fullscreen.vert",
             Self::PostProcessFrag => "post.fullscreen.frag",
+            Self::DecalFrag => "post.decal.frag",
             Self::GBufferVert => "deferred.gbuffer.vert",
             Self::GBufferFrag => "deferred.gbuffer.frag",
             Self::BloomDownsample => "post.bloom_downsample.comp",
@@ -191,6 +194,7 @@ impl BaseShaderAsset {
             | Self::BlenderLiveFrag
             | Self::ShadowFrag
             | Self::PostProcessFrag
+            | Self::DecalFrag
             | Self::GBufferFrag => BaseShaderStage::Fragment,
             Self::BloomDownsample
             | Self::BloomUpsample
@@ -211,7 +215,7 @@ impl BaseShaderAsset {
             Self::BlenderLiveVert | Self::BlenderLiveFrag => BaseShaderFamily::BlenderLivePbr,
             Self::ShadowVert | Self::ShadowFrag => BaseShaderFamily::ShadowDepth,
             Self::GBufferVert | Self::GBufferFrag => BaseShaderFamily::Deferred,
-            Self::PostProcessVert | Self::PostProcessFrag => BaseShaderFamily::PostFullscreen,
+            Self::PostProcessVert | Self::PostProcessFrag | Self::DecalFrag => BaseShaderFamily::PostFullscreen,
             Self::BloomDownsample
             | Self::BloomUpsample
             | Self::DepthResolve
@@ -241,6 +245,7 @@ impl BaseShaderAsset {
             Self::PostProcessFrag => {
                 "Compositor fullscreen: tone map, bloom, SSGI, SSR, fog, LUT, grain"
             }
+            Self::DecalFrag => "Decal projection: projects textures onto G-Buffer depth geometry",
             Self::GBufferVert => "G-Buffer vert: world pos + normal + UV + vertex color",
             Self::GBufferFrag => {
                 "G-Buffer frag: escribe 4 attachments (albedo/AO, normal/material, emissive, motion/depth/flags)"
@@ -269,6 +274,7 @@ impl BaseShaderAsset {
             Self::ShadowFrag => "shaders/shadow_frag.spv",
             Self::PostProcessVert => "shaders/post_process_vert.spv",
             Self::PostProcessFrag => "shaders/post_process_frag.spv",
+            Self::DecalFrag => "shaders/post/decal.spv",
             Self::GBufferVert => "shaders/deferred/gbuffer_vert.spv",
             Self::GBufferFrag => "shaders/deferred/gbuffer_frag.spv",
             Self::BloomDownsample => "shaders/post/bloom_downsample.spv",
@@ -298,6 +304,7 @@ impl BaseShaderAsset {
             Self::ShadowFrag => Some("shaders/live/shadow.frag"),
             Self::PostProcessVert => Some("shaders/post/post_process.vert"),
             Self::PostProcessFrag => Some("shaders/post/post_process.frag"),
+            Self::DecalFrag => Some("shaders/post/decal.frag"),
             Self::GBufferVert => Some("shaders/deferred/gbuffer.vert"),
             Self::GBufferFrag => Some("shaders/deferred/gbuffer.frag"),
             Self::BloomDownsample => Some("shaders/post/bloom_downsample.comp"),
@@ -324,6 +331,7 @@ impl BaseShaderAsset {
             Self::ShadowFrag => include_bytes!("../shaders/shadow_frag.spv"),
             Self::PostProcessVert => include_bytes!("../shaders/post_process_vert.spv"),
             Self::PostProcessFrag => include_bytes!("../shaders/post_process_frag.spv"),
+            Self::DecalFrag => include_bytes!("../shaders/post/decal.spv"),
             Self::GBufferVert => include_bytes!("../shaders/deferred/gbuffer_vert.spv"),
             Self::GBufferFrag => include_bytes!("../shaders/deferred/gbuffer_frag.spv"),
             Self::BloomDownsample => include_bytes!("../shaders/post/bloom_downsample.spv"),

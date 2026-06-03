@@ -312,15 +312,20 @@ void main() {
     vec4 tex_albedo = texture(u_albedo_map, vUV);
     vec3 albedo     = max(tex_albedo.rgb * push.color.rgb, vec3(0.0));
     
+    // Reconstrucción del TBN
+    mat3 TBN = calculate_TBN(P, vN, vUV);
+    
     // Normal mapping
     vec3 normalMap = texture(u_normal_map, vUV).rgb;
     vec3 N = vN;
-    // Si la textura de normales contiene datos (es decir, no es el flat color fallback por defecto)
     if (length(normalMap - vec3(0.5, 0.5, 1.0)) > 0.01) {
-        mat3 TBN = calculate_TBN(P, vN, vUV);
         vec3 tangentNormal = normalMap * 2.0 - 1.0;
         N = normalize(TBN * tangentNormal);
     }
+
+    // Re-ortogonalizar base tangente contra la normal modificada
+    vec3 T = normalize(TBN[0] - N * dot(TBN[0], N));
+    vec3 B = cross(N, T);
 
     // ── Propiedades PBR reales ──────────────────────────────────────────────
     float tex_metallic  = texture(u_metallic_map, vUV).r;
@@ -339,46 +344,74 @@ void main() {
         shadow_factor = calculate_shadow(P, N);
     }
 
+    // Parámetros de anisotropía de push.color.a
+    float anisotropy = clamp(push.color.a, -1.0, 1.0);
+    bool use_aniso = abs(anisotropy) > 0.01;
+
     vec3 lo = vec3(0.0);
     
-    // Evaluate 3-point studio lights, applying shadow to the main key light
+    // Configuración de luces analíticas
     vec3 keyDir  = normalize(vec3(-0.45, 0.85, 0.40));
     vec3 fillDir = normalize(vec3( 0.65, 0.45,-0.30));
     vec3 backDir = normalize(vec3( 0.10, 0.65,-0.95));
     vec3 keyRad  = vec3(3.2, 3.0, 2.7) * shadow_factor;
     vec3 fillRad = vec3(0.55, 0.65, 0.85);
     vec3 backRad = vec3(1.6, 1.55, 1.50);
-    lo += light_eval_directional(N, V, keyDir,  keyRad,  albedo, metallic, roughness, f0);
-    lo += light_eval_directional(N, V, fillDir, fillRad, albedo, metallic, roughness, f0);
-    lo += light_eval_directional(N, V, backDir, backRad, albedo, metallic, roughness, f0);
 
-    // Dynamic point light (shadowed)
-    lo += light_eval_point(
-        N, V, P,
-        push.light_pos.xyz,
-        /* color     */ vec3(1.0, 1.0, 1.0),
-        /* intensity */ 12.0 * shadow_factor,
-        /* range     */ 25.0,
-        albedo, metallic, roughness, f0
-    );
+    if (use_aniso) {
+        lo += light_eval_directional_anisotropic(N, V, keyDir, T, B, keyRad, albedo, metallic, roughness, anisotropy, f0);
+        lo += light_eval_directional_anisotropic(N, V, fillDir, T, B, fillRad, albedo, metallic, roughness, anisotropy, f0);
+        lo += light_eval_directional_anisotropic(N, V, backDir, T, B, backRad, albedo, metallic, roughness, anisotropy, f0);
+        
+        // Point light dinámica
+        lo += light_eval_point_anisotropic(
+            N, V, P, T, B,
+            push.light_pos.xyz,
+            vec3(1.0, 1.0, 1.0),
+            12.0 * shadow_factor,
+            25.0,
+            albedo, metallic, roughness, anisotropy, f0
+        );
 
-    // Dynamic Sun directional light
-    if (shadow.shadow_enabled != 0) {
-        vec3 L_sun = -normalize(shadow.light_direction.xyz);
-        vec3 sun_radiance = vec3(2.5, 2.4, 2.2) * shadow_factor;
-        lo += light_eval_directional(N, V, L_sun, sun_radiance, albedo, metallic, roughness, f0);
+        // Sun light dinámica
+        if (shadow.shadow_enabled != 0) {
+            vec3 L_sun = -normalize(shadow.light_direction.xyz);
+            vec3 sun_radiance = vec3(2.5, 2.4, 2.2) * shadow_factor;
+            lo += light_eval_directional_anisotropic(N, V, L_sun, T, B, sun_radiance, albedo, metallic, roughness, anisotropy, f0);
+        }
+    } else {
+        lo += light_eval_directional(N, V, keyDir,  keyRad,  albedo, metallic, roughness, f0);
+        lo += light_eval_directional(N, V, fillDir, fillRad, albedo, metallic, roughness, f0);
+        lo += light_eval_directional(N, V, backDir, backRad, albedo, metallic, roughness, f0);
+        
+        lo += light_eval_point(
+            N, V, P,
+            push.light_pos.xyz,
+            vec3(1.0, 1.0, 1.0),
+            12.0 * shadow_factor,
+            25.0,
+            albedo, metallic, roughness, f0
+        );
+
+        if (shadow.shadow_enabled != 0) {
+            vec3 L_sun = -normalize(shadow.light_direction.xyz);
+            vec3 sun_radiance = vec3(2.5, 2.4, 2.2) * shadow_factor;
+            lo += light_eval_directional(N, V, L_sun, sun_radiance, albedo, metallic, roughness, f0);
+        }
     }
 
-    // ── IBL (diffuse + specular split-sum from pre-baked HDR cubemap) ────────
-    vec3 ambient = ibl_eval_textured(N, V, albedo, metallic, roughness, f0, ao, ibl_params.max_mip);
+    // ── IBL (diffuse + specular split-sum) ──────────────────────────────────
+    vec3 ambient;
+    if (use_aniso) {
+        ambient = ibl_eval_textured_anisotropic(N, V, T, B, albedo, metallic, roughness, anisotropy, f0, ao, ibl_params.max_mip);
+    } else {
+        ambient = ibl_eval_textured(N, V, albedo, metallic, roughness, f0, ao, ibl_params.max_mip);
+    }
 
     // ── Rim light ──────────────────────────────────────────────────────────
     vec3 rim = light_rim(N, V, vec3(0.65, 0.78, 1.0) * 0.5, 4.0, metallic);
 
-    // ── Composición ────────────────-----------------------------------------
-    // SSS translucency color (blood/warm flesh spectrum for organic materials)
-    // If emission color is non-zero, treat push.emission.w as emissive strength.
-    // If emission color is zero, treat push.emission.w as SSS weight.
+    // ── Composición y Subsurface Scattering Avanzado (SSS) ──────────────────
     float emission_strength = 0.0;
     float sss_weight = 0.0;
     if (length(push.emission.rgb) > 0.01) {
@@ -390,20 +423,30 @@ void main() {
     vec3 sss_accum = vec3(0.0);
     if (sss_weight > 0.001) {
         vec3 sss_color = albedo * vec3(1.0, 0.35, 0.22);
+        float thickness = clamp(1.0 - sss_weight, 0.01, 1.0);
+
+        // Key light
         sss_accum += evaluate_sss(N, V, keyDir, keyRad, sss_color, sss_weight);
+        sss_accum += evaluate_transmittance(N, V, keyDir, thickness, sss_color, keyRad);
+
+        // Sun light
         if (shadow.shadow_enabled != 0) {
             vec3 L_sun = -normalize(shadow.light_direction.xyz);
             vec3 sun_radiance = vec3(2.5, 2.4, 2.2) * shadow_factor;
             sss_accum += evaluate_sss(N, V, L_sun, sun_radiance, sss_color, sss_weight);
+            sss_accum += evaluate_transmittance(N, V, L_sun, thickness, sss_color, sun_radiance);
         }
+
+        // Point light
         vec3 pointL = normalize(push.light_pos.xyz - P);
         float dist = length(push.light_pos.xyz - P);
         float atten = 1.0 / (dist * dist + 1.0);
-        sss_accum += evaluate_sss(N, V, pointL, vec3(1.0, 1.0, 1.0) * 12.0 * shadow_factor * atten, sss_color, sss_weight);
+        vec3 point_radiance = vec3(1.0, 1.0, 1.0) * 12.0 * shadow_factor * atten;
+        sss_accum += evaluate_sss(N, V, pointL, point_radiance, sss_color, sss_weight);
+        sss_accum += evaluate_transmittance(N, V, pointL, thickness, sss_color, point_radiance);
     }
 
-    // Salida LINEAR HDR — sin tone mapping aquí.
-    // El post-process pipeline aplica bloom (sobre HDR) → AgX → gamma.
+    // Salida LINEAR HDR
     vec3 emissive = push.emission.rgb * emission_strength;
     vec3 color = (lo + ambient + rim) * cs + sss_accum + emissive;
 

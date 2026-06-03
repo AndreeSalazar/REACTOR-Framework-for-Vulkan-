@@ -13,6 +13,7 @@ pub struct SceneObject {
     pub metallic: f32,
     pub roughness: f32,
     pub emission: glam::Vec4, // .xyz = color, .w = SSS strength/thickness
+    pub anisotropy: f32,
 }
 
 impl SceneObject {
@@ -27,6 +28,7 @@ impl SceneObject {
             metallic: 0.0,
             roughness: 0.5,
             emission: glam::Vec4::ZERO,
+            anisotropy: 0.0,
         }
     }
 

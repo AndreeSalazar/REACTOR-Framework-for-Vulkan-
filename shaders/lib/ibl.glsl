@@ -11,33 +11,21 @@
 #ifndef REACTOR_LIB_IBL
 #define REACTOR_LIB_IBL
 
-#include "color.glsl"
-#include "pbr.glsl"
+#include "sky.glsl"
 
 // ── Parámetros de "estudio" procedural ───────────────────────────────────────
 // Cambia estas constantes para repaintar el ambiente sin tocar el BRDF.
-const vec3  REACTOR_SKY_ZENITH   = vec3(0.42, 0.58, 0.85);
-const vec3  REACTOR_SKY_HORIZON  = vec3(0.88, 0.92, 0.98);
-const vec3  REACTOR_GROUND_NADIR = vec3(0.10, 0.10, 0.12);
 const vec3  REACTOR_SUN_DIR      = normalize(vec3(-0.45, 0.85, 0.40));
-const vec3  REACTOR_SUN_COLOR    = vec3(2.4, 2.2, 1.95);
-const float REACTOR_SUN_DISC_COS = 0.9995; // cos(~1.8°)
-const float REACTOR_SUN_HALO_K   = 80.0;
 
 // ── Sky procedural ───────────────────────────────────────────────────────────
 vec3 sampleEnv(vec3 dir) {
-    float up    = dir.y;
-    float t     = sign(up) * pow(abs(up), 0.6);                  // compresión al horizonte
-    vec3  sky   = mix(REACTOR_SKY_HORIZON, REACTOR_SKY_ZENITH, saturate(t));
-    vec3  gnd   = mix(REACTOR_SKY_HORIZON, REACTOR_GROUND_NADIR, saturate(-t));
-    vec3  env   = mix(gnd, sky, step(0.0, up));
-
-    // Sun disc + halo (sólo en direcciones cercanas al sol).
-    float ds    = dot(dir, REACTOR_SUN_DIR);
-    float disc  = smoothstep(REACTOR_SUN_DISC_COS, 1.0, ds);
-    float halo  = pow(saturate(ds), REACTOR_SUN_HALO_K) * 0.35;
-    env += REACTOR_SUN_COLOR * (disc * 25.0 + halo);
-    return env;
+    if (dir.y < 0.0) {
+        float t = saturate(-dir.y * 2.0);
+        vec3 ground = vec3(0.04, 0.04, 0.05); // dark ground nadir
+        vec3 horizonSky = evaluate_atmosphere(vec3(dir.x, 0.0, dir.z), REACTOR_SUN_DIR, 2.0);
+        return mix(horizonSky, ground, t);
+    }
+    return evaluate_atmosphere(dir, REACTOR_SUN_DIR, 2.0);
 }
 
 // ── Diffuse irradiance (5-tap cosine-weighted) ───────────────────────────────
