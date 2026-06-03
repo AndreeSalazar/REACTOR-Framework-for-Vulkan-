@@ -778,21 +778,23 @@ impl Xenofall {
     fn apply_render_showcase_profile(&mut self, ctx: &mut ReactorContext) {
         let mut shader = BaseShaderCookbook::xenofall_showcase();
         let s = &mut shader.post_settings;
-        s.exposure = 1.08;
+        s.exposure = 0.72;           // Mucho más bajo
         s.gamma = 2.2;
-        s.bloom_threshold = 0.62;
-        s.bloom_intensity = 0.78;
-        s.grain_intensity = 0.010;
+        s.bloom_threshold = 1.2;     // Solo luces reales
+        s.bloom_intensity = 0.32;    // Sutil
+        s.grain_intensity = 0.003;   // Apenas perceptible
         s.chromatic_intensity = 0.0014;
         s.vignette_intensity = 0.42;
         s.sharpen_intensity = 0.18;
-        s.ssgi_intensity = 0.34;
+        s.ssgi_intensity = 0.42;     // Más AO para horror
         s.ssgi_radius = 14.0;
         s.ssr_strength = 0.46;
-        s.fog_density = 0.24;
-        s.fog_scatter = 0.58;
-        s.flare_intensity = 0.52;
+        s.fog_density = 0.10;        // Apenas visible
+        s.fog_scatter = 0.15;        // Tenue
+        s.flare_intensity = 0.18;    // Sutil
         s.highlight_recovery = 0.82;
+        s.dof_focus_distance = 12.0; // Enfoque a los zombies
+        s.dof_aperture = 0.015;       // Bokeh sutil de fondo
         s.enable_effect(PostProcessEffect::Bloom);
         s.enable_effect(PostProcessEffect::SSGI);
         s.enable_effect(PostProcessEffect::SSR);
@@ -800,17 +802,20 @@ impl Xenofall {
         s.enable_effect(PostProcessEffect::LutColorGrading);
         s.enable_effect(PostProcessEffect::ToneMapping);
         s.enable_effect(PostProcessEffect::AnamorphicFlares);
-        s.enable_effect(PostProcessEffect::FXAA);
+        s.disable_effect(PostProcessEffect::FXAA);
+        s.enable_effect(PostProcessEffect::TAA);
         s.enable_effect(PostProcessEffect::FilmGrain);
         s.enable_effect(PostProcessEffect::ChromaticAberration);
         s.enable_effect(PostProcessEffect::ContactShadows);
         s.enable_effect(PostProcessEffect::SSSDiffusion);
+        s.enable_effect(PostProcessEffect::DepthOfField);
+        s.enable_effect(PostProcessEffect::AutoExposure);
         ctx.apply_base_shader(&shader);
 
         let sun_dir = Vec3::new(-0.22, -0.86, -0.45).normalize();
         let moon_cold = Vec3::new(0.42, 0.55, 0.82);
         ctx.scene.set_sun(sun_dir, moon_cold * 1.65);
-        ctx.scene.set_ambient(Vec3::new(0.018, 0.022, 0.032));
+        ctx.scene.set_ambient(Vec3::new(0.012, 0.016, 0.014)); // Ambient verdoso oscuro
         ctx.add_directional_light(sun_dir, moon_cold, 1.35);
 
         Log::engine("Render Showcase: Cinematic/AAA profile active for Xenofall");
@@ -819,25 +824,25 @@ impl Xenofall {
     fn apply_render_showcase_materials(&mut self, ctx: &mut ReactorContext) {
         for &idx in &self.floor_indices {
             if let Some(obj) = ctx.scene.objects.get_mut(idx) {
-                obj.color = Vec4::new(0.26, 0.28, 0.30, 1.0);
+                obj.color = Vec4::new(0.08, 0.08, 0.09, 1.0); // Concreto oscuro mojado
                 obj.metallic = 0.0;
-                obj.roughness = 0.18; // wet concrete for SSR/TAA/GTAO preview
+                obj.roughness = 0.12; // muy liso = reflejos nítidos
             }
         }
 
         for &idx in &self.wall_indices {
             if let Some(obj) = ctx.scene.objects.get_mut(idx) {
-                obj.color = Vec4::new(0.34, 0.36, 0.35, 1.0);
+                obj.color = Vec4::new(0.14, 0.13, 0.12, 1.0); // Concreto sucio mate
                 obj.metallic = 0.05;
-                obj.roughness = 0.72;
+                obj.roughness = 0.85; // rugoso = sin reflejos
             }
         }
 
         for &idx in &self.pillar_indices {
             if let Some(obj) = ctx.scene.objects.get_mut(idx) {
-                obj.color = Vec4::new(0.42, 0.40, 0.36, 1.0);
-                obj.metallic = 0.35;
-                obj.roughness = 0.38;
+                obj.color = Vec4::new(0.22, 0.18, 0.14, 1.0); // Metal oxidado
+                obj.metallic = 0.65;
+                obj.roughness = 0.45;
             }
         }
 

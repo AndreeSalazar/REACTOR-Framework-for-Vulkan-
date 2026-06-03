@@ -1,6 +1,7 @@
 use crate::core::VulkanContext;
-use crate::graphics::Image;
+use crate::graphics::{Buffer, Image};
 use ash::vk;
+use gpu_allocator::MemoryLocation;
 use bytemuck::{Pod, Zeroable};
 use gpu_allocator::vulkan::Allocator;
 use std::sync::{Arc, Mutex};
@@ -30,6 +31,8 @@ pub enum PostProcessEffect {
     AnamorphicFlares,
     ContactShadows,
     SSSDiffusion,
+    DepthOfField,
+    AutoExposure,
 }
 
 /// Anti-Aliasing quality presets
@@ -201,9 +204,13 @@ pub struct PostProcessSettings {
     pub light_dir_x: f32,
     pub light_dir_y: f32,
     pub light_dir_z: f32,
+
+    // Depth of Field (Feature A)
+    pub dof_focus_distance: f32,
+    pub dof_aperture: f32,
 }
 
-const _: () = assert!(std::mem::size_of::<PostProcessSettings>() == 132);
+const _: () = assert!(std::mem::size_of::<PostProcessSettings>() == 140);
 
 impl Default for PostProcessSettings {
     fn default() -> Self {
@@ -241,6 +248,8 @@ impl Default for PostProcessSettings {
             light_dir_x: 0.0,
             light_dir_y: 1.0,
             light_dir_z: 0.0,
+            dof_focus_distance: 8.0,  // Focus 8 units away by default
+            dof_aperture: 0.04,        // Subtle default blur strength
         };
         settings.enable_effect(PostProcessEffect::ToneMapping);
         settings.enable_effect(PostProcessEffect::Vignette);
@@ -285,6 +294,8 @@ impl PostProcessSettings {
         settings.enable_effect(PostProcessEffect::AnamorphicFlares);
         settings.enable_effect(PostProcessEffect::ContactShadows);
         settings.enable_effect(PostProcessEffect::SSSDiffusion);
+        settings.enable_effect(PostProcessEffect::DepthOfField);
+        settings.enable_effect(PostProcessEffect::AutoExposure);
         settings.vignette_intensity = 0.4;
         settings.grain_intensity = 0.008;
         settings.bloom_threshold = 0.75;
@@ -348,7 +359,19 @@ pub struct PostProcessPipeline {
     pub bloom_downsample_sets: Vec<Vec<vk::DescriptorSet>>,
     pub bloom_upsample_sets: Vec<Vec<vk::DescriptorSet>>,
 
-    device: Option<crate::core::arc_handle::ArcDevice>,
+    // ── Auto-Exposure (Compute) ──
+    pub auto_exposure_pipeline: Option<crate::compute::ComputePipeline>,
+    pub exposure_buffers: Vec<crate::graphics::Buffer>,
+    pub last_time: f32,
+    pub delta_time: f32,
+
+    // ── Temporal Anti-Aliasing (TAA Compute) ──
+    pub taa_pipeline: Option<crate::compute::ComputePipeline>,
+    pub taa_descriptor_layout: Option<vk::DescriptorSetLayout>,
+    pub taa_descriptor_pool: Option<vk::DescriptorPool>,
+    pub taa_descriptor_sets: Vec<vk::DescriptorSet>,
+
+    pub device: Option<crate::core::arc_handle::ArcDevice>,
 }
 
 impl PostProcessPipeline {
@@ -378,6 +401,14 @@ impl PostProcessPipeline {
             bloom_mip_views_storage: Vec::new(),
             bloom_downsample_sets: Vec::new(),
             bloom_upsample_sets: Vec::new(),
+            auto_exposure_pipeline: None,
+            exposure_buffers: Vec::new(),
+            last_time: 0.0,
+            delta_time: 0.0166,
+            taa_pipeline: None,
+            taa_descriptor_layout: None,
+            taa_descriptor_pool: None,
+            taa_descriptor_sets: Vec::new(),
             device: None,
         }
     }
@@ -413,11 +444,22 @@ impl PostProcessPipeline {
             bloom_mip_views_storage: Vec::new(),
             bloom_downsample_sets: Vec::new(),
             bloom_upsample_sets: Vec::new(),
+            auto_exposure_pipeline: None,
+            exposure_buffers: Vec::new(),
+            last_time: 0.0,
+            delta_time: 0.0166,
+            taa_pipeline: None,
+            taa_descriptor_layout: None,
+            taa_descriptor_pool: None,
+            taa_descriptor_sets: Vec::new(),
             device: None,
         }
     }
 
     pub fn update_time(&mut self, time: f32) {
+        let raw_dt = time - self.last_time;
+        self.delta_time = if raw_dt > 0.0 && raw_dt < 2.0 { raw_dt } else { 0.0166 };
+        self.last_time = time;
         self.settings.time = time;
     }
 
@@ -441,7 +483,7 @@ impl PostProcessPipeline {
                 .binding(0)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                 .descriptor_count(1)
-                .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT | vk::ShaderStageFlags::COMPUTE),
             vk::DescriptorSetLayoutBinding::default()
                 .binding(1)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
@@ -452,6 +494,11 @@ impl PostProcessPipeline {
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                 .descriptor_count(1)
                 .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(3)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT | vk::ShaderStageFlags::COMPUTE),
         ];
         let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&pp_bindings);
         let descriptor_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
@@ -575,11 +622,16 @@ impl PostProcessPipeline {
         }
 
         // 4. Create Descriptor Pool
-        let pool_size = vk::DescriptorPoolSize::default()
-            .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .descriptor_count(image_count * 3);
+        let pool_sizes = [
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(image_count * 3),
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::STORAGE_BUFFER)
+                .descriptor_count(image_count),
+        ];
         let pool_info = vk::DescriptorPoolCreateInfo::default()
-            .pool_sizes(std::slice::from_ref(&pool_size))
+            .pool_sizes(&pool_sizes)
             .max_sets(image_count);
         let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None)? };
 
@@ -627,6 +679,8 @@ impl PostProcessPipeline {
         // Clean old resources
         self.destroy_bloom_resources(device);
         self.destroy_depth_resolve_resources(device);
+        self.exposure_buffers.clear();
+        self.auto_exposure_pipeline = None;
         self.offscreen_images.clear();
         if let Some(sampler) = self.sampler.take() {
             unsafe {
@@ -676,11 +730,16 @@ impl PostProcessPipeline {
                     "post-process descriptor layout is not initialized",
                 )
             })?;
-            let pool_size = vk::DescriptorPoolSize::default()
-                .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .descriptor_count(image_count * 3);
+            let pool_sizes = [
+                vk::DescriptorPoolSize::default()
+                    .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .descriptor_count(image_count * 3),
+                vk::DescriptorPoolSize::default()
+                    .ty(vk::DescriptorType::STORAGE_BUFFER)
+                    .descriptor_count(image_count),
+            ];
             let pool_info = vk::DescriptorPoolCreateInfo::default()
-                .pool_sizes(std::slice::from_ref(&pool_size))
+                .pool_sizes(&pool_sizes)
                 .max_sets(image_count);
             let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None)? };
             let layouts = vec![descriptor_layout; image_count as usize];
@@ -690,6 +749,37 @@ impl PostProcessPipeline {
             self.descriptor_sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
             self.descriptor_pool = Some(descriptor_pool);
         }
+
+        // Allocate exposure buffers
+        self.exposure_buffers.clear();
+        for _ in 0..image_count as usize {
+            let buf = Buffer::new(
+                ctx,
+                allocator.clone(),
+                4, // 4 bytes for float
+                vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+                MemoryLocation::CpuToGpu,
+            )?;
+            buf.write(&[1.0f32]); // Write initial exposure 1.0
+            self.exposure_buffers.push(buf);
+        }
+
+        // Initialize Auto-Exposure compute pipeline
+        let ae_spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
+            "../../shaders/post/auto_exposure.spv"
+        )))
+        .unwrap();
+        let ae_pipeline = crate::compute::ComputePipeline::new(
+            ctx,
+            &ae_spv,
+            &[self.descriptor_layout.unwrap()],
+            Some(20), // 20 bytes push constant (AutoExposureParams)
+        )?;
+        self.auto_exposure_pipeline = Some(ae_pipeline);
+
+        // Initialize TAA resolve compute pipeline
+        self.destroy_taa_resources(device);
+        self.init_taa(ctx, image_count)?;
 
         for i in 0..image_count as usize {
             let img = Image::new(
@@ -724,6 +814,11 @@ impl PostProcessPipeline {
                 .image_view(depth_or_fallback_view)
                 .sampler(sampler);
 
+            let buffer_info = vk::DescriptorBufferInfo::default()
+                .buffer(self.exposure_buffers[i].handle)
+                .offset(0)
+                .range(4);
+
             let writes = [
                 vk::WriteDescriptorSet::default()
                     .dst_set(self.descriptor_sets[i])
@@ -737,6 +832,12 @@ impl PostProcessPipeline {
                     .dst_array_element(0)
                     .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                     .image_info(std::slice::from_ref(&depth_info)),
+                vk::WriteDescriptorSet::default()
+                    .dst_set(self.descriptor_sets[i])
+                    .dst_binding(3)
+                    .dst_array_element(0)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(std::slice::from_ref(&buffer_info)),
             ];
 
             unsafe {
@@ -1501,13 +1602,414 @@ impl PostProcessPipeline {
             );
         }
     }
+
+    /// Record auto-exposure compute commands to estimate screen average luminance and dynamically update exposure factor.
+    pub fn dispatch_auto_exposure(
+        &self,
+        device: &ash::Device,
+        command_buffer: vk::CommandBuffer,
+        image_index: usize,
+        dt: f32,
+    ) {
+        let Some(pipeline) = self.auto_exposure_pipeline.as_ref() else {
+            return;
+        };
+
+        pipeline.bind(command_buffer, device);
+
+        // Bind the post-process descriptor set containing bindings 0 (input texture) and 3 (exposure buffer)
+        unsafe {
+            device.cmd_bind_descriptor_sets(
+                command_buffer,
+                vk::PipelineBindPoint::COMPUTE,
+                pipeline.layout,
+                0,
+                &[self.descriptor_sets[image_index]],
+                &[],
+            );
+        }
+
+        // Push constants: dt, speed, target_luminance, max_exposure, min_exposure
+        let params = AutoExposureParams {
+            dt,
+            speed: 1.5,             // Speed of eye adaptation (larger = faster)
+            target_luminance: 0.18,  // Target average gray (18% reflectance standard)
+            max_exposure: 3.5,       // Max exposure limit to prevent darkness being too bright
+            min_exposure: 0.2,       // Min exposure limit to prevent light being too dim
+        };
+
+        let push_bytes = bytemuck::bytes_of(&params);
+        unsafe {
+            device.cmd_push_constants(
+                command_buffer,
+                pipeline.layout,
+                vk::ShaderStageFlags::COMPUTE,
+                0,
+                push_bytes,
+            );
+
+            // Dispatch a single workgroup of 16x16 threads (256 total threads)
+            device.cmd_dispatch(command_buffer, 1, 1, 1);
+        }
+
+        // Memory barrier to ensure compute buffer writes to exposure buffer are visible to fragment shader reads
+        let buffer_barrier = vk::BufferMemoryBarrier::default()
+            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ)
+            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .buffer(self.exposure_buffers[image_index].handle)
+            .offset(0)
+            .size(4);
+
+        unsafe {
+            device.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[buffer_barrier],
+                &[],
+            );
+        }
+    }
+
+    /// Initialize TAA resolve compute pipeline, descriptor set layout, and descriptor pool.
+    fn init_taa(&mut self, ctx: &VulkanContext, image_count: u32) -> crate::core::error::ReactorResult<()> {
+        let device = ctx.ash_device();
+
+        // 1. Create Descriptor Set Layout
+        let bindings = [
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::COMPUTE),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(1)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::COMPUTE),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(2)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::COMPUTE),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(3)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::COMPUTE),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(4)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::COMPUTE),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(5)
+                .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::COMPUTE),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(6)
+                .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::COMPUTE),
+        ];
+
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+        let descriptor_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
+
+        // 2. Create Compute Pipeline (16 bytes push constants for TaaParams)
+        let spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
+            "../../shaders/post/taa_resolve.spv"
+        )))
+        .unwrap();
+        let pipeline = crate::compute::ComputePipeline::new(ctx, &spv, &[descriptor_layout], Some(16))?;
+
+        // 3. Create Descriptor Pool
+        let pool_sizes = [
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(image_count * 5),
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::STORAGE_IMAGE)
+                .descriptor_count(image_count * 2),
+        ];
+        let pool_info = vk::DescriptorPoolCreateInfo::default()
+            .pool_sizes(&pool_sizes)
+            .max_sets(image_count);
+        let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None)? };
+
+        // 4. Allocate Descriptor Sets
+        let layouts = vec![descriptor_layout; image_count as usize];
+        let alloc_info = vk::DescriptorSetAllocateInfo::default()
+            .descriptor_pool(descriptor_pool)
+            .set_layouts(&layouts);
+        let descriptor_sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
+
+        self.taa_pipeline = Some(pipeline);
+        self.taa_descriptor_layout = Some(descriptor_layout);
+        self.taa_descriptor_pool = Some(descriptor_pool);
+        self.taa_descriptor_sets = descriptor_sets;
+
+        Ok(())
+    }
+
+    /// Clean up TAA resources
+    fn destroy_taa_resources(&mut self, device: &ash::Device) {
+        self.taa_descriptor_sets.clear();
+        self.taa_pipeline = None;
+        unsafe {
+            if let Some(pool) = self.taa_descriptor_pool.take() {
+                device.destroy_descriptor_pool(pool, None);
+            }
+            if let Some(layout) = self.taa_descriptor_layout.take() {
+                device.destroy_descriptor_set_layout(layout, None);
+            }
+        }
+    }
+
+    /// Record TAA compute resolve dispatch. Reprojects current frame against history color/depth using motion vectors.
+    pub fn dispatch_taa(
+        &self,
+        device: &ash::Device,
+        command_buffer: vk::CommandBuffer,
+        image_index: usize,
+        history: &crate::graphics::TemporalHistory,
+        gbuffer: &crate::graphics::GBuffer,
+        depth_view: vk::ImageView,
+        reset_history: bool,
+    ) {
+        let Some(pipeline) = self.taa_pipeline.as_ref() else {
+            return;
+        };
+
+        // ── 1. Transition layouts dynamically for history ping-pong images ──
+        let prev_old_layout = if history.frame_index == 0 { vk::ImageLayout::UNDEFINED } else { vk::ImageLayout::GENERAL };
+        let curr_old_layout = if history.frame_index == 0 { vk::ImageLayout::UNDEFINED } else { vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL };
+        let prev_src_access = if history.frame_index == 0 { vk::AccessFlags::empty() } else { vk::AccessFlags::SHADER_WRITE };
+        let curr_src_access = if history.frame_index == 0 { vk::AccessFlags::empty() } else { vk::AccessFlags::SHADER_READ };
+        let src_stage = if history.frame_index == 0 { vk::PipelineStageFlags::TOP_OF_PIPE } else { vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER };
+
+        let prev_color_barrier = vk::ImageMemoryBarrier::default()
+            .old_layout(prev_old_layout)
+            .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .src_access_mask(prev_src_access)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ)
+            .image(history.previous_color().handle)
+            .subresource_range(vk::ImageSubresourceRange::default()
+                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .base_mip_level(0)
+                .level_count(1)
+                .base_array_layer(0)
+                .layer_count(1));
+
+        let prev_depth_barrier = vk::ImageMemoryBarrier::default()
+            .old_layout(prev_old_layout)
+            .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .src_access_mask(prev_src_access)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ)
+            .image(history.previous_depth().handle)
+            .subresource_range(vk::ImageSubresourceRange::default()
+                .aspect_mask(vk::ImageAspectFlags::COLOR) // R32_SFLOAT storage uses Color aspect
+                .base_mip_level(0)
+                .level_count(1)
+                .base_array_layer(0)
+                .layer_count(1));
+
+        let curr_color_barrier = vk::ImageMemoryBarrier::default()
+            .old_layout(curr_old_layout)
+            .new_layout(vk::ImageLayout::GENERAL)
+            .src_access_mask(curr_src_access)
+            .dst_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .image(history.current_color().handle)
+            .subresource_range(vk::ImageSubresourceRange::default()
+                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .base_mip_level(0)
+                .level_count(1)
+                .base_array_layer(0)
+                .layer_count(1));
+
+        let curr_depth_barrier = vk::ImageMemoryBarrier::default()
+            .old_layout(curr_old_layout)
+            .new_layout(vk::ImageLayout::GENERAL)
+            .src_access_mask(curr_src_access)
+            .dst_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .image(history.current_depth().handle)
+            .subresource_range(vk::ImageSubresourceRange::default()
+                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .base_mip_level(0)
+                .level_count(1)
+                .base_array_layer(0)
+                .layer_count(1));
+
+        unsafe {
+            device.cmd_pipeline_barrier(
+                command_buffer,
+                src_stage,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[prev_color_barrier, prev_depth_barrier, curr_color_barrier, curr_depth_barrier],
+            );
+        }
+
+        // ── 2. Update Descriptor Set dynamically for the current frame views ──
+        let sampler = self.sampler.unwrap();
+
+        let current_color_info = vk::DescriptorImageInfo::default()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(self.offscreen_images[image_index].view)
+            .sampler(sampler);
+
+        let history_color_info = vk::DescriptorImageInfo::default()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(history.previous_color().view)
+            .sampler(sampler);
+
+        let motion_info = vk::DescriptorImageInfo::default()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(gbuffer.motion_depth_flags.view)
+            .sampler(sampler);
+
+        let current_depth_info = vk::DescriptorImageInfo::default()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(depth_view)
+            .sampler(sampler);
+
+        let history_depth_info = vk::DescriptorImageInfo::default()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(history.previous_depth().view)
+            .sampler(sampler);
+
+        let output_color_info = vk::DescriptorImageInfo::default()
+            .image_layout(vk::ImageLayout::GENERAL)
+            .image_view(history.current_color().view);
+
+        let output_depth_info = vk::DescriptorImageInfo::default()
+            .image_layout(vk::ImageLayout::GENERAL)
+            .image_view(history.current_depth().view);
+
+        let ds = self.taa_descriptor_sets[image_index];
+
+        let writes = [
+            vk::WriteDescriptorSet::default()
+                .dst_set(ds)
+                .dst_binding(0)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .image_info(std::slice::from_ref(&current_color_info)),
+            vk::WriteDescriptorSet::default()
+                .dst_set(ds)
+                .dst_binding(1)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .image_info(std::slice::from_ref(&history_color_info)),
+            vk::WriteDescriptorSet::default()
+                .dst_set(ds)
+                .dst_binding(2)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .image_info(std::slice::from_ref(&motion_info)),
+            vk::WriteDescriptorSet::default()
+                .dst_set(ds)
+                .dst_binding(3)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .image_info(std::slice::from_ref(&current_depth_info)),
+            vk::WriteDescriptorSet::default()
+                .dst_set(ds)
+                .dst_binding(4)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .image_info(std::slice::from_ref(&history_depth_info)),
+            vk::WriteDescriptorSet::default()
+                .dst_set(ds)
+                .dst_binding(5)
+                .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                .image_info(std::slice::from_ref(&output_color_info)),
+            vk::WriteDescriptorSet::default()
+                .dst_set(ds)
+                .dst_binding(6)
+                .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                .image_info(std::slice::from_ref(&output_depth_info)),
+        ];
+
+        unsafe {
+            device.update_descriptor_sets(&writes, &[]);
+        }
+
+        // ── 3. Bind and dispatch TAA compute shader ──
+        pipeline.bind(command_buffer, device);
+
+        unsafe {
+            device.cmd_bind_descriptor_sets(
+                command_buffer,
+                vk::PipelineBindPoint::COMPUTE,
+                pipeline.layout,
+                0,
+                &[ds],
+                &[],
+            );
+        }
+
+        // Push constants: history_weight, depth_rejection, motion_scale, reset_history
+        let pc = [
+            0.90f32,                              // history_weight
+            0.003f32,                             // depth_rejection
+            1.0f32,                               // motion_scale
+            if reset_history { 1.0f32 } else { 0.0f32 }, // reset_history
+        ];
+
+        let push_bytes = bytemuck::cast_slice(&pc);
+        unsafe {
+            device.cmd_push_constants(
+                command_buffer,
+                pipeline.layout,
+                vk::ShaderStageFlags::COMPUTE,
+                0,
+                push_bytes,
+            );
+
+            let dispatch_x = (history.width + 15) / 16;
+            let dispatch_y = (history.height + 15) / 16;
+            device.cmd_dispatch(command_buffer, dispatch_x, dispatch_y, 1);
+        }
+
+        // ── 4. Transition current color output back to SHADER_READ_ONLY_OPTIMAL for post_process fragment sampling
+        let post_resolve_barrier = vk::ImageMemoryBarrier::default()
+            .old_layout(vk::ImageLayout::GENERAL)
+            .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ)
+            .image(history.current_color().handle)
+            .subresource_range(vk::ImageSubresourceRange::default()
+                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .base_mip_level(0)
+                .level_count(1)
+                .base_array_layer(0)
+                .layer_count(1));
+
+        unsafe {
+            device.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[post_resolve_barrier],
+            );
+        }
+    }
 }
 
 impl Drop for PostProcessPipeline {
     fn drop(&mut self) {
+        self.exposure_buffers.clear();
+        self.auto_exposure_pipeline = None;
         if let Some(device) = self.device.clone() {
             self.destroy_depth_resolve_resources(&device);
             self.destroy_bloom_resources(&device);
+            self.destroy_taa_resources(&device);
             unsafe {
                 if let Some(sampler) = self.sampler.take() {
                     device.destroy_sampler(sampler, None);
@@ -1558,4 +2060,14 @@ pub enum PostProcessPreset {
     Cinematic,
     Vibrant,
     Retro,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Pod, Zeroable)]
+pub struct AutoExposureParams {
+    pub dt: f32,
+    pub speed: f32,
+    pub target_luminance: f32,
+    pub max_exposure: f32,
+    pub min_exposure: f32,
 }

@@ -319,6 +319,38 @@ impl Reactor {
                 );
             }
 
+            let taa_enabled = self.post_process.enabled
+                && self.post_process.settings.is_effect_enabled(crate::graphics::post_process::PostProcessEffect::TAA)
+                && self.temporal_history.is_some()
+                && self.gbuffer.is_some();
+
+            let mut local_vp = *view_projection;
+            if taa_enabled {
+                if let Some(ref history) = self.temporal_history {
+                    let f_idx = history.frame_index;
+                    fn halton(index: u32, base: u32) -> f32 {
+                        let mut result = 0.0;
+                        let mut f = 1.0 / base as f32;
+                        let mut i = index;
+                        while i > 0 {
+                            result += f * (i % base) as f32;
+                            f /= base as f32;
+                            i /= base;
+                        }
+                        result
+                    }
+                    let halton_x = halton((f_idx % 8) as u32 + 1, 2);
+                    let halton_y = halton((f_idx % 8) as u32 + 1, 3);
+                    let width = self.swapchain.extent.width as f32;
+                    let height = self.swapchain.extent.height as f32;
+                    let jitter_x = (halton_x - 0.5) * 2.0 / width;
+                    let jitter_y = (halton_y - 0.5) * 2.0 / height;
+                    self.camera_proj.z_axis.x += jitter_x;
+                    self.camera_proj.z_axis.y += jitter_y;
+                    local_vp = self.camera_proj * self.camera_view;
+                }
+            }
+
             // Determine if we should render to offscreen target for post-processing
             let use_post_process =
                 self.post_process.enabled && !self.post_process.offscreen_images.is_empty();
@@ -471,7 +503,7 @@ impl Reactor {
             let visible_objects = scene.objects.iter().filter(|object| object.visible).count();
             self.apply_pixel_intelligent_vrs(command_buffer, visible_objects);
 
-            let frustum = crate::systems::frustum::Frustum::from_view_projection(*view_projection);
+            let frustum = crate::systems::frustum::Frustum::from_view_projection(local_vp);
             let mut active_pipeline = vk::Pipeline::null();
             let mut active_descriptor_set = vk::DescriptorSet::null();
 
@@ -568,7 +600,7 @@ impl Reactor {
                     active_descriptor_set = descriptor_set_handle;
                 }
 
-                let mvp = *view_projection * object.transform;
+                let mvp = local_vp * object.transform;
 
                 #[repr(C)]
                 struct PushConstants {
@@ -699,6 +731,41 @@ impl Reactor {
                     );
                 }
 
+                // ── Auto-Exposure Compute Pipeline ──
+                if self.post_process.auto_exposure_pipeline.is_some()
+                    && self.post_process
+                        .settings
+                        .is_effect_enabled(crate::graphics::post_process::PostProcessEffect::AutoExposure)
+                {
+                    self.post_process.dispatch_auto_exposure(
+                        self.context.ash_device(),
+                        command_buffer,
+                        image_index as usize,
+                        self.post_process.delta_time,
+                    );
+                }
+
+                // ── Temporal Anti-Aliasing (TAA) Compute Pass ──
+                if taa_enabled {
+                    let history = self.temporal_history.as_ref().unwrap();
+                    let gbuffer = self.gbuffer.as_ref().unwrap();
+                    let current_depth_view = if self.msaa_samples == vk::SampleCountFlags::TYPE_1 {
+                        self.depth_image_view.unwrap()
+                    } else {
+                        self.post_process.depth_resolved_images[image_index as usize].view
+                    };
+                    
+                    self.post_process.dispatch_taa(
+                        self.context.ash_device(),
+                        command_buffer,
+                        image_index as usize,
+                        history,
+                        gbuffer,
+                        current_depth_view,
+                        false, // reset_history
+                    );
+                }
+
                 // Transition swapchain image from UNDEFINED to COLOR_ATTACHMENT_OPTIMAL
                 let swapchain_barrier = vk::ImageMemoryBarrier::default()
                     .old_layout(vk::ImageLayout::UNDEFINED)
@@ -749,6 +816,29 @@ impl Reactor {
                     vk::PipelineBindPoint::GRAPHICS,
                     self.post_process.pipeline.unwrap(),
                 );
+
+                // Update binding 0 dynamically: use resolved TAA history color if TAA is enabled,
+                // or fallback to the raw offscreen image if TAA is disabled.
+                let sampler = self.post_process.sampler.unwrap();
+                let color_view = if taa_enabled {
+                    self.temporal_history.as_ref().unwrap().current_color().view
+                } else {
+                    self.post_process.offscreen_images[image_index as usize].view
+                };
+                
+                let image_info = vk::DescriptorImageInfo::default()
+                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    .image_view(color_view)
+                    .sampler(sampler);
+                    
+                let write = vk::WriteDescriptorSet::default()
+                    .dst_set(self.post_process.descriptor_sets[image_index as usize])
+                    .dst_binding(0)
+                    .dst_array_element(0)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .image_info(std::slice::from_ref(&image_info));
+                    
+                self.context.device.update_descriptor_sets(&[write], &[]);
 
                 // Bind descriptor set (the offscreen texture)
                 self.context.device.cmd_bind_descriptor_sets(
@@ -808,6 +898,10 @@ impl Reactor {
 
                 // End post-processing rendering pass
                 self.context.device.cmd_end_rendering(command_buffer);
+
+                if let Some(ref mut history) = self.temporal_history {
+                    history.advance();
+                }
             }
 
             // ── Barrera 2: Color → Present ──

@@ -407,5 +407,5 @@ void main() {
     vec3 emissive = push.emission.rgb * emission_strength;
     vec3 color = (lo + ambient + rim) * cs + sss_accum + emissive;
 
-    outColor = vec4(color, tex_albedo.a * push.color.a);
+    outColor = vec4(color, roughness);
 }

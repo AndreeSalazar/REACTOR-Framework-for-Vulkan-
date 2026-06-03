@@ -443,5 +443,5 @@ void main() {
     // ─── 13. GAMMA CORRECTION (Linear → sRGB) ─────────────────────────
     finalColor = pow(finalColor, vec3(1.0 / 2.2));
 
-    outColor = vec4(finalColor, 1.0);
+    outColor = vec4(finalColor, surfaceRoughness);
 }

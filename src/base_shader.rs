@@ -605,6 +605,9 @@ impl BaseShaderCookbook {
             PostProcessEffect::AnamorphicFlares,
             PostProcessEffect::ContactShadows,
             PostProcessEffect::SSSDiffusion,
+            PostProcessEffect::DepthOfField,
+            PostProcessEffect::AutoExposure,
+            PostProcessEffect::TAA,
         ] {
             cookbook.post_settings.enable_effect(effect);
         }

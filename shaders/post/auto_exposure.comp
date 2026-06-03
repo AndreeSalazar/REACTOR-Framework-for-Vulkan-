@@ -1,0 +1,75 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(binding = 0) uniform sampler2D u_input_texture;
+
+layout(binding = 3) buffer ExposureBuffer {
+    float current_exposure;
+};
+
+layout(push_constant) uniform ExposureParams {
+    float dt;
+    float speed;
+    float target_luminance;
+    float max_exposure;
+    float min_exposure;
+} params;
+
+shared float shared_luma[256];
+
+float luminance(vec3 color) {
+    return dot(color, vec3(0.2126, 0.7152, 0.0722));
+}
+
+void main() {
+    uint local_index = gl_LocalInvocationIndex;
+    
+    // Each thread samples an 8x8 grid across the screen to estimate scene brightness
+    float sum_luma = 0.0;
+    int samples = 0;
+    
+    ivec2 thread_pos = ivec2(gl_LocalInvocationID.xy);
+    
+    for (int y = 0; y < 8; ++y) {
+        for (int x = 0; x < 8; ++x) {
+            // Distribute sample coordinates across the screen (128x128 grid total)
+            vec2 sample_pos = (vec2(thread_pos * 8 + ivec2(x, y)) + 0.5) / 128.0;
+            vec3 color = texture(u_input_texture, sample_pos).rgb;
+            sum_luma += luminance(color);
+            samples++;
+        }
+    }
+    
+    shared_luma[local_index] = sum_luma / float(samples);
+    barrier();
+    
+    // Parallel reduction in shared memory to sum all 256 threads
+    for (uint stride = 128; stride > 0; stride >>= 1) {
+        if (local_index < stride) {
+            shared_luma[local_index] += shared_luma[local_index + stride];
+        }
+        barrier();
+    }
+    
+    // Thread 0 computes average and updates the exposure buffer
+    if (local_index == 0) {
+        float avg_luma = shared_luma[0] / 256.0;
+        
+        // Target exposure: Exposure = TargetLuminance / max(avg_luma, 0.001)
+        float target_exposure = params.target_luminance / max(avg_luma, 0.001);
+        target_exposure = clamp(target_exposure, params.min_exposure, params.max_exposure);
+        
+        // Temporal adaptation: Exposure_new = Exposure_old + (Exposure_target - Exposure_old) * (1 - e^(-dt * speed))
+        float old_exposure = current_exposure;
+        // Handle initialization / reset
+        if (old_exposure <= 0.0001 || isnan(old_exposure)) {
+            old_exposure = 1.0;
+        }
+        
+        float t = 1.0 - exp(-params.dt * params.speed);
+        float new_exposure = mix(old_exposure, target_exposure, clamp(t, 0.0, 1.0));
+        
+        current_exposure = new_exposure;
+    }
+}

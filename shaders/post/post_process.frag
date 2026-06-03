@@ -7,6 +7,10 @@ layout(binding = 0) uniform sampler2D screenTexture;
 layout(binding = 1) uniform sampler2D bloomTexture;
 layout(binding = 2) uniform sampler2D depthTexture;
 
+layout(binding = 3) readonly buffer ExposureBuffer {
+    float current_exposure;
+};
+
 layout(push_constant) uniform PostProcessSettings {
     // Vignette
     float vignette_intensity;
@@ -56,6 +60,10 @@ layout(push_constant) uniform PostProcessSettings {
     float light_dir_x;
     float light_dir_y;
     float light_dir_z;
+
+    // Depth of Field (Feature A)
+    float dof_focus_distance;
+    float dof_aperture;
 } settings;
 
 // Effect indices (matching PostProcessEffect enum)
@@ -78,6 +86,8 @@ layout(push_constant) uniform PostProcessSettings {
 #define EFFECT_ANAMORPHIC_FLARES  (1u << 19)
 #define EFFECT_CONTACT_SHADOWS    (1u << 20)
 #define EFFECT_SSS_DIFFUSION      (1u << 21)
+#define EFFECT_DEPTH_OF_FIELD     (1u << 22)
+#define EFFECT_AUTO_EXPOSURE      (1u << 23)
 
 float luminance(vec3 color) {
     return dot(color, vec3(0.2126, 0.7152, 0.0722));
@@ -296,9 +306,12 @@ vec3 screen_space_reflection(vec2 uv, vec2 texelSize, vec3 color) {
     vec3 normal = estimate_screen_normal(uv, texelSize);
     vec3 viewDir = normalize(pos); // View direction (from camera origin)
 
-    // Estimate roughness from color variance (proxy — real G-Buffer would be better)
-    float colorVar = abs(luminance(color) - luminance(sample_screen(uv + texelSize)));
-    float roughness = clamp(1.0 - smoothstep(0.01, 0.25, luminance(color)) * 0.7, 0.05, 0.95);
+    // Read actual per-pixel roughness stored in the screen texture alpha channel (Feature D G-Buffer alternative)
+    // If the alpha is 1.0 (default albedo alpha/fallback) or 0.0, we fallback to the luminance heuristic.
+    float screenAlpha = texture(screenTexture, uv).a;
+    float roughness = (screenAlpha >= 0.999 || screenAlpha <= 0.001)
+        ? clamp(1.0 - smoothstep(0.01, 0.25, luminance(color)) * 0.7, 0.05, 0.95)
+        : clamp(screenAlpha, 0.04, 0.96);
 
     // Jitter reflection direction based on roughness for glossy appearance
     float noise = interleaved_gradient_noise(gl_FragCoord.xy, settings.time);
@@ -395,7 +408,10 @@ vec3 sss_screen_diffusion(vec2 uv, vec2 texelSize, vec3 color) {
     // Detect skin-like pixels by warm saturation heuristic
     float lum = luminance(color);
     float warmth = color.r / max(color.b + 0.001, 0.01);
-    float skinMask = smoothstep(1.1, 2.8, warmth) * smoothstep(0.04, 0.25, lum) * smoothstep(0.92, 0.15, lum);
+    float skinMask = smoothstep(1.4, 2.2, warmth) 
+                   * smoothstep(0.08, 0.20, lum) 
+                   * smoothstep(0.65, 0.12, lum)
+                   * step(0.03, color.g - color.b); // skin has G > B
     if (skinMask < 0.01) return color;
 
     // Multi-spectral kernel radii (in texels) — scaled by distance
@@ -440,6 +456,55 @@ vec3 sss_screen_diffusion(vec2 uv, vec2 texelSize, vec3 color) {
     return mix(color, blurred, skinMask * 0.72);
 }
 
+// ── Cinematic Bokeh Depth of Field (DoF) ────────────────────────────────────
+// Real physical camera simulation using a circular Fermat spiral disc kernel.
+// Samples depth-aware weights to prevent foreground bleeding.
+vec3 depth_of_field(vec2 uv, vec2 texelSize, vec3 color) {
+    float centerDepth = sample_depth(uv);
+    if (centerDepth >= 0.9999) return color; // Skip background sky
+
+    float depth = linearize_depth(centerDepth);
+    // Circle of Confusion: positive for far blur, negative for near blur
+    float coc = (depth - settings.dof_focus_distance) * settings.dof_aperture;
+    coc = clamp(coc, -1.0, 1.0);
+    
+    float blurRadius = abs(coc) * 16.0; // Max blur radius in pixels
+    if (blurRadius < 0.15) return color; // Early out for pixels in focus
+
+    vec3 blurred = vec3(0.0);
+    float totalWeight = 0.0;
+    const int DOF_TAPS = 24;
+
+    for (int i = 0; i < DOF_TAPS; ++i) {
+        // Fermat spiral distribution with golden angle rotation
+        float theta = float(i) * 2.39996323; // Golden angle
+        float r = sqrt(float(i) + 0.5) / sqrt(float(DOF_TAPS));
+        vec2 offset = vec2(cos(theta), sin(theta)) * r * blurRadius * texelSize;
+
+        vec2 sampleUV = uv + offset;
+        float sampleDepthVal = sample_depth(sampleUV);
+        if (sampleDepthVal >= 0.9999) continue; // Skip sky in blur sampling
+
+        float sampleDepth = linearize_depth(sampleDepthVal);
+        vec3 sampleColor = sample_screen(sampleUV);
+
+        // Depth-dependent weight: prevent background/foreground bleeding artifacts
+        float sampleCoC = clamp((sampleDepth - settings.dof_focus_distance) * settings.dof_aperture, -1.0, 1.0);
+        float sampleBlurRadius = abs(sampleCoC) * 16.0;
+
+        float weight = 1.0;
+        // If sample is closer than center pixel but is sharp, do not bleed it over us
+        if (sampleDepth < depth) {
+            weight = smoothstep(0.0, 1.0, sampleBlurRadius / max(blurRadius, 0.001));
+        }
+
+        blurred += sampleColor * weight;
+        totalWeight += weight;
+    }
+
+    return totalWeight > 0.001 ? (blurred / totalWeight) : color;
+}
+
 vec3 volumetric_fog(vec2 uv, vec3 color) {
     vec2 p = uv - 0.5;
     float radialDepth = smoothstep(0.1, 0.92, length(p));
@@ -450,12 +515,13 @@ vec3 volumetric_fog(vec2 uv, vec3 color) {
     vec2 lightUvB = vec2(0.82, 0.24);
     float shaftA = pow(max(0.0, 1.0 - length((uv - lightUvA) * vec2(1.0, 1.6))), 4.0);
     float shaftB = pow(max(0.0, 1.0 - length((uv - lightUvB) * vec2(1.0, 1.6))), 4.0);
-    vec3 shaftColor = vec3(0.55, 0.08, 0.35) * shaftA + vec3(0.03, 0.45, 0.65) * shaftB;
+    // Horror aesthetic: greenish-yellow fluorescent shafts for A, and dim amber/warm tone for B
+    vec3 shaftColor = vec3(0.18, 0.22, 0.08) * shaftA + vec3(0.12, 0.10, 0.06) * shaftB;
 
     float density = settings.fog_density * (0.45 + horizon * 0.95 + radialDepth * 0.55);
     density *= 0.9 + noise * 0.2;
 
-    vec3 fogColor = vec3(0.018, 0.016, 0.032) + shaftColor * settings.fog_scatter;
+    vec3 fogColor = vec3(0.012, 0.016, 0.014) + shaftColor * settings.fog_scatter;
     float fogAmount = 1.0 - exp(-density);
     return mix(color, fogColor + color * 0.12, clamp(fogAmount, 0.0, 0.82));
 }
@@ -823,11 +889,9 @@ void main() {
         color = anamorphic_flares(uv, texelSize, color);
     }
 
-    // 12. Film Grain
-    if ((settings.effect_mask & EFFECT_GRAIN) != 0) {
-        float noise = rand(uv + settings.time * settings.grain_speed);
-        color += (noise - 0.5) * settings.grain_intensity;
-        color = max(color, 0.0);
+    // 11.5. Cinematic Bokeh Depth of Field
+    if ((settings.effect_mask & EFFECT_DEPTH_OF_FIELD) != 0) {
+        color = depth_of_field(uv, texelSize, color);
     }
 
     // 13. LUT-style Color Grading
@@ -855,7 +919,11 @@ void main() {
 
     // 16. Tone Mapping & Exposure (AgX — cinematic SDR, matches Blender output)
     if ((settings.effect_mask & EFFECT_TONEMAP) != 0) {
-        color *= settings.exposure;
+        if ((settings.effect_mask & EFFECT_AUTO_EXPOSURE) != 0) {
+            color *= current_exposure;
+        } else {
+            color *= settings.exposure;
+        }
         color = agx_tonemap(color);
         // Subtle saturation recovery post-tonemap (AgX is deliberately neutral)
         float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
@@ -864,6 +932,13 @@ void main() {
 
     // 17. Gamma Correction
     color = pow(color, vec3(1.0 / settings.gamma));
+
+    // 12. Film Grain (Moved after Gamma Correction to ensure perfectly monochromatic noise and no non-linear skew)
+    if ((settings.effect_mask & EFFECT_GRAIN) != 0) {
+        float noise = rand(uv + settings.time * settings.grain_speed);
+        color += vec3((noise - 0.5) * settings.grain_intensity);
+        color = max(color, 0.0);
+    }
 
     // 18. Anti-banding dither (reduces 8-bit quantization artifacts on SDR)
     float dither = (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 255.0;

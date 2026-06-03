@@ -12,7 +12,7 @@ pub struct TemporalHistory {
     pub depth_a: Image,
     pub depth_b: Image,
     pub storage_writes_supported: bool,
-    frame_index: u64,
+    pub frame_index: u64,
 }
 
 impl TemporalHistory {
