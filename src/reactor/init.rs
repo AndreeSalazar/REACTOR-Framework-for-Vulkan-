@@ -414,9 +414,11 @@ impl Reactor {
             ..Default::default()
         };
 
-        // Renderizar directamente sobre el target de color offscreen (formato swapchain)
+        // MRT: Decals write to 2 G-Buffer attachments (AlbedoAO + NormalMaterial)
+        // Must match the formats defined in GBufferAttachment
         let color_formats = [
-            self.swapchain.format,
+            vk::Format::R8G8B8A8_UNORM,       // Location 0: outAlbedoAo
+            vk::Format::R16G16B16A16_SFLOAT,   // Location 1: outNormalMaterial
         ];
 
         let decal_pipeline = crate::graphics::pipeline::Pipeline::with_config_multi_color(

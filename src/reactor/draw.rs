@@ -562,26 +562,16 @@ impl Reactor {
                     active_descriptor_set = vk::DescriptorSet::null(); // Reset active descriptor set on pipeline change
 
                     if object.material.uses_ibl {
-                        if let Some(ref ibl) = self.ibl_textures {
-                            self.context.device.cmd_bind_descriptor_sets(
-                                command_buffer,
-                                vk::PipelineBindPoint::GRAPHICS,
-                                object.material.pipeline.layout,
-                                1, // Set 1 for IBL Textures
-                                &[ibl.descriptor_set],
-                                &[],
-                            );
-                        }
-                    }
-
-                    if !self.shadow_descriptor_sets.is_empty() {
-                        self.context.device.cmd_bind_descriptor_sets(
+                        self.bind_reactor_system_descriptors(
                             command_buffer,
-                            vk::PipelineBindPoint::GRAPHICS,
                             object.material.pipeline.layout,
-                            2, // Set 2 for Shadows
-                            &[self.shadow_descriptor_sets[self.current_frame]],
-                            &[],
+                            true,
+                        );
+                    } else if !self.shadow_descriptor_sets.is_empty() {
+                        self.bind_reactor_system_descriptors(
+                            command_buffer,
+                            object.material.pipeline.layout,
+                            false,
                         );
                     }
                 }
@@ -1449,13 +1439,26 @@ impl Reactor {
             );
         }
 
-        // 2. Comenzar render pass de decals en el color target offscreen (cargando el color actual)
-        let target_view = self.post_process.offscreen_images[image_index].view;
-        let color_attachment = vk::RenderingAttachmentInfo::default()
-            .image_view(target_view)
+        // 2. Begin MRT render pass writing to G-Buffer AlbedoAO + NormalMaterial
+        let Some(ref gbuffer) = self.gbuffer else {
+            return Ok(());
+        };
+
+        // MRT Attachment 0: AlbedoAO — alpha-over blending
+        let albedo_attachment = vk::RenderingAttachmentInfo::default()
+            .image_view(gbuffer.albedo_ao.view)
             .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
             .load_op(vk::AttachmentLoadOp::LOAD)
             .store_op(vk::AttachmentStoreOp::STORE);
+
+        // MRT Attachment 1: NormalMaterial — alpha-over blending
+        let normal_attachment = vk::RenderingAttachmentInfo::default()
+            .image_view(gbuffer.normal_material.view)
+            .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+            .load_op(vk::AttachmentLoadOp::LOAD)
+            .store_op(vk::AttachmentStoreOp::STORE);
+
+        let color_attachments = [albedo_attachment, normal_attachment];
 
         let rendering_info = vk::RenderingInfo::default()
             .render_area(vk::Rect2D {
@@ -1463,7 +1466,7 @@ impl Reactor {
                 extent: self.swapchain.extent,
             })
             .layer_count(1)
-            .color_attachments(std::slice::from_ref(&color_attachment));
+            .color_attachments(&color_attachments);
 
         unsafe {
             self.context.device.cmd_begin_rendering(command_buffer, &rendering_info);
@@ -1565,5 +1568,49 @@ impl Reactor {
         }
 
         Ok(())
+    }
+
+    /// Binds the global REACTOR system descriptor sets (IBL + Shadows) for a given pipeline.
+    ///
+    /// This is the **unified modular API** entry point (Phase 22) — a single call replaces
+    /// all duplicated `cmd_bind_descriptor_sets` for Sets 1 (IBL) and 2 (Shadows) across the
+    /// rendering pipeline, reducing boilerplate and eliminating binding inconsistencies.
+    ///
+    /// # Parameters
+    /// - `command_buffer`: Active Vulkan command buffer.
+    /// - `pipeline_layout`: The layout of the currently bound graphics pipeline.
+    /// - `bind_ibl`: Whether to bind IBL textures (Set 1). Set to `false` for pipelines
+    ///   that don't sample IBL (e.g. shadow-only passes).
+    pub unsafe fn bind_reactor_system_descriptors(
+        &self,
+        command_buffer: vk::CommandBuffer,
+        pipeline_layout: vk::PipelineLayout,
+        bind_ibl: bool,
+    ) {
+        // Set 1: IBL Textures (irradiance + prefiltered + BRDF LUT + params)
+        if bind_ibl {
+            if let Some(ref ibl) = self.ibl_textures {
+                self.context.device.cmd_bind_descriptor_sets(
+                    command_buffer,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    pipeline_layout,
+                    1,
+                    &[ibl.descriptor_set],
+                    &[],
+                );
+            }
+        }
+
+        // Set 2: Cascaded Shadow Maps
+        if !self.shadow_descriptor_sets.is_empty() {
+            self.context.device.cmd_bind_descriptor_sets(
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                pipeline_layout,
+                2,
+                &[self.shadow_descriptor_sets[self.current_frame]],
+                &[],
+            );
+        }
     }
 }

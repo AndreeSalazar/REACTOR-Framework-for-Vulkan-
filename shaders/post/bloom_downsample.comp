@@ -63,8 +63,19 @@ void main() {
         float luma = dot(downsample, vec3(0.2126, 0.7152, 0.0722));
         downsample = downsample / max(1.0 - luma, 0.0001);
         
-        // Thresholding
-        if (luma < params.u_threshold) {
+        // ── Selective Emissive Bloom Thresholding ────────────────────────────────
+        // The alpha channel carries emissive weight (from blender_live.frag roughness
+        // channel which is repurposed here via the bloom input). We sample the center
+        // texel's alpha to determine if this region is truly emissive.
+        //
+        // Emissive pixels (neon, muzzle flash, glowing eyes): use normal threshold.
+        // Non-emissive pixels (skin, clothing, walls): require 3× higher luminance
+        // to contribute to bloom, preventing overexposure on non-light-sources.
+        float emissive_weight = texture(u_input_texture, uv).a;
+        // Smoothly interpolate between strict (non-emissive) and loose (emissive) threshold
+        float effective_threshold = mix(params.u_threshold * 3.0, params.u_threshold, clamp(emissive_weight * 2.0, 0.0, 1.0));
+        
+        if (luma < effective_threshold) {
             downsample = vec3(0.0);
         }
     } else {
