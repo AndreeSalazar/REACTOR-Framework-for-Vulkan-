@@ -358,7 +358,10 @@ void main() {
     vec3 fillRad = vec3(0.55, 0.65, 0.85);
     vec3 backRad = vec3(1.6, 1.55, 1.50);
 
-    bool is_hair = (anisotropy > 0.85);
+    // ── Material mode detection ──
+    bool is_hair      = (anisotropy > 0.85);
+    bool is_cloth     = (anisotropy < -0.85);
+    bool is_clearcoat = (!is_hair && !is_cloth && metallic > 0.95 && roughness < 0.15);
 
     if (is_hair) {
         // Modelo Kajiya-Kay para cabello (RenderMan Style) con especular primario y secundario desplazados
@@ -382,6 +385,50 @@ void main() {
             vec3 L_sun = -normalize(shadow.light_direction.xyz);
             vec3 sun_radiance = vec3(2.5, 2.4, 2.2) * shadow_factor;
             lo += brdf_eval_hair(T, N, V, L_sun, albedo, roughness, shift, sec_roughness, sec_color) * sun_radiance;
+        }
+    } else if (is_cloth) {
+        // ── Cloth / Sheen BRDF (Horizon Zero Dawn / RenderMan) ──
+        // Usa distribución Charlie + visibilidad Neubelt para halo suave de tela
+        vec3 sheen_color = mix(vec3(1.0), albedo, 0.3);  // Sheen ligeramente coloreado
+        float sheen_roughness = clamp(roughness * 1.2, 0.3, 1.0); // Cloth es más rugoso
+
+        lo += brdf_shade_cloth(N, V, keyDir,  keyRad,  albedo, roughness, sheen_color, sheen_roughness);
+        lo += brdf_shade_cloth(N, V, fillDir, fillRad, albedo, roughness, sheen_color, sheen_roughness);
+        lo += brdf_shade_cloth(N, V, backDir, backRad, albedo, roughness, sheen_color, sheen_roughness);
+
+        // Point light dinámica
+        vec3 pointL = normalize(push.light_pos.xyz - P);
+        float dist = length(push.light_pos.xyz - P);
+        float atten = 1.0 / (dist * dist + 1.0);
+        vec3 point_radiance = vec3(1.0, 1.0, 1.0) * 12.0 * shadow_factor * atten;
+        lo += brdf_shade_cloth(N, V, pointL, point_radiance, albedo, roughness, sheen_color, sheen_roughness);
+
+        if (shadow.shadow_enabled != 0) {
+            vec3 L_sun = -normalize(shadow.light_direction.xyz);
+            vec3 sun_radiance = vec3(2.5, 2.4, 2.2) * shadow_factor;
+            lo += brdf_shade_cloth(N, V, L_sun, sun_radiance, albedo, roughness, sheen_color, sheen_roughness);
+        }
+    } else if (is_clearcoat) {
+        // ── Clear Coat BRDF (Forza Horizon / Cyberpunk wet) ──
+        // Segundo lóbulo GGX con IOR 1.5 sobre la capa base
+        float coat_weight = 1.0;
+        float coat_roughness = 0.03; // Coat muy liso para coches
+        
+        lo += brdf_shade_clearcoat(N, V, keyDir,  keyRad,  albedo, metallic, roughness, f0, coat_weight, coat_roughness);
+        lo += brdf_shade_clearcoat(N, V, fillDir, fillRad, albedo, metallic, roughness, f0, coat_weight, coat_roughness);
+        lo += brdf_shade_clearcoat(N, V, backDir, backRad, albedo, metallic, roughness, f0, coat_weight, coat_roughness);
+
+        // Point light dinámica
+        vec3 pointL = normalize(push.light_pos.xyz - P);
+        float dist = length(push.light_pos.xyz - P);
+        float atten = 1.0 / (dist * dist + 1.0);
+        vec3 point_radiance = vec3(1.0, 1.0, 1.0) * 12.0 * shadow_factor * atten;
+        lo += brdf_shade_clearcoat(N, V, pointL, point_radiance, albedo, metallic, roughness, f0, coat_weight, coat_roughness);
+
+        if (shadow.shadow_enabled != 0) {
+            vec3 L_sun = -normalize(shadow.light_direction.xyz);
+            vec3 sun_radiance = vec3(2.5, 2.4, 2.2) * shadow_factor;
+            lo += brdf_shade_clearcoat(N, V, L_sun, sun_radiance, albedo, metallic, roughness, f0, coat_weight, coat_roughness);
         }
     } else if (use_aniso) {
         lo += light_eval_directional_anisotropic(N, V, keyDir, T, B, keyRad, albedo, metallic, roughness, anisotropy, f0);

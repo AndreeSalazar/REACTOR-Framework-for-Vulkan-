@@ -221,5 +221,139 @@ vec3 brdf_eval_hair(vec3 T, vec3 N, vec3 V, vec3 L, vec3 albedo, float roughness
     return (diffuse + specular) * NoL;
 }
 
+// ── Clear Coat BRDF (Forza Horizon / Cyberpunk 2077 / Disney Principled) ─────
+// Simula una capa transparente de barniz sobre la superficie base:
+//   • Pintura de coches (la más icónica)
+//   • Suelos mojados (charcos, lluvia)
+//   • Ojos (córnea), pantallas de teléfono, madera lacada
+//
+// Modelo: segundo lóbulo GGX independiente con IOR del coat (típ. 1.5 = F0 ~0.04).
+// La energía que refleja el coat se resta de la capa base (conservación).
+//
+// Parámetros:
+//   coat_weight    [0..1] — intensidad del clear coat (0 = sin coat, 1 = coat completo)
+//   coat_roughness [0..1] — rugosidad del coat (típ. 0.0-0.1 para coches, 0.3 para mojado)
+
+struct ClearCoatSample {
+    vec3 base_diffuse;
+    vec3 base_specular;
+    vec3 coat_specular;
+};
+
+// Fresnel del coat usando IOR fijo de 1.5 (F0 = 0.04)
+float F_Schlick_Coat(float VoH) {
+    const float F0_COAT = 0.04;
+    return F0_COAT + (1.0 - F0_COAT) * pow(1.0 - VoH, 5.0);
+}
+
+ClearCoatSample brdf_eval_clearcoat(vec3 N, vec3 V, vec3 L,
+                                     vec3 albedo, float metallic, float roughness, vec3 f0,
+                                     float coat_weight, float coat_roughness) {
+    vec3  H   = normalize(V + L);
+    float NoV = max(dot(N, V), 0.0);
+    float NoL = max(dot(N, L), 0.0);
+    float NoH = max(dot(N, H), 0.0);
+    float VoH = max(dot(V, H), 0.0);
+    float LoH = max(dot(L, H), 0.0);
+
+    // ── Base layer (standard Cook-Torrance) ──
+    roughness = clamp(roughness, 0.04, 1.0);
+    float alpha = roughness * roughness;
+    float D_base  = D_GGX(NoH, alpha);
+    float V_base  = V_SmithGGXCorrelated(NoV, NoL, alpha);
+    vec3  F_base  = F_Schlick(VoH, f0);
+
+    vec3 spec_base = D_base * V_base * F_base;
+    vec3 kd        = (1.0 - F_base) * (1.0 - metallic);
+    vec3 diff_base = kd * Fd_Burley(albedo, roughness, NoV, NoL, LoH);
+
+    // ── Coat layer (second GGX lobe, dielectric IOR 1.5) ──
+    float coat_alpha = clamp(coat_roughness, 0.002, 1.0);
+    coat_alpha *= coat_alpha;
+    float D_coat = D_GGX(NoH, coat_alpha);
+    float V_coat = V_SmithGGXCorrelated(NoV, NoL, coat_alpha);
+    float F_coat = F_Schlick_Coat(VoH) * coat_weight;
+
+    vec3 spec_coat = vec3(D_coat * V_coat * F_coat);
+
+    // ── Energy conservation: coat absorbs energy from the base layer ──
+    // Lo que refleja el coat, no llega a la base
+    float coat_attenuation = 1.0 - F_coat;
+
+    ClearCoatSample s;
+    s.base_diffuse  = diff_base * coat_attenuation * NoL;
+    s.base_specular  = spec_base * coat_attenuation * NoL;
+    s.coat_specular  = spec_coat * NoL;
+    return s;
+}
+
+vec3 brdf_shade_clearcoat(vec3 N, vec3 V, vec3 L, vec3 radiance,
+                           vec3 albedo, float metallic, float roughness, vec3 f0,
+                           float coat_weight, float coat_roughness) {
+    ClearCoatSample s = brdf_eval_clearcoat(N, V, L, albedo, metallic, roughness, f0,
+                                             coat_weight, coat_roughness);
+    return (s.base_diffuse + s.base_specular + s.coat_specular) * radiance;
+}
+
+// ── Cloth / Sheen BRDF (Horizon Zero Dawn / RenderMan / Filament) ────────────
+// Modelo dedicado para tela y tejidos:
+//   • Terciopelo, satén, algodón, lana, cuero suave
+//   • La tela NO tiene Fresnel metálico — tiene un halo suave difuso
+//   • Usa la distribución Charlie (Ashikhmin invertida) en vez de GGX
+//   • Visibilidad Neubelt (uniform cylinder approximation)
+//
+// Parámetros:
+//   sheen_color     — color del halo de sheen (típ. blanco para algodón, coloreado para terciopelo)
+//   sheen_roughness — rugosidad del sheen [0..1] (típ. 0.5-0.8)
+
+// D · Charlie / Ashikhmin inverted Gaussian — distribución suave para cloth
+float D_Charlie(float NoH, float roughness) {
+    float alpha = roughness * roughness;
+    float inv_alpha = 1.0 / alpha;
+    float cos2h = NoH * NoH;
+    float sin2h = max(1.0 - cos2h, REACTOR_EPS);
+    // Ashikhmin inverted Gaussian: (2 + 1/α) / (2π) * sin(θ)^(1/α)
+    return (2.0 + inv_alpha) * pow(sin2h, inv_alpha * 0.5) / (2.0 * REACTOR_PI);
+}
+
+// V · Neubelt — aproximación analítica para la visibilidad de cloth
+// Uniform cylinder model: V = 1 / (4 * (NoL + NoV - NoL*NoV))
+float V_Neubelt(float NoV, float NoL) {
+    return 1.0 / max(4.0 * (NoL + NoV - NoL * NoV), REACTOR_EPS);
+}
+
+BrdfSample brdf_eval_cloth(vec3 N, vec3 V, vec3 L,
+                            vec3 albedo, float roughness,
+                            vec3 sheen_color, float sheen_roughness) {
+    vec3  H   = normalize(V + L);
+    float NoV = max(dot(N, V), 0.0);
+    float NoL = max(dot(N, L), 0.0);
+    float NoH = max(dot(N, H), 0.0);
+    float LoH = max(dot(L, H), 0.0);
+
+    // Sheen specular: Charlie distribution + Neubelt visibility
+    // No Fresnel — cloth has diffuse-like sheen instead
+    float D_sheen = D_Charlie(NoH, clamp(sheen_roughness, 0.07, 1.0));
+    float V_sheen = V_Neubelt(NoV, NoL);
+    vec3  spec    = sheen_color * D_sheen * V_sheen;
+
+    // Diffuse: Burley wrap — cloth is primarily diffuse
+    // Cloth energy compensation: subtract sheen contribution from diffuse
+    float sheen_energy = max(max(sheen_color.r, sheen_color.g), sheen_color.b);
+    vec3 diff = (1.0 - sheen_energy * 0.5) * Fd_Burley(albedo, roughness, NoV, NoL, LoH);
+
+    BrdfSample s;
+    s.diffuse  = diff * NoL;
+    s.specular = spec * NoL;
+    return s;
+}
+
+vec3 brdf_shade_cloth(vec3 N, vec3 V, vec3 L, vec3 radiance,
+                       vec3 albedo, float roughness,
+                       vec3 sheen_color, float sheen_roughness) {
+    BrdfSample s = brdf_eval_cloth(N, V, L, albedo, roughness, sheen_color, sheen_roughness);
+    return (s.diffuse + s.specular) * radiance;
+}
+
 #endif
 
