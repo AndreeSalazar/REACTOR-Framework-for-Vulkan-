@@ -1,0 +1,119 @@
+#version 450
+// =============================================================================
+// REACTOR · shaders/compute/cull.comp — GPU Frustum + Occlusion Culling
+// =============================================================================
+// Compute pass que lee AABBs de objetos y genera comandos de dibujo indirecto:
+//   1. Test de frustum (6 planos) — descarta objetos fuera de vista
+//   2. Test de oclusión Hi-Z — descarta objetos ocultos tras geometría
+//   3. Escribe draw commands en un buffer indirecto
+//
+// Requiere: SSBO de AABBs + Hi-Z depth pyramid + buffer de draw indirect
+// =============================================================================
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// AABB de cada objeto/meshlet en espacio mundo
+struct ObjectAABB {
+    vec4 center_radius;   // xyz = centro, w = radio de bounding sphere
+    vec4 extent_flags;    // xyz = half-extents del AABB, w = flags (bit 0 = visible)
+    uint mesh_index;      // Índice del mesh para el draw command
+    uint index_count;     // Número de índices del mesh
+    uint first_index;     // Offset del primer índice
+    int  vertex_offset;   // Offset de vértices
+};
+
+// Draw command estilo Vulkan (VkDrawIndexedIndirectCommand)
+struct DrawCommand {
+    uint index_count;
+    uint instance_count;
+    uint first_index;
+    int  vertex_offset;
+    uint first_instance;
+};
+
+layout(std430, set = 0, binding = 0) readonly buffer ObjectBuffer {
+    ObjectAABB objects[];
+};
+
+layout(std430, set = 0, binding = 1) writeonly buffer DrawCommandBuffer {
+    DrawCommand commands[];
+};
+
+layout(std430, set = 0, binding = 2) buffer DrawCountBuffer {
+    uint draw_count;       // Atómico: número de draw commands visibles
+};
+
+layout(set = 0, binding = 3) uniform sampler2D hiz_pyramid; // Hi-Z depth pyramid (mip chain)
+
+layout(push_constant) uniform CullPushConstants {
+    mat4  view_proj;
+    vec4  frustum_planes[6]; // 6 planos del frustum en world space (nx,ny,nz,d)
+    vec4  camera_pos;        // xyz = posición de cámara
+    uint  object_count;
+    float hiz_width;         // Ancho del nivel 0 del Hi-Z
+    float hiz_height;        // Alto del nivel 0 del Hi-Z
+    float near_plane;
+} push;
+
+// ── Test de Frustum con 6 planos ──
+// Retorna true si la esfera está al menos parcialmente dentro del frustum
+bool frustum_test(vec3 center, float radius) {
+    for (int i = 0; i < 6; i++) {
+        float dist = dot(push.frustum_planes[i].xyz, center) + push.frustum_planes[i].w;
+        if (dist < -radius) return false; // Completamente fuera de este plano
+    }
+    return true;
+}
+
+// ── Test de Oclusión Hi-Z ──
+// Proyecta la esfera al screen space y compara con el Hi-Z pyramid
+bool occlusion_test(vec3 center, float radius) {
+    // Proyectar centro al clip space
+    vec4 clip = push.view_proj * vec4(center, 1.0);
+    if (clip.w <= 0.0) return true; // Detrás de la cámara, skip occlusion
+    
+    vec3 ndc = clip.xyz / clip.w;
+    vec2 screen_center = ndc.xy * 0.5 + 0.5;
+    
+    // Estimar el radio en screen space (proyección perspectiva)
+    float dist = length(center - push.camera_pos.xyz);
+    float screen_radius = radius / max(dist, 0.001) * 0.5;
+    
+    // Seleccionar el mip level del Hi-Z basado en el tamaño en pantalla
+    float screen_size = screen_radius * max(push.hiz_width, push.hiz_height);
+    float mip_level = max(0.0, ceil(log2(max(screen_size, 1.0))));
+    
+    // Leer la profundidad del Hi-Z en el mip seleccionado
+    float hiz_depth = textureLod(hiz_pyramid, screen_center, mip_level).r;
+    
+    // La profundidad más cercana del objeto (centro - radio en view space)
+    float obj_depth = ndc.z; // En Vulkan reverse-Z: menor = más lejos
+    
+    // Si el objeto está completamente detrás del Hi-Z, está oculto
+    // Reverse-Z: depth más grande = más cerca
+    return obj_depth >= hiz_depth - 0.001; // Pequeño margen de error
+}
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= push.object_count) return;
+    
+    ObjectAABB obj = objects[id];
+    vec3 center = obj.center_radius.xyz;
+    float radius = obj.center_radius.w;
+    
+    // ── Test 1: Frustum Culling ──
+    if (!frustum_test(center, radius)) return;
+    
+    // ── Test 2: Hi-Z Occlusion Culling ──
+    if (!occlusion_test(center, radius)) return;
+    
+    // ── Objeto visible: escribir draw command ──
+    uint slot = atomicAdd(draw_count, 1);
+    
+    commands[slot].index_count    = obj.index_count;
+    commands[slot].instance_count = 1;
+    commands[slot].first_index    = obj.first_index;
+    commands[slot].vertex_offset  = obj.vertex_offset;
+    commands[slot].first_instance = id; // Usar como instance ID para datos per-object
+}
