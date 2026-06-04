@@ -1,0 +1,135 @@
+#version 450
+// =============================================================================
+// REACTOR · shaders/post/lens_flare.comp — Physical Lens Flare (Ghost + Starburst)
+// =============================================================================
+// Genera efectos de lens flare físicamente inspirados:
+//   • Ghost images: reflexiones internas entre elementos de la lente
+//   • Chromatic aberration: dispersión de color en los ghosts
+//   • Starburst: patrón de difracción por las cuchillas del diafragma
+//
+// Se ejecuta sobre el bloom downsampled (mip 2-3) para detectar bright spots.
+// Referencia: UE5, Battlefield, Call of Duty, Red Dead Redemption 2
+// =============================================================================
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(binding = 0) uniform sampler2D bloomMip;     // Bloom downsampled (mip 2-3)
+layout(binding = 1, rgba16f) uniform writeonly image2D flareOutput;
+
+layout(push_constant) uniform FlarePushConstants {
+    vec2 resolution;       // Resolución de salida
+    float ghost_dispersal; // Dispersión entre ghosts (típ. 0.37)
+    float ghost_count;     // Número de ghosts (típ. 4-8)
+    float ghost_threshold; // Umbral de brillo para generar ghosts (típ. 0.8)
+    float halo_radius;     // Radio del halo (típ. 0.45)
+    float halo_width;      // Ancho del halo (típ. 0.06)
+    float chromatic_dist;  // Distorsión cromática (típ. 0.02)
+    float starburst_scale; // Escala del starburst (típ. 0.5)
+    float intensity;       // Intensidad global del flare (típ. 0.5-1.0)
+    float camera_angle;    // Ángulo de la cámara para rotar el starburst
+    float _pad;
+} push;
+
+// ── Chromatic aberration sampling ──
+// Muestrea la textura con desplazamiento cromático (R, G, B separados)
+vec3 sample_chromatic(sampler2D tex, vec2 uv, vec2 direction, float dist) {
+    float r = texture(tex, uv + direction * dist).r;
+    float g = texture(tex, uv).g;
+    float b = texture(tex, uv - direction * dist).b;
+    return vec3(r, g, b);
+}
+
+// ── Ghost image generation ──
+// Genera reflexiones internas de la lente (ghosts) invirtiendo y escalando UV
+vec3 generate_ghosts(vec2 uv) {
+    // Invertir UV respecto al centro para simular reflexión interna
+    vec2 ghost_uv = vec2(1.0) - uv;
+    vec2 ghost_vec = (vec2(0.5) - ghost_uv) * push.ghost_dispersal;
+    
+    vec3 result = vec3(0.0);
+    
+    for (float i = 0.0; i < 8.0; i += 1.0) {
+        if (i >= push.ghost_count) break;
+        
+        vec2 offset = fract(ghost_uv + ghost_vec * i);
+        
+        // Solo generar ghost si el bright spot excede el umbral
+        float luma = dot(texture(bloomMip, offset).rgb, vec3(0.2126, 0.7152, 0.0722));
+        if (luma < push.ghost_threshold) continue;
+        
+        // Chromatic aberration en cada ghost
+        vec2 direction = normalize(ghost_vec);
+        float dist = push.chromatic_dist * (i + 1.0) * 0.5;
+        vec3 ghost_color = sample_chromatic(bloomMip, offset, direction, dist);
+        
+        // Atenuación por distancia al centro (los ghosts más lejos son más débiles)
+        float weight = length(vec2(0.5) - offset);
+        weight = pow(1.0 - clamp(weight, 0.0, 1.0), 8.0);
+        
+        // Variación de intensidad por ghost (los pares son más brillantes)
+        float ghost_weight = mix(0.5, 1.0, mod(i, 2.0));
+        
+        result += ghost_color * weight * ghost_weight;
+    }
+    
+    return result;
+}
+
+// ── Halo effect ──
+// Genera un anillo de halo alrededor de las fuentes brillantes
+vec3 generate_halo(vec2 uv) {
+    vec2 halo_vec = vec2(0.5) - uv;
+    halo_vec /= max(length(halo_vec), 0.001);
+    halo_vec *= push.halo_radius;
+    
+    vec2 halo_uv = uv + halo_vec;
+    
+    // Peso del halo: solo activo en un anillo estrecho
+    float dist = length(vec2(0.5) - uv);
+    float halo_weight = max(0.0, 1.0 - abs(dist - push.halo_radius) / push.halo_width);
+    halo_weight = pow(halo_weight, 3.0);
+    
+    vec3 halo_color = sample_chromatic(bloomMip, halo_uv, normalize(halo_vec), push.chromatic_dist);
+    return halo_color * halo_weight;
+}
+
+// ── Starburst pattern ──
+// Patrón de difracción de las cuchillas del diafragma
+float starburst_pattern(vec2 uv) {
+    vec2 center_vec = uv - 0.5;
+    float angle = atan(center_vec.y, center_vec.x) + push.camera_angle;
+    
+    // 6 cuchillas de diafragma → 6 puntas de estrella
+    float star = cos(angle * 6.0);
+    star = pow(max(star, 0.0), 12.0); // Puntas afiladas
+    
+    // Segundo armónico para 12 puntas secundarias más débiles
+    float star2 = cos(angle * 12.0 + 0.5);
+    star2 = pow(max(star2, 0.0), 24.0) * 0.3;
+    
+    return (star + star2) * push.starburst_scale;
+}
+
+void main() {
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(flareOutput);
+    if (pixel.x >= size.x || pixel.y >= size.y) return;
+    
+    vec2 uv = (vec2(pixel) + 0.5) / vec2(size);
+    
+    // ── Generar componentes del lens flare ──
+    vec3 ghosts = generate_ghosts(uv);
+    vec3 halo   = generate_halo(uv);
+    
+    // Combinar ghosts + halo
+    vec3 flare = ghosts + halo;
+    
+    // Aplicar patrón de starburst
+    float starburst = starburst_pattern(uv);
+    flare *= (1.0 + starburst);
+    
+    // Intensidad global
+    flare *= push.intensity;
+    
+    imageStore(flareOutput, pixel, vec4(max(flare, vec3(0.0)), 1.0));
+}

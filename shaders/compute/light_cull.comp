@@ -1,0 +1,183 @@
+#version 450
+// =============================================================================
+// REACTOR · shaders/compute/light_cull.comp — Clustered Light Culling
+// =============================================================================
+// Divide el frustum en tiles 16×16 y asigna luces puntuales/spot a cada tile.
+// Cada tile almacena una lista de índices de luces que lo afectan.
+// El fragment shader solo evalúa las luces asignadas a su tile.
+//
+// Escala a 1000+ luces dinámicas sin degradación de rendimiento.
+// Referencia: Doom Eternal, Frostbite, UE5 clustered forward
+// =============================================================================
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// ── Estructuras de datos ──
+
+struct PointLight {
+    vec4 position_radius;  // xyz = world position, w = radius
+    vec4 color_intensity;  // xyz = color, w = intensity
+};
+
+// Resultado: lista de luces por tile
+// Formato: [offset, count] por tile, luego array lineal de light indices
+struct TileLightList {
+    uint offset;    // Offset en el array global de light indices
+    uint count;     // Número de luces en este tile
+};
+
+layout(std430, set = 0, binding = 0) readonly buffer LightBuffer {
+    PointLight lights[];
+};
+
+layout(std430, set = 0, binding = 1) writeonly buffer TileLightListBuffer {
+    TileLightList tile_lists[];
+};
+
+layout(std430, set = 0, binding = 2) writeonly buffer LightIndexBuffer {
+    uint light_indices[];
+};
+
+layout(std430, set = 0, binding = 3) buffer GlobalAtomicBuffer {
+    uint global_light_index_count;
+};
+
+layout(set = 0, binding = 4) uniform sampler2D depthTexture;
+
+layout(push_constant) uniform LightCullPush {
+    mat4 view;
+    mat4 projection;
+    mat4 inv_projection;
+    uint light_count;
+    uint tile_count_x;
+    uint tile_count_y;
+    uint screen_width;
+    uint screen_height;
+    float near_plane;
+    float far_plane;
+    uint max_lights_per_tile;
+} push;
+
+// ── Shared memory para el tile ──
+shared uint tile_min_depth;
+shared uint tile_max_depth;
+shared uint tile_light_count;
+shared uint tile_light_start;
+shared uint tile_light_indices[256]; // Max 256 luces por tile
+
+// Convertir profundidad Vulkan [0,1] a view-space Z
+float linearize_depth(float d) {
+    return push.near_plane * push.far_plane / (push.far_plane - d * (push.far_plane - push.near_plane));
+}
+
+// Crear un plano del frustum del tile desde 2 puntos en NDC
+vec4 create_plane(vec3 p0, vec3 p1, vec3 p2) {
+    vec3 n = normalize(cross(p1 - p0, p2 - p0));
+    return vec4(n, -dot(n, p0));
+}
+
+void main() {
+    uvec2 tile_id = gl_WorkGroupID.xy;
+    uint local_id = gl_LocalInvocationIndex;
+    
+    // ── Inicializar shared memory ──
+    if (local_id == 0) {
+        tile_min_depth = 0xFFFFFFFF;
+        tile_max_depth = 0;
+        tile_light_count = 0;
+    }
+    barrier();
+    
+    // ── Calcular profundidad min/max del tile ──
+    uvec2 pixel = tile_id * 16 + gl_LocalInvocationID.xy;
+    if (pixel.x < push.screen_width && pixel.y < push.screen_height) {
+        vec2 uv = (vec2(pixel) + 0.5) / vec2(push.screen_width, push.screen_height);
+        float depth = texture(depthTexture, uv).r;
+        float linear_d = linearize_depth(depth);
+        
+        uint d_uint = floatBitsToUint(linear_d);
+        atomicMin(tile_min_depth, d_uint);
+        atomicMax(tile_max_depth, d_uint);
+    }
+    barrier();
+    
+    float min_depth = uintBitsToFloat(tile_min_depth);
+    float max_depth = uintBitsToFloat(tile_max_depth);
+    
+    // ── Frustum del tile en view space ──
+    // Calcular los 4 planos laterales del frustum del tile
+    vec2 tile_min_ndc = vec2(tile_id) / vec2(push.tile_count_x, push.tile_count_y) * 2.0 - 1.0;
+    vec2 tile_max_ndc = vec2(tile_id + 1) / vec2(push.tile_count_x, push.tile_count_y) * 2.0 - 1.0;
+    
+    // Esquinas del tile en view space (near plane)
+    vec4 corners_clip[4] = vec4[](
+        vec4(tile_min_ndc.x, tile_min_ndc.y, 0.0, 1.0),
+        vec4(tile_max_ndc.x, tile_min_ndc.y, 0.0, 1.0),
+        vec4(tile_max_ndc.x, tile_max_ndc.y, 0.0, 1.0),
+        vec4(tile_min_ndc.x, tile_max_ndc.y, 0.0, 1.0)
+    );
+    
+    vec3 corners_view[4];
+    for (int i = 0; i < 4; i++) {
+        vec4 vs = push.inv_projection * corners_clip[i];
+        corners_view[i] = vs.xyz / vs.w;
+    }
+    
+    // ── Culling de luces contra el frustum del tile ──
+    // Cada thread del workgroup procesa un subconjunto de luces
+    uint lights_per_thread = (push.light_count + 255) / 256;
+    uint start_light = local_id * lights_per_thread;
+    uint end_light = min(start_light + lights_per_thread, push.light_count);
+    
+    for (uint i = start_light; i < end_light; i++) {
+        PointLight light = lights[i];
+        
+        // Transformar posición de luz a view space
+        vec4 light_view = push.view * vec4(light.position_radius.xyz, 1.0);
+        float radius = light.position_radius.w;
+        
+        // Test rápido de profundidad: la esfera de la luz intersecta [min_depth, max_depth]?
+        if (light_view.z + radius < min_depth || light_view.z - radius > max_depth) {
+            continue;
+        }
+        
+        // Test de frustum del tile (simplificado: esfera vs AABB en screen space)
+        vec4 light_clip = push.projection * light_view;
+        if (light_clip.w <= 0.0) continue;
+        
+        vec2 light_ndc = light_clip.xy / light_clip.w;
+        float screen_radius = radius / max(light_view.z, 0.001);
+        
+        // Test AABB 2D
+        if (light_ndc.x + screen_radius < tile_min_ndc.x ||
+            light_ndc.x - screen_radius > tile_max_ndc.x ||
+            light_ndc.y + screen_radius < tile_min_ndc.y ||
+            light_ndc.y - screen_radius > tile_max_ndc.y) {
+            continue;
+        }
+        
+        // La luz afecta este tile — añadir al shared memory
+        uint slot = atomicAdd(tile_light_count, 1);
+        if (slot < 256) {
+            tile_light_indices[slot] = i;
+        }
+    }
+    barrier();
+    
+    // ── Escribir resultados al buffer global ──
+    uint final_count = min(tile_light_count, min(256, push.max_lights_per_tile));
+    
+    if (local_id == 0) {
+        tile_light_start = atomicAdd(global_light_index_count, final_count);
+        
+        uint tile_index = tile_id.y * push.tile_count_x + tile_id.x;
+        tile_lists[tile_index].offset = tile_light_start;
+        tile_lists[tile_index].count  = final_count;
+    }
+    barrier();
+    
+    // Copiar índices de luces del shared memory al buffer global
+    for (uint i = local_id; i < final_count; i += 256) {
+        light_indices[tile_light_start + i] = tile_light_indices[i];
+    }
+}

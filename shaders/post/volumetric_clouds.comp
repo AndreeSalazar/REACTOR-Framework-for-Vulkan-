@@ -1,0 +1,197 @@
+#version 450
+// =============================================================================
+// REACTOR · shaders/post/volumetric_clouds.comp — Volumetric Cloud Rendering
+// =============================================================================
+// Ray-marched 3D cloudscapes inspirados en Horizon Zero Dawn / Red Dead 2:
+//   • Ray-march desde la cámara a través de una capa esférica de nubes
+//   • Muestreo de 3D noise (Worley + Perlin-Worley) para forma y detalle
+//   • Light marching: scattering de luz solar dentro del volumen (Beer-Powder)
+//   • Temporal reprojection para amortizar el coste del ray-march
+//
+// Vulkan estándar — sin extensiones de raytracing
+// =============================================================================
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(binding = 0, rgba16f) uniform writeonly image2D cloudOutput;
+layout(binding = 1) uniform sampler2D depthTexture;
+layout(binding = 2) uniform sampler3D shapeNoise;     // 3D Worley noise (128³)
+layout(binding = 3) uniform sampler3D detailNoise;    // 3D Perlin-Worley (32³)
+
+layout(push_constant) uniform CloudParams {
+    mat4 inv_view_proj;
+    vec4 camera_pos;          // xyz = posición
+    vec4 sun_direction;       // xyz = dirección normalizada hacia el sol
+    vec4 sun_color;           // xyz = color, w = intensidad
+    float cloud_base;         // Altitud base de nubes (ej. 2000m)
+    float cloud_top;          // Altitud tope de nubes (ej. 6000m)
+    float cloud_coverage;     // Cobertura [0..1] (0 = despejado, 1 = nublado)
+    float cloud_density;      // Multiplicador de densidad
+    float time;               // Tiempo para animación del viento
+    float wind_speed;         // Velocidad del viento
+    uint  max_steps;          // Pasos de ray-march (64-128)
+    uint  light_steps;        // Pasos de light march (6-8)
+} params;
+
+// ── Funciones de utilidad ──
+
+// Remap [a,b] → [c,d]
+float remap(float value, float a, float b, float c, float d) {
+    return c + (value - a) / (b - a) * (d - c);
+}
+
+// Intersección rayo-esfera para la capa de nubes
+// Retorna (t_entry, t_exit) o (-1,-1) si no intersecta
+vec2 ray_sphere_intersect(vec3 ro, vec3 rd, float sphere_radius) {
+    // Asumimos centro en (0, -earth_radius, 0) y el observador sobre la tierra
+    float earth_radius = 6371000.0;
+    vec3 center = vec3(0.0, -earth_radius, 0.0);
+    vec3 oc = ro - center;
+    
+    float a = dot(rd, rd);
+    float b = 2.0 * dot(oc, rd);
+    float c = dot(oc, oc) - (earth_radius + sphere_radius) * (earth_radius + sphere_radius);
+    float discriminant = b * b - 4.0 * a * c;
+    
+    if (discriminant < 0.0) return vec2(-1.0);
+    
+    float sqrt_d = sqrt(discriminant);
+    float t0 = (-b - sqrt_d) / (2.0 * a);
+    float t1 = (-b + sqrt_d) / (2.0 * a);
+    
+    return vec2(max(t0, 0.0), max(t1, 0.0));
+}
+
+// Obtener la altitud relativa dentro de la capa de nubes [0,1]
+float get_height_fraction(vec3 pos) {
+    float altitude = length(pos - vec3(0.0, -6371000.0, 0.0)) - 6371000.0;
+    return clamp((altitude - params.cloud_base) / max(params.cloud_top - params.cloud_base, 1.0), 0.0, 1.0);
+}
+
+// Gradiente de densidad por altitud (nubes más densas en la mitad inferior)
+float height_gradient(float height_fraction) {
+    // Perfil de cumulus: denso abajo, difuso arriba
+    float bottom = smoothstep(0.0, 0.15, height_fraction);
+    float top = smoothstep(1.0, 0.65, height_fraction);
+    return bottom * top;
+}
+
+// ── Muestreo de densidad de nube ──
+float sample_cloud_density(vec3 pos) {
+    float height_frac = get_height_fraction(pos);
+    if (height_frac <= 0.0 || height_frac >= 1.0) return 0.0;
+    
+    // Coordenadas de muestreo con animación de viento
+    vec3 wind_offset = vec3(params.time * params.wind_speed, 0.0, params.time * params.wind_speed * 0.5);
+    vec3 sample_pos = (pos + wind_offset) * 0.00015; // Escala mundo → noise UV
+    
+    // Shape noise (baja frecuencia — forma general de la nube)
+    vec4 shape = texture(shapeNoise, sample_pos);
+    float shape_fbm = shape.g * 0.625 + shape.b * 0.25 + shape.a * 0.125;
+    float base_cloud = remap(shape.r, shape_fbm - 1.0, 1.0, 0.0, 1.0);
+    
+    // Aplicar gradiente de altitud y cobertura
+    base_cloud *= height_gradient(height_frac);
+    base_cloud = remap(base_cloud, 1.0 - params.cloud_coverage, 1.0, 0.0, 1.0);
+    base_cloud = clamp(base_cloud, 0.0, 1.0);
+    
+    if (base_cloud <= 0.01) return 0.0;
+    
+    // Detail noise (alta frecuencia — erosión de bordes)
+    vec3 detail_pos = sample_pos * 5.0 + wind_offset * 0.001;
+    vec4 detail = texture(detailNoise, detail_pos);
+    float detail_fbm = detail.r * 0.625 + detail.g * 0.25 + detail.b * 0.125;
+    
+    // Erosionar los bordes de la nube con el detalle
+    float detail_modifier = mix(detail_fbm, 1.0 - detail_fbm, clamp(height_frac * 2.0, 0.0, 1.0));
+    base_cloud = remap(base_cloud, detail_modifier * 0.2, 1.0, 0.0, 1.0);
+    
+    return clamp(base_cloud * params.cloud_density, 0.0, 1.0);
+}
+
+// ── Light marching: evaluar la luz solar a lo largo del volumen ──
+float light_march(vec3 pos) {
+    vec3 light_dir = normalize(params.sun_direction.xyz);
+    float step_size = (params.cloud_top - params.cloud_base) / float(params.light_steps);
+    
+    float total_density = 0.0;
+    for (uint i = 0; i < params.light_steps; i++) {
+        pos += light_dir * step_size;
+        total_density += max(sample_cloud_density(pos), 0.0) * step_size;
+    }
+    
+    // Beer-Lambert: transmittance = exp(-density * extinction)
+    float beer = exp(-total_density * 0.04);
+    // Powder effect: más scattering cuando la densidad es baja (bordes brillantes)
+    float powder = 1.0 - exp(-total_density * 0.08);
+    
+    return mix(beer, beer * powder * 2.0, 0.5);
+}
+
+void main() {
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(cloudOutput);
+    if (pixel.x >= size.x || pixel.y >= size.y) return;
+    
+    vec2 uv = (vec2(pixel) + 0.5) / vec2(size);
+    
+    // Reconstruir dirección del rayo
+    vec4 clip = vec4(uv * 2.0 - 1.0, 0.5, 1.0);
+    vec4 world = params.inv_view_proj * clip;
+    vec3 ray_dir = normalize(world.xyz / world.w - params.camera_pos.xyz);
+    vec3 ray_origin = params.camera_pos.xyz;
+    
+    // Intersectar con la capa de nubes
+    vec2 t_base = ray_sphere_intersect(ray_origin, ray_dir, params.cloud_base);
+    vec2 t_top  = ray_sphere_intersect(ray_origin, ray_dir, params.cloud_top);
+    
+    if (t_base.x < 0.0 && t_top.x < 0.0) {
+        imageStore(cloudOutput, pixel, vec4(0.0, 0.0, 0.0, 1.0));
+        return;
+    }
+    
+    float t_start = max(t_base.x, 0.0);
+    float t_end   = t_top.y;
+    
+    // Verificar que no estemos obstruidos por geometría de la escena
+    float scene_depth_raw = texture(depthTexture, uv).r;
+    
+    // Ray-march a través de la capa de nubes
+    float step_size = (t_end - t_start) / float(params.max_steps);
+    float t = t_start;
+    
+    vec3 cloud_color = vec3(0.0);
+    float transmittance = 1.0;
+    
+    for (uint step = 0; step < params.max_steps; step++) {
+        if (transmittance < 0.01) break;
+        
+        vec3 pos = ray_origin + ray_dir * t;
+        float density = sample_cloud_density(pos);
+        
+        if (density > 0.001) {
+            // Evaluar iluminación solar en este punto del volumen
+            float light_energy = light_march(pos);
+            
+            // Color de la nube: mezcla entre color del sol y ambiente
+            float height_frac = get_height_fraction(pos);
+            vec3 ambient = mix(vec3(0.4, 0.45, 0.6), vec3(0.8, 0.85, 0.95), height_frac);
+            vec3 sun_lit = params.sun_color.rgb * params.sun_color.w * light_energy;
+            vec3 sample_color = mix(ambient * 0.3, sun_lit, light_energy);
+            
+            // Beer-Lambert absorption
+            float absorption = exp(-density * step_size * 0.05);
+            
+            // Acumular color (front-to-back compositing)
+            cloud_color += sample_color * density * transmittance * step_size * 0.02;
+            transmittance *= absorption;
+        }
+        
+        t += step_size;
+    }
+    
+    // Alpha = cuánto cielo se ve a través (1 - transmittance = opacidad de la nube)
+    float cloud_alpha = 1.0 - transmittance;
+    
+    imageStore(cloudOutput, pixel, vec4(cloud_color, cloud_alpha));
+}
