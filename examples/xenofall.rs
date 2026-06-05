@@ -39,6 +39,9 @@ use reactor_vulkan::prelude::*;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::keyboard::{KeyCode, PhysicalKey};
 
+#[path = "../xenofall/mod.rs"]
+mod xenofall;
+
 // =============================================================================
 // CONSTANTES DE GAMEPLAY
 // =============================================================================
@@ -776,49 +779,7 @@ impl Xenofall {
     }
 
     fn apply_render_showcase_profile(&mut self, ctx: &mut ReactorContext) {
-        let mut shader = BaseShaderCookbook::xenofall_showcase();
-        let s = &mut shader.post_settings;
-        s.exposure = 0.72;           // Mucho más bajo
-        s.gamma = 2.2;
-        s.bloom_threshold = 1.2;     // Solo luces reales
-        s.bloom_intensity = 0.32;    // Sutil
-        s.grain_intensity = 0.003;   // Apenas perceptible
-        s.chromatic_intensity = 0.0014;
-        s.vignette_intensity = 0.42;
-        s.sharpen_intensity = 0.18;
-        s.ssgi_intensity = 0.42;     // Más AO para horror
-        s.ssgi_radius = 14.0;
-        s.ssr_strength = 0.46;
-        s.fog_density = 0.10;        // Apenas visible
-        s.fog_scatter = 0.15;        // Tenue
-        s.flare_intensity = 0.18;    // Sutil
-        s.highlight_recovery = 0.82;
-        s.dof_focus_distance = 12.0; // Enfoque a los zombies
-        s.dof_aperture = 0.015;       // Bokeh sutil de fondo
-        s.enable_effect(PostProcessEffect::Bloom);
-        s.enable_effect(PostProcessEffect::SSGI);
-        s.enable_effect(PostProcessEffect::SSR);
-        s.enable_effect(PostProcessEffect::VolumetricFog);
-        s.enable_effect(PostProcessEffect::LutColorGrading);
-        s.enable_effect(PostProcessEffect::ToneMapping);
-        s.enable_effect(PostProcessEffect::AnamorphicFlares);
-        s.disable_effect(PostProcessEffect::FXAA);
-        s.enable_effect(PostProcessEffect::TAA);
-        s.enable_effect(PostProcessEffect::FilmGrain);
-        s.enable_effect(PostProcessEffect::ChromaticAberration);
-        s.enable_effect(PostProcessEffect::ContactShadows);
-        s.enable_effect(PostProcessEffect::SSSDiffusion);
-        s.enable_effect(PostProcessEffect::DepthOfField);
-        s.enable_effect(PostProcessEffect::AutoExposure);
-        ctx.apply_base_shader(&shader);
-
-        let sun_dir = Vec3::new(-0.22, -0.86, -0.45).normalize();
-        let moon_cold = Vec3::new(0.42, 0.55, 0.82);
-        ctx.scene.set_sun(sun_dir, moon_cold * 1.65);
-        ctx.scene.set_ambient(Vec3::new(0.012, 0.016, 0.014)); // Ambient verdoso oscuro
-        ctx.add_directional_light(sun_dir, moon_cold, 1.35);
-
-        Log::engine("Render Showcase: Cinematic/AAA profile active for Xenofall");
+        xenofall::render_lab::apply_professional_profile(ctx);
     }
 
     fn apply_render_showcase_materials(&mut self, ctx: &mut ReactorContext) {
@@ -872,31 +833,7 @@ impl Xenofall {
     }
 
     fn print_render_showcase_budget(&self, ctx: &ReactorContext) {
-        let gbuffer_mib = ctx
-            .reactor
-            .gbuffer
-            .as_ref()
-            .map(|g| g.estimated_bytes() as f32 / (1024.0 * 1024.0))
-            .unwrap_or(0.0);
-        let history_mib = ctx
-            .reactor
-            .temporal_history
-            .as_ref()
-            .map(|h| h.estimated_bytes() as f32 / (1024.0 * 1024.0))
-            .unwrap_or(0.0);
-
-        Log::section("REACTOR Render AAA Foundation");
-        Log::kv("G-Buffer 4 attachments", &format!("{:.1} MiB", gbuffer_mib));
-        Log::kv(
-            "TAA history color/depth",
-            &format!("{:.1} MiB", history_mib),
-        );
-        Log::kv("Depth resolve MSAA", "R32F sampleable");
-        Log::kv("GTAO/SSR source", "depth + normal/material G-Buffer");
-        Log::kv(
-            "Next required",
-            "deferred geometry pass + AO/SSR/TAA dispatch",
-        );
+        xenofall::render_lab::log_phase_one_budget(ctx);
     }
 
     fn spawn_enemy(&mut self, ctx: &mut ReactorContext, pos: Vec3, hp: i32, speed: f32) {
