@@ -41,401 +41,18 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 
 #[path = "mod.rs"]
 mod xenofall;
-use xenofall::vfx::VfxPools;
-use xenofall::world::WorldGeometry;
-
-// =============================================================================
-// CONSTANTES DE GAMEPLAY
-// =============================================================================
-
-// =============================================================================
-// UE5-STANDARD PROPORTIONS (1 unit ≈ 1 meter)
-// =============================================================================
-// Model data (measured): zombie_basic.glb
-//   Native vertex height: 178 cm (centimeter-scale model)
-//   Root node scale in glTF: 0.017 (auto-converts cm → m)
-//   Effective height at scale 1.0: 178 × 0.017 = 3.03m
-//   For 1.8m zombie: scale = 1.8 / 3.03 ≈ 0.59 → use 0.6
-//
-// Corridor: 7m wide × 3.5m tall (realistic lab hallway)
-// Human:    ~1.8m tall at eye level 1.7m
-// =============================================================================
-
-const RAIL_SPEED: f32 = 3.0;
-const RAIL_LENGTH: f32 = 90.0;
-
-const AIM_FOV_SCALE: f32 = 0.55;
-const MAX_AMMO: u32 = 8;
-const RELOAD_TIME: f32 = 1.2;
-const FIRE_COOLDOWN: f32 = 0.18;
-
-// TAP / HOLD thresholds
-const TAP_WINDOW: f32 = 0.25;
-const HOLD_THRESHOLD: f32 = 0.35;
-const TAP_DAMAGE_MULT: f32 = 2.0;
-const HOLD_DAMAGE_MULT: f32 = 0.5;
-
-const TRACER_SPEED: f32 = 150.0;
-const TRACER_LIFETIME: f32 = 0.4;
-const TRACER_POOL_SIZE: usize = 12;
-const IMPACT_POOL_SIZE: usize = 20;
-const IMPACT_LIFETIME: f32 = 0.35;
-
-// Corridor geometry constants
-const CORRIDOR_HALF_WIDTH: f32 = 3.5; // Total 7m wide
-const CORRIDOR_HEIGHT: f32 = 3.5; // 3.5m ceiling
-const PILLAR_X: f32 = 2.8; // Pillar distance from center
-const CAMERA_Y: f32 = 1.7; // Human eye level (1.7m)
-
-// Enemy constants — tuned for UE5-scale humans
-const ENEMY_BASE_SPEED: f32 = 2.5;
-const ENEMY_HIT_RADIUS: f32 = 0.5; // Hitbox radius for ~1.8m tall zombie
-const ENEMY_ATTACK_DIST: f32 = 2.5;
-const ENEMY_ATTACK_COOLDOWN: f32 = 1.2;
-const ENEMY_DEATH_DURATION: f32 = 0.6;
-
-// Zombie model scale — measured: 178cm native × 0.017 root = 3.03m at 1.0
-// For a 1.8m tall zombie: 0.6x. Using 0.6 for proper human height.
-// Cube fallback dimensions (human proportions: 0.5m wide × 1.8m tall × 0.35m deep)
-const ZOMBIE_CUBE_SCALE: Vec3 = Vec3::new(0.5, 1.8, 0.35);
-// Y offset: zombie feet at floor (Y=0). Hitbox center at ~0.9m.
-const ZOMBIE_GROUND_Y: f32 = 0.9;
-// zombie_basic.glb faces +Z in its bind pose. Keep this at 0 so enemies face the player.
-const ZOMBIE_MODEL_YAW_OFFSET: f32 = 0.0;
-
-/// How far ahead of the camera enemies spawn (close enough to see immediately)
-const ENEMY_SPAWN_DIST_MIN: f32 = 5.0;
-const ENEMY_SPAWN_DIST_MAX: f32 = 12.0;
-/// Brief delay after clearing a wave before camera resumes
-const WAVE_CLEAR_DELAY: f32 = 1.0;
-
-const PLAYER_MAX_HP: i32 = 100;
-const DAMAGE_PER_HIT: i32 = 12;
-const SCORE_PER_KILL: u32 = 100;
-const COMBO_TIMEOUT: f32 = 2.5;
-const MAX_COMBO: u32 = 10;
-const HEADSHOT_MULTIPLIER: u32 = 3;
-const SCORE_CAP: u32 = 9_999_999;
-
-const MUZZLE_FLASH_DURATION: f32 = 0.06;
-
-// =============================================================================
-// TIPOS
-// =============================================================================
-
-#[derive(Clone, Copy, PartialEq)]
-enum EnemyState {
-    Alive,
-    Dying,
-    Dead,
-}
-
-struct Enemy {
-    _scene_indices: Vec<usize>,
-    position: Vec3,
-    health: i32,
-    max_health: i32,
-    state: EnemyState,
-    death_timer: f32,
-    attack_timer: f32,
-    speed: f32,
-    is_gltf: bool,
-    _id: u32,
-    /// Índice del blob shadow asociado (Fase 4.3 HOTD-style).
-    blob_shadow: Option<usize>,
-    /// Escala glTF aplicada por `spawn_gltf_smart` (auto-calculada por REACTOR
-    /// a partir de la altura nativa del modelo en Blender).
-    _gltf_scale: f32,
-    /// Transforms locales originales de cada malla para mantener la jerarquía al mover el zombie
-    initial_transforms: Vec<(usize, Mat4)>,
-}
-
-struct Tracer {
-    pool_index: usize,
-    position: Vec3,
-    direction: Vec3,
-    lifetime: f32,
-}
-
-struct Impact {
-    pool_index: usize,
-    position: Vec3,
-    lifetime: f32,
-    max_lifetime: f32,
-}
-
-/// Definición de una oleada de enemigos
-#[derive(Clone, Copy)]
-struct WaveDef {
-    trigger_z: f32,
-    count: u32,
-    spread: f32,
-    depth: f32,
-    _height_range: (f32, f32),
-    speed_mult: f32,
-    enemy_hp: i32,
-}
-
-/// Estado global del juego
-#[derive(Clone, Copy, PartialEq)]
-enum GameState {
-    Playing,
-    Paused,
-    CardSelect,
-    GameOver,
-    Victory,
-}
-
-/// Tipo de disparo detectado
-#[derive(Clone, Copy, PartialEq)]
-enum FireMode {
-    Tap,
-    Hold,
-    Normal,
-}
-
-// =============================================================================
-// SISTEMA DE CARTAS — Roguelite modifiers
-// =============================================================================
-
-#[derive(Clone, Copy, PartialEq)]
-enum CardType {
-    // Ofensivas
-    DoubleTap,      // TAP damage x3 en vez de x2
-    PiercingRounds, // Balas atraviesan 1 enemigo extra
-    ExplosiveShot,  // Daño de área al impactar
-    // Defensivas
-    ArmorPlating, // +25 HP máximo
-    Regeneration, // Regenerar 2 HP por oleada
-    QuickReload,  // Tiempo de recarga -40%
-    // Utilidad
-    ExtendedMag, // +4 balas extra por cargador
-    ComboMaster, // Combo timeout +2 seg
-    ScoreBonus,  // +50% score por kill
-}
-
-impl CardType {
-    fn name(self) -> &'static str {
-        match self {
-            Self::DoubleTap => "🔥 DOBLE TAP",
-            Self::PiercingRounds => "🗡️ RONDAS PERFORANTES",
-            Self::ExplosiveShot => "💥 DISPARO EXPLOSIVO",
-            Self::ArmorPlating => "🛡️ BLINDAJE",
-            Self::Regeneration => "💚 REGENERACIÓN",
-            Self::QuickReload => "⚡ RECARGA RÁPIDA",
-            Self::ExtendedMag => "📦 CARGADOR EXTENDIDO",
-            Self::ComboMaster => "🎯 MAESTRO DEL COMBO",
-            Self::ScoreBonus => "⭐ BONUS DE PUNTOS",
-        }
-    }
-
-    fn description(self) -> &'static str {
-        match self {
-            Self::DoubleTap => "TAP rápido → daño x3",
-            Self::PiercingRounds => "Balas penetran +1 enemigo",
-            Self::ExplosiveShot => "Daño en área al impactar",
-            Self::ArmorPlating => "+25 HP máximo",
-            Self::Regeneration => "+2 HP al inicio de oleada",
-            Self::QuickReload => "Recarga 40% más rápida",
-            Self::ExtendedMag => "+4 balas por cargador",
-            Self::ComboMaster => "Combo timeout +2 segundos",
-            Self::ScoreBonus => "+50% puntos por kill",
-        }
-    }
-
-    /// Get all card types for random selection
-    fn all() -> &'static [CardType] {
-        &[
-            Self::DoubleTap,
-            Self::PiercingRounds,
-            Self::ExplosiveShot,
-            Self::ArmorPlating,
-            Self::Regeneration,
-            Self::QuickReload,
-            Self::ExtendedMag,
-            Self::ComboMaster,
-            Self::ScoreBonus,
-        ]
-    }
-}
-
-/// Active build modifiers from selected cards
-struct Build {
-    tap_damage_mult: f32,
-    piercing: u32,
-    explosive_radius: f32,
-    max_hp: i32,
-    regen_per_wave: i32,
-    reload_mult: f32,
-    mag_bonus: u32,
-    combo_timeout_bonus: f32,
-    score_mult: f32,
-    cards_collected: Vec<CardType>,
-}
-
-impl Build {
-    fn new() -> Self {
-        Self {
-            tap_damage_mult: TAP_DAMAGE_MULT,
-            piercing: 0,
-            explosive_radius: 0.0,
-            max_hp: PLAYER_MAX_HP,
-            regen_per_wave: 0,
-            reload_mult: 1.0,
-            mag_bonus: 0,
-            combo_timeout_bonus: 0.0,
-            score_mult: 1.0,
-            cards_collected: Vec::new(),
-        }
-    }
-
-    fn apply_card(&mut self, card: CardType) {
-        self.cards_collected.push(card);
-        match card {
-            CardType::DoubleTap => self.tap_damage_mult = 3.0,
-            CardType::PiercingRounds => self.piercing += 1,
-            CardType::ExplosiveShot => self.explosive_radius = 2.5,
-            CardType::ArmorPlating => self.max_hp += 25,
-            CardType::Regeneration => self.regen_per_wave += 2,
-            CardType::QuickReload => self.reload_mult *= 0.6,
-            CardType::ExtendedMag => self.mag_bonus += 4,
-            CardType::ComboMaster => self.combo_timeout_bonus += 2.0,
-            CardType::ScoreBonus => self.score_mult *= 1.5,
-        }
-    }
-
-    fn effective_mag_size(&self) -> u32 {
-        MAX_AMMO + self.mag_bonus
-    }
-
-    fn effective_reload_time(&self) -> f32 {
-        RELOAD_TIME * self.reload_mult
-    }
-
-    fn effective_combo_timeout(&self) -> f32 {
-        COMBO_TIMEOUT + self.combo_timeout_bonus
-    }
-}
-
-// =============================================================================
-// AUDIO IDs
-// =============================================================================
-
-struct GameAudio {
-    gunshot: Option<AudioClipId>,
-    reload: Option<AudioClipId>,
-    zombie_groan: Option<AudioClipId>,
-    impact: Option<AudioClipId>,
-    death: Option<AudioClipId>,
-    combo: Option<AudioClipId>,
-    card_select: Option<AudioClipId>,
-    damage: Option<AudioClipId>,
-    wave_start: Option<AudioClipId>,
-    victory: Option<AudioClipId>,
-}
-
-impl GameAudio {
-    fn new() -> Self {
-        Self {
-            gunshot: None,
-            reload: None,
-            zombie_groan: None,
-            impact: None,
-            death: None,
-            combo: None,
-            card_select: None,
-            damage: None,
-            wave_start: None,
-            victory: None,
-        }
-    }
-
-    fn load_all(&mut self, audio: &mut AudioSystem) {
-        self.gunshot = Self::try_load(audio, "assets/audio/gunshot.wav");
-        self.reload = Self::try_load(audio, "assets/audio/reload.wav");
-        self.zombie_groan = Self::try_load(audio, "assets/audio/zombie_groan.wav");
-        self.impact = Self::try_load(audio, "assets/audio/impact.wav");
-        self.death = Self::try_load(audio, "assets/audio/death.wav");
-        self.combo = Self::try_load(audio, "assets/audio/combo.wav");
-        self.card_select = Self::try_load(audio, "assets/audio/card_select.wav");
-        self.damage = Self::try_load(audio, "assets/audio/damage.wav");
-        self.wave_start = Self::try_load(audio, "assets/audio/wave_start.wav");
-        self.victory = Self::try_load(audio, "assets/audio/victory.wav");
-    }
-
-    fn try_load(audio: &mut AudioSystem, path: &str) -> Option<AudioClipId> {
-        match audio.load_clip(path) {
-            Ok(id) => {
-                Log::audio(&format!("Loaded: {}", path));
-                Some(id)
-            }
-            Err(e) => {
-                Log::error(&format!("Could not load {}: {}", path, e));
-                None
-            }
-        }
-    }
-}
-
-// =============================================================================
-// HELPERS
-// =============================================================================
-
-fn hash_rand(seed: u32) -> f32 {
-    let mut x = seed.wrapping_mul(2654435761);
-    x ^= x >> 16;
-    x = x.wrapping_mul(0x85ebca6b);
-    x ^= x >> 13;
-    x = x.wrapping_mul(0xc2b2ae35);
-    x ^= x >> 16;
-    (x % 10000) as f32 / 10000.0
-}
-
-fn hash_rand_signed(seed: u32) -> f32 {
-    hash_rand(seed) * 2.0 - 1.0
-}
-
-/// Pick N unique random cards from all cards
-fn pick_random_cards(seed: u32, count: usize) -> Vec<CardType> {
-    let all = CardType::all();
-    let mut indices: Vec<usize> = (0..all.len()).collect();
-    let mut result = Vec::new();
-
-    for i in 0..count.min(all.len()) {
-        let remaining = indices.len();
-        if remaining == 0 {
-            break;
-        }
-        let pick = (hash_rand(seed.wrapping_add(i as u32 * 37)) * remaining as f32) as usize;
-        let pick = pick.min(remaining - 1);
-        result.push(all[indices[pick]]);
-        indices.swap_remove(pick);
-    }
-    result
-}
-
-fn ray_sphere_intersect(origin: Vec3, dir: Vec3, center: Vec3, radius: f32) -> Option<f32> {
-    let oc = origin - center;
-    let a = dir.dot(dir);
-    let b = 2.0 * oc.dot(dir);
-    let c = oc.dot(oc) - radius * radius;
-    let disc = b * b - 4.0 * a * c;
-    if disc < 0.0 {
-        None
-    } else {
-        let t = (-b - disc.sqrt()) / (2.0 * a);
-        if t > 0.0 {
-            Some(t)
-        } else {
-            None
-        }
-    }
-}
-
-fn ray_headshot_intersect(origin: Vec3, dir: Vec3, center: Vec3) -> Option<f32> {
-    let head_center = center + Vec3::new(0.0, 0.5, 0.0);
-    ray_sphere_intersect(origin, dir, head_center, 0.3)
-}
+use xenofall::{
+    audio::GameAudio,
+    cards::{Build, CardType},
+    constants::*,
+    helpers::{
+        hash_rand, hash_rand_signed, pick_random_cards, ray_headshot_intersect,
+        ray_sphere_intersect,
+    },
+    types::{Enemy, EnemyState, FireMode, GameState, Impact, Tracer, WaveDef},
+    vfx::VfxPools,
+    world::WorldGeometry,
+};
 
 // =============================================================================
 // GAME STATE
@@ -546,7 +163,7 @@ impl Xenofall {
             active_impacts: Vec::new(),
             world: WorldGeometry::default(),
             vfx: VfxPools::default(),
-            waves: Self::build_waves(),
+            waves: xenofall::waves::build_waves(),
             wave_index: 0,
             total_enemies_alive: 0,
             wave_clear_timer: 0.0,
@@ -579,216 +196,16 @@ impl Xenofall {
         };
     }
 
-    fn build_waves() -> Vec<WaveDef> {
-        vec![
-            // Oleada 1: Casa abandonada — pocos zombies lentos
-            WaveDef {
-                trigger_z: 8.0,
-                count: 3,
-                spread: 3.0,
-                depth: 4.0,
-                _height_range: (0.8, 0.8),
-                speed_mult: 0.7,
-                enemy_hp: 1,
-            },
-            // Oleada 2: Más infectados emergen
-            WaveDef {
-                trigger_z: 18.0,
-                count: 5,
-                spread: 4.0,
-                depth: 5.0,
-                _height_range: (0.8, 0.8),
-                speed_mult: 0.8,
-                enemy_hp: 1,
-            },
-            // Oleada 3: Mezcla — más enemigos, mayor spread
-            WaveDef {
-                trigger_z: 28.0,
-                count: 5,
-                spread: 4.5,
-                depth: 4.0,
-                _height_range: (0.8, 0.8),
-                speed_mult: 0.9,
-                enemy_hp: 2,
-            },
-            // Oleada 4: Emboscada lateral
-            WaveDef {
-                trigger_z: 38.0,
-                count: 7,
-                spread: 5.0,
-                depth: 6.0,
-                _height_range: (0.8, 0.8),
-                speed_mult: 1.0,
-                enemy_hp: 2,
-            },
-            // Oleada 5: Horda densa — Laboratorio
-            WaveDef {
-                trigger_z: 48.0,
-                count: 6,
-                spread: 5.0,
-                depth: 5.0,
-                _height_range: (0.8, 0.8),
-                speed_mult: 1.1,
-                enemy_hp: 2,
-            },
-            // Oleada 6: Mutantes rápidos
-            WaveDef {
-                trigger_z: 58.0,
-                count: 8,
-                spread: 5.0,
-                depth: 6.0,
-                _height_range: (0.8, 0.8),
-                speed_mult: 1.2,
-                enemy_hp: 3,
-            },
-            // Oleada 7: Caos total — pasillos de contención rotos
-            WaveDef {
-                trigger_z: 68.0,
-                count: 8,
-                spread: 5.5,
-                depth: 6.0,
-                _height_range: (0.8, 0.8),
-                speed_mult: 1.3,
-                enemy_hp: 3,
-            },
-            // Oleada 8: JEFE FINAL — Sujeto Omega
-            WaveDef {
-                trigger_z: 78.0,
-                count: 12,
-                spread: 5.5,
-                depth: 8.0,
-                _height_range: (0.8, 0.8),
-                speed_mult: 1.0,
-                enemy_hp: 4,
-            },
-        ]
-    }
-
     // =========================================================================
     // SPAWN HELPERS
     // =========================================================================
 
     fn build_corridor(&mut self, ctx: &mut ReactorContext) {
-        let w = CORRIDOR_HALF_WIDTH; // 3.5m from center
-        let h = CORRIDOR_HEIGHT; // 3.5m
-        let pw = PILLAR_X; // 2.8m from center
-
-        // ── Suelo del corredor (7m wide) ──
-        for i in 0..12 {
-            let z = -(i as f32 * 8.0 + 4.0);
-            if let Ok(idx) = ctx.spawn_plane(Vec3::new(0.0, 0.0, z), w * 2.0) {
-                self.floor_indices.push(idx);
-            }
-        }
-
-        self.build_water_puddles(ctx);
-
-        // ── Paredes laterales (3.5m tall, matching corridor height) ──
-        for i in 0..20 {
-            let z = -(i as f32 * 5.0 + 2.5);
-            if let Ok(left) = ctx.spawn_cube(Vec3::ZERO) {
-                ctx.set_transform(
-                    left,
-                    Mat4::from_scale_rotation_translation(
-                        Vec3::new(0.25, h, 5.0),
-                        Quat::IDENTITY,
-                        Vec3::new(-w, h * 0.5, z),
-                    ),
-                );
-                self.wall_indices.push(left);
-            }
-            if let Ok(right) = ctx.spawn_cube(Vec3::ZERO) {
-                ctx.set_transform(
-                    right,
-                    Mat4::from_scale_rotation_translation(
-                        Vec3::new(0.25, h, 5.0),
-                        Quat::IDENTITY,
-                        Vec3::new(w, h * 0.5, z),
-                    ),
-                );
-                self.wall_indices.push(right);
-            }
-        }
-
-        // ── Pilares decorativos (human-scale, ~0.4m × 3.2m × 0.4m) ──
-        for i in 0..10 {
-            let z = -(i as f32 * 10.0 + 7.0);
-            if let Ok(idx) = ctx.spawn_cube(Vec3::ZERO) {
-                ctx.set_transform(
-                    idx,
-                    Mat4::from_scale_rotation_translation(
-                        Vec3::new(0.4, h - 0.3, 0.4),
-                        Quat::IDENTITY,
-                        Vec3::new(-pw, (h - 0.3) * 0.5, z),
-                    ),
-                );
-                self.pillar_indices.push(idx);
-            }
-            if let Ok(idx) = ctx.spawn_cube(Vec3::ZERO) {
-                ctx.set_transform(
-                    idx,
-                    Mat4::from_scale_rotation_translation(
-                        Vec3::new(0.4, h - 0.3, 0.4),
-                        Quat::IDENTITY,
-                        Vec3::new(pw, (h - 0.3) * 0.5, z),
-                    ),
-                );
-                self.pillar_indices.push(idx);
-            }
-        }
-
-        // ── Techo (barras transversales spanning corridor width) ──
-        for i in 0..10 {
-            let z = -(i as f32 * 10.0 + 5.0);
-            if let Ok(idx) = ctx.spawn_cube(Vec3::ZERO) {
-                ctx.set_transform(
-                    idx,
-                    Mat4::from_scale_rotation_translation(
-                        Vec3::new(w * 2.0, 0.15, 0.4),
-                        Quat::IDENTITY,
-                        Vec3::new(0.0, h, z),
-                    ),
-                );
-                self.wall_indices.push(idx);
-            }
-        }
-    }
-
-    fn build_water_puddles(&mut self, ctx: &mut ReactorContext) {
-        // Fase 2: charcos pequeños, cacheables y baratos. Sirven para probar
-        // SSR/TAA y materiales reflectivos antes de implementar agua reactiva.
-        const PUDDLES: &[(f32, f32, f32)] = &[
-            (-1.15, -9.5, 1.25),
-            (1.05, -21.0, 0.95),
-            (-0.55, -34.0, 1.55),
-            (1.45, -52.0, 1.10),
-            (-1.35, -68.0, 1.35),
-            (0.35, -82.5, 0.85),
-        ];
-
-        for &(x, z, size) in PUDDLES {
-            if let Ok(idx) = ctx.spawn_plane(Vec3::new(x, 0.012, z), size) {
-                self.puddle_indices.push(idx);
-            }
-        }
+        self.world = xenofall::world::build_corridor(ctx);
     }
 
     fn build_pools(&mut self, ctx: &mut ReactorContext) {
-        for _ in 0..TRACER_POOL_SIZE {
-            if let Ok(idx) = ctx.spawn_sphere(Vec3::new(0.0, -1000.0, 0.0), 0.04) {
-                self.tracer_pool.push(idx);
-            }
-        }
-
-        for _ in 0..IMPACT_POOL_SIZE {
-            if let Ok(idx) = ctx.spawn_sphere(Vec3::new(0.0, -1000.0, 0.0), 0.12) {
-                self.impact_pool.push(idx);
-            }
-        }
-
-        if let Ok(idx) = ctx.spawn_sphere(Vec3::new(0.0, -1000.0, 0.0), 0.15) {
-            self.muzzle_flash_index = Some(idx);
-        }
+        self.vfx = xenofall::vfx::build_pools(ctx);
     }
 
     fn apply_render_showcase_profile(&mut self, ctx: &mut ReactorContext) {
@@ -796,61 +213,8 @@ impl Xenofall {
     }
 
     fn apply_render_showcase_materials(&mut self, ctx: &mut ReactorContext) {
-        for &idx in &self.floor_indices {
-            if let Some(obj) = ctx.scene.objects.get_mut(idx) {
-                obj.color = Vec4::new(0.08, 0.08, 0.09, 1.0); // Concreto oscuro mojado
-                obj.metallic = 0.0;
-                obj.roughness = 0.12; // muy liso = reflejos nítidos
-            }
-        }
-
-        for &idx in &self.puddle_indices {
-            if let Some(obj) = ctx.scene.objects.get_mut(idx) {
-                obj.color = Vec4::new(0.035, 0.055, 0.065, 0.78); // agua sucia fría
-                obj.metallic = 0.0;
-                obj.roughness = 0.025; // espejo imperfecto para SSR/TAA
-            }
-        }
-
-        for &idx in &self.wall_indices {
-            if let Some(obj) = ctx.scene.objects.get_mut(idx) {
-                obj.color = Vec4::new(0.14, 0.13, 0.12, 1.0); // Concreto sucio mate
-                obj.metallic = 0.05;
-                obj.roughness = 0.85; // rugoso = sin reflejos
-            }
-        }
-
-        for &idx in &self.pillar_indices {
-            if let Some(obj) = ctx.scene.objects.get_mut(idx) {
-                obj.color = Vec4::new(0.22, 0.18, 0.14, 1.0); // Metal oxidado
-                obj.metallic = 0.65;
-                obj.roughness = 0.45;
-            }
-        }
-
-        for (i, &idx) in self.tracer_pool.iter().enumerate() {
-            if let Some(obj) = ctx.scene.objects.get_mut(idx) {
-                obj.color = Vec4::new(1.0, 0.78, 0.25, 1.0);
-                obj.metallic = 0.0;
-                obj.roughness = if i % 2 == 0 { 0.08 } else { 0.16 };
-            }
-        }
-
-        for &idx in &self.impact_pool {
-            if let Some(obj) = ctx.scene.objects.get_mut(idx) {
-                obj.color = Vec4::new(1.0, 0.22, 0.08, 1.0);
-                obj.metallic = 0.0;
-                obj.roughness = 0.12;
-            }
-        }
-
-        if let Some(idx) = self.muzzle_flash_index {
-            if let Some(obj) = ctx.scene.objects.get_mut(idx) {
-                obj.color = Vec4::new(1.0, 0.62, 0.18, 1.0);
-                obj.metallic = 0.0;
-                obj.roughness = 0.04;
-            }
-        }
+        xenofall::world::apply_world_materials(ctx, &self.world);
+        xenofall::vfx::apply_vfx_materials(ctx, &self.vfx);
     }
 
     fn print_render_showcase_budget(&self, ctx: &ReactorContext) {
@@ -1015,7 +379,7 @@ impl Xenofall {
         if let Some(pool_idx) = self.find_free_tracer() {
             let tracer_pos = ray_origin + ray_dir * 0.5;
             ctx.set_transform(
-                self.tracer_pool[pool_idx],
+                self.vfx.tracer_pool[pool_idx],
                 Mat4::from_translation(tracer_pos),
             );
             self.active_tracers.push(Tracer {
@@ -1168,7 +532,7 @@ impl Xenofall {
 
     fn spawn_impact(&mut self, ctx: &mut ReactorContext, position: Vec3) {
         let used_pools: Vec<usize> = self.active_impacts.iter().map(|i| i.pool_index).collect();
-        for (pool_idx, &scene_idx) in self.impact_pool.iter().enumerate() {
+        for (pool_idx, &scene_idx) in self.vfx.impact_pool.iter().enumerate() {
             if !used_pools.contains(&pool_idx) {
                 ctx.set_transform(scene_idx, Mat4::from_translation(position));
                 self.active_impacts.push(Impact {
@@ -1184,7 +548,7 @@ impl Xenofall {
 
     fn find_free_tracer(&self) -> Option<usize> {
         let used: Vec<usize> = self.active_tracers.iter().map(|t| t.pool_index).collect();
-        (0..self.tracer_pool.len()).find(|pool_idx| !used.contains(pool_idx))
+        (0..self.vfx.tracer_pool.len()).find(|pool_idx| !used.contains(pool_idx))
     }
 
     // =========================================================================
@@ -1457,7 +821,7 @@ impl Xenofall {
         }
 
         // Muzzle flash visual
-        if let Some(flash_idx) = self.muzzle_flash_index {
+        if let Some(flash_idx) = self.vfx.muzzle_flash_index {
             if self.muzzle_flash_timer > 0.0 {
                 let flash_pos = ctx.camera.position
                     + ctx.camera.forward() * 0.8
@@ -1483,13 +847,13 @@ impl Xenofall {
 
             if tracer.lifetime <= 0.0 {
                 ctx.set_transform(
-                    self.tracer_pool[tracer.pool_index],
+                    self.vfx.tracer_pool[tracer.pool_index],
                     Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)),
                 );
                 to_remove.push(i);
             } else {
                 ctx.set_transform(
-                    self.tracer_pool[tracer.pool_index],
+                    self.vfx.tracer_pool[tracer.pool_index],
                     Mat4::from_translation(tracer.position),
                 );
             }
@@ -1509,14 +873,14 @@ impl Xenofall {
 
             if impact.lifetime <= 0.0 {
                 ctx.set_transform(
-                    self.impact_pool[impact.pool_index],
+                    self.vfx.impact_pool[impact.pool_index],
                     Mat4::from_translation(Vec3::new(0.0, -1000.0, 0.0)),
                 );
                 to_remove.push(i);
             } else {
                 let scale = (impact.lifetime / impact.max_lifetime) * 0.12;
                 ctx.set_transform(
-                    self.impact_pool[impact.pool_index],
+                    self.vfx.impact_pool[impact.pool_index],
                     Mat4::from_scale_rotation_translation(
                         Vec3::splat(scale),
                         Quat::IDENTITY,
@@ -2218,13 +1582,13 @@ impl ReactorApp for Xenofall {
 
         Log::asset(&format!(
             "Corredor: {} segmentos, {} charcos cargados",
-            self.floor_indices.len(),
-            self.puddle_indices.len()
+            self.world.floor_count(),
+            self.world.puddle_count()
         ));
         Log::engine(&format!(
             "Pools: {} trazadores, {} impactos listos",
-            self.tracer_pool.len(),
-            self.impact_pool.len()
+            self.vfx.tracer_count(),
+            self.vfx.impact_count()
         ));
         Log::game(&format!("{} oleadas cargadas", self.waves.len()));
         Log::game("Sistema de cartas roguelite activo");

@@ -40,13 +40,13 @@ pub const IMPACT_LIFETIME: f32 = 0.35;
 
 // Corridor geometry constants
 pub const CORRIDOR_HALF_WIDTH: f32 = 3.5; // Total 7m wide
-pub const CORRIDOR_HEIGHT: f32 = 3.5;     // 3.5m ceiling
-pub const PILLAR_X: f32 = 2.8;            // Pillar distance from center
-pub const CAMERA_Y: f32 = 1.7;            // Human eye level (1.7m)
+pub const CORRIDOR_HEIGHT: f32 = 3.5; // 3.5m ceiling
+pub const PILLAR_X: f32 = 2.8; // Pillar distance from center
+pub const CAMERA_Y: f32 = 1.7; // Human eye level (1.7m)
 
 // Enemy constants — tuned for UE5-scale humans
 pub const ENEMY_BASE_SPEED: f32 = 2.5;
-pub const ENEMY_HIT_RADIUS: f32 = 0.5;       // Hitbox radius for ~1.8m tall zombie
+pub const ENEMY_HIT_RADIUS: f32 = 0.5; // Hitbox radius for ~1.8m tall zombie
 pub const ENEMY_ATTACK_DIST: f32 = 2.5;
 pub const ENEMY_ATTACK_COOLDOWN: f32 = 1.2;
 pub const ENEMY_DEATH_DURATION: f32 = 0.6;

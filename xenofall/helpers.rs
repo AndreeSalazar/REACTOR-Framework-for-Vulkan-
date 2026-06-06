@@ -3,8 +3,8 @@
 // HELPERS — Pure utility functions
 // =============================================================================
 
-use reactor_vulkan::prelude::*;
 use crate::xenofall::cards::CardType;
+use reactor_vulkan::prelude::*;
 
 pub fn hash_rand(seed: u32) -> f32 {
     let mut x = seed.wrapping_mul(2654435761);
