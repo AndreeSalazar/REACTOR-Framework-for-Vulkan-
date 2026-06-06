@@ -488,6 +488,7 @@ struct Xenofall {
 
     // Escenario
     floor_indices: Vec<usize>,
+    puddle_indices: Vec<usize>,
     wall_indices: Vec<usize>,
     pillar_indices: Vec<usize>,
 
@@ -552,6 +553,7 @@ impl Xenofall {
             impact_pool: Vec::new(),
             muzzle_flash_index: None,
             floor_indices: Vec::new(),
+            puddle_indices: Vec::new(),
             wall_indices: Vec::new(),
             pillar_indices: Vec::new(),
             waves: Self::build_waves(),
@@ -689,6 +691,8 @@ impl Xenofall {
             }
         }
 
+        self.build_water_puddles(ctx);
+
         // ── Paredes laterales (3.5m tall, matching corridor height) ──
         for i in 0..20 {
             let z = -(i as f32 * 5.0 + 2.5);
@@ -760,6 +764,25 @@ impl Xenofall {
         }
     }
 
+    fn build_water_puddles(&mut self, ctx: &mut ReactorContext) {
+        // Fase 2: charcos pequeños, cacheables y baratos. Sirven para probar
+        // SSR/TAA y materiales reflectivos antes de implementar agua reactiva.
+        const PUDDLES: &[(f32, f32, f32)] = &[
+            (-1.15, -9.5, 1.25),
+            (1.05, -21.0, 0.95),
+            (-0.55, -34.0, 1.55),
+            (1.45, -52.0, 1.10),
+            (-1.35, -68.0, 1.35),
+            (0.35, -82.5, 0.85),
+        ];
+
+        for &(x, z, size) in PUDDLES {
+            if let Ok(idx) = ctx.spawn_plane(Vec3::new(x, 0.012, z), size) {
+                self.puddle_indices.push(idx);
+            }
+        }
+    }
+
     fn build_pools(&mut self, ctx: &mut ReactorContext) {
         for _ in 0..TRACER_POOL_SIZE {
             if let Ok(idx) = ctx.spawn_sphere(Vec3::new(0.0, -1000.0, 0.0), 0.04) {
@@ -788,6 +811,14 @@ impl Xenofall {
                 obj.color = Vec4::new(0.08, 0.08, 0.09, 1.0); // Concreto oscuro mojado
                 obj.metallic = 0.0;
                 obj.roughness = 0.12; // muy liso = reflejos nítidos
+            }
+        }
+
+        for &idx in &self.puddle_indices {
+            if let Some(obj) = ctx.scene.objects.get_mut(idx) {
+                obj.color = Vec4::new(0.035, 0.055, 0.065, 0.78); // agua sucia fría
+                obj.metallic = 0.0;
+                obj.roughness = 0.025; // espejo imperfecto para SSR/TAA
             }
         }
 
@@ -2196,8 +2227,9 @@ impl ReactorApp for Xenofall {
         }
 
         Log::asset(&format!(
-            "Corredor: {} segmentos cargados",
-            self.floor_indices.len()
+            "Corredor: {} segmentos, {} charcos cargados",
+            self.floor_indices.len(),
+            self.puddle_indices.len()
         ));
         Log::engine(&format!(
             "Pools: {} trazadores, {} impactos listos",
@@ -2207,6 +2239,7 @@ impl ReactorApp for Xenofall {
         Log::game(&format!("{} oleadas cargadas", self.waves.len()));
         Log::game("Sistema de cartas roguelite activo");
         self.print_render_showcase_budget(ctx);
+        xenofall::visual_features::log_visual_feature_roadmap();
         Log::section("¡Sobrevive al corredor, Contractor!");
         println!();
     }

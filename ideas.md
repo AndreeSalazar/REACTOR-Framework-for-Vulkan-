@@ -381,6 +381,42 @@ La regla: primero prototipar simple, medir, luego complicar.
 
 ## Plan de prototipos sugerido
 
+### Fase 2 — XENOFALL como laboratorio visual profesional
+
+Antes de implementar delta rendering completo, XENOFALL debe servir como escena de estrés controlada para shaders, agua ligera, VFX y métricas. Lo más recomendable:
+
+1. **Materiales profesionales primero**
+   - Corredor mojado con roughness baja, normal maps, grime masks y zonas metálicas.
+   - Esto es barato, estático y cacheable en VRAM persistente.
+
+2. **Agua simple antes de agua física**
+   - Charcos pequeños, no simulación oceánica.
+   - SSR + normales animadas + variación de roughness.
+   - Ripples reactivos solo después de tener puddles estables.
+
+3. **VFX de gameplay antes de VFX decorativos**
+   - Muzzle flash, trazadores, impactos, sangre, polvo y chispas.
+   - Deben marcar dirty tiles siempre porque comunican combate.
+
+4. **Luces dinámicas medidas**
+   - Flicker de emergencia, luces de disparo, luces rojas de alarma.
+   - Buen test para invalidación de sombras, bloom e iluminación.
+
+5. **Fog/volumetría con presupuesto fijo**
+   - Low-res, temporal, bilateral upsample.
+   - Nunca debe causar spikes.
+
+6. **Decals semi-persistentes**
+   - Bullet holes, sangre, leaks, quemaduras.
+   - Ideales para probar memoria persistente de mundo.
+
+7. **Debug visual obligatorio**
+   - Overlay de dirty/reused tiles.
+   - Métricas de history accepted/rejected.
+   - VRAM por tier.
+
+Esta fase queda representada en código por `xenofall/visual_features.rs`.
+
 ### Prototipo A — Dirty tile renderer
 
 - Dividir pantalla en tiles.
