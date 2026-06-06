@@ -133,7 +133,7 @@ path = "examples/quick.rs"
 
 [[example]]
 name = "xenofall"
-path = "examples/xenofall.rs"
+path = "xenofall/main.rs"
 
 [[example]]
 name = "generate_audio"

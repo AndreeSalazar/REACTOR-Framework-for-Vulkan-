@@ -39,7 +39,7 @@ use reactor_vulkan::prelude::*;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::keyboard::{KeyCode, PhysicalKey};
 
-#[path = "../xenofall/mod.rs"]
+#[path = "mod.rs"]
 mod xenofall;
 
 // =============================================================================
