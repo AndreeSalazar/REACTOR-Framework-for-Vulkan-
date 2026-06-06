@@ -12,4 +12,6 @@ pub mod constants;
 pub mod helpers;
 pub mod render_lab;
 pub mod types;
+pub mod vfx;
 pub mod visual_features;
+pub mod world;

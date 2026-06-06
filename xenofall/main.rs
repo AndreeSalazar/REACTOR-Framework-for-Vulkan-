@@ -41,6 +41,8 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 
 #[path = "mod.rs"]
 mod xenofall;
+use xenofall::vfx::VfxPools;
+use xenofall::world::WorldGeometry;
 
 // =============================================================================
 // CONSTANTES DE GAMEPLAY
@@ -481,16 +483,9 @@ struct Xenofall {
     active_tracers: Vec<Tracer>,
     active_impacts: Vec<Impact>,
 
-    // Pools
-    tracer_pool: Vec<usize>,
-    impact_pool: Vec<usize>,
-    muzzle_flash_index: Option<usize>,
-
-    // Escenario
-    floor_indices: Vec<usize>,
-    puddle_indices: Vec<usize>,
-    wall_indices: Vec<usize>,
-    pillar_indices: Vec<usize>,
+    // Escenario / VFX modularizados
+    world: WorldGeometry,
+    vfx: VfxPools,
 
     // Oleadas
     waves: Vec<WaveDef>,
@@ -549,13 +544,8 @@ impl Xenofall {
             enemies: Vec::new(),
             active_tracers: Vec::new(),
             active_impacts: Vec::new(),
-            tracer_pool: Vec::new(),
-            impact_pool: Vec::new(),
-            muzzle_flash_index: None,
-            floor_indices: Vec::new(),
-            puddle_indices: Vec::new(),
-            wall_indices: Vec::new(),
-            pillar_indices: Vec::new(),
+            world: WorldGeometry::default(),
+            vfx: VfxPools::default(),
             waves: Self::build_waves(),
             wave_index: 0,
             total_enemies_alive: 0,
