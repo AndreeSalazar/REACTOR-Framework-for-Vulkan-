@@ -1,6 +1,5 @@
 #![allow(unused_imports)]
 
-use crate::Xenofall;
 use crate::xenofall::{
     audio::GameAudio,
     cards::{Build, CardType},
@@ -13,6 +12,7 @@ use crate::xenofall::{
     vfx::VfxPools,
     world::WorldGeometry,
 };
+use crate::Xenofall;
 use reactor_vulkan::graphics::post_process::PostProcessEffect;
 use reactor_vulkan::prelude::*;
 use winit::event::{ElementState, MouseButton, WindowEvent};
@@ -39,6 +39,4 @@ impl Xenofall {
     pub(crate) fn print_render_showcase_budget(&self, ctx: &ReactorContext) {
         crate::xenofall::render_lab::log_phase_one_budget(ctx);
     }
-
-
 }

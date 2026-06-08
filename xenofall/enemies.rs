@@ -1,6 +1,5 @@
 #![allow(unused_imports)]
 
-use crate::Xenofall;
 use crate::xenofall::{
     audio::GameAudio,
     cards::{Build, CardType},
@@ -13,6 +12,7 @@ use crate::xenofall::{
     vfx::VfxPools,
     world::WorldGeometry,
 };
+use crate::Xenofall;
 use reactor_vulkan::graphics::post_process::PostProcessEffect;
 use reactor_vulkan::prelude::*;
 use winit::event::{ElementState, MouseButton, WindowEvent};
@@ -120,7 +120,6 @@ impl Xenofall {
     // =========================================================================
     // FIRE MODE DETECTION
     // =========================================================================
-
 
     pub(crate) fn update_enemies(&mut self, ctx: &mut ReactorContext) {
         let dt = ctx.delta();
@@ -271,7 +270,6 @@ impl Xenofall {
         self.enemies.retain(|e| e.state != EnemyState::Dead);
     }
 
-
     pub(crate) fn update_waves(&mut self, ctx: &mut ReactorContext) {
         if self.state != GameState::Playing {
             return;
@@ -329,6 +327,4 @@ impl Xenofall {
             }
         }
     }
-
-
 }

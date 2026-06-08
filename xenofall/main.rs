@@ -34,22 +34,14 @@
 //
 // =============================================================================
 
-use reactor_vulkan::graphics::post_process::PostProcessEffect;
-use reactor_vulkan::prelude::*;
-use winit::event::{ElementState, MouseButton, WindowEvent};
-use winit::keyboard::{KeyCode, PhysicalKey};
+use reactor_vulkan::prelude::PauseConfig;
 
 #[path = "mod.rs"]
 mod xenofall;
 use crate::xenofall::{
     audio::GameAudio,
     cards::{Build, CardType},
-    constants::*,
-    helpers::{
-        hash_rand, hash_rand_signed, pick_random_cards, ray_headshot_intersect,
-        ray_sphere_intersect,
-    },
-    types::{Enemy, EnemyState, FireMode, GameState, Impact, Tracer, WaveDef},
+    types::{Enemy, FireMode, GameState, Impact, Tracer, WaveDef},
     vfx::VfxPools,
     world::WorldGeometry,
 };
@@ -132,9 +124,5 @@ struct Xenofall {
 }
 
 fn main() {
-    reactor_vulkan::run(crate::xenofall::new());
+    reactor_vulkan::run(Xenofall::new());
 }
-
-// =============================================================================
-// BANNER
-// =============================================================================

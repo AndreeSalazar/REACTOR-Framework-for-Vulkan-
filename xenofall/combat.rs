@@ -1,6 +1,5 @@
 #![allow(unused_imports)]
 
-use crate::Xenofall;
 use crate::xenofall::{
     audio::GameAudio,
     cards::{Build, CardType},
@@ -13,6 +12,7 @@ use crate::xenofall::{
     vfx::VfxPools,
     world::WorldGeometry,
 };
+use crate::Xenofall;
 use reactor_vulkan::graphics::post_process::PostProcessEffect;
 use reactor_vulkan::prelude::*;
 use winit::event::{ElementState, MouseButton, WindowEvent};
@@ -51,7 +51,12 @@ impl Xenofall {
     // COMBAT
     // =========================================================================
 
-    pub(crate) fn fire_weapon(&mut self, ctx: &mut ReactorContext, ray_origin: Vec3, ray_dir: Vec3) {
+    pub(crate) fn fire_weapon(
+        &mut self,
+        ctx: &mut ReactorContext,
+        ray_origin: Vec3,
+        ray_dir: Vec3,
+    ) {
         let mag_size = self.build.effective_mag_size();
         if self.ammo == 0 || self.reloading || self.fire_cooldown > 0.0 {
             return;
@@ -250,7 +255,6 @@ impl Xenofall {
     // =========================================================================
     // CARD SELECTION
     // =========================================================================
-
 
     pub(crate) fn update_shooting(&mut self, ctx: &mut ReactorContext) {
         let dt = ctx.delta();
@@ -466,6 +470,4 @@ impl Xenofall {
             self.active_impacts.remove(i);
         }
     }
-
-
 }

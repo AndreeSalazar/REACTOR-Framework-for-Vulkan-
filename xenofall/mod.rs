@@ -6,8 +6,8 @@
 
 #![allow(dead_code)]
 
-pub mod audio;
 pub mod app_lifecycle;
+pub mod audio;
 pub mod cards;
 pub mod cards_runtime;
 pub mod combat;
