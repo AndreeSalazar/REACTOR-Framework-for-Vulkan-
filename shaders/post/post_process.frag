@@ -13,6 +13,7 @@ layout(binding = 3) readonly buffer ExposureBuffer {
 
 layout(binding = 4) uniform sampler2D lutTexture;
 layout(binding = 5) uniform sampler2D motionTexture;
+layout(binding = 6) uniform sampler2D fogTexture;
 
 layout(push_constant) uniform PostProcessSettings {
     // Vignette
@@ -514,6 +515,17 @@ vec3 depth_of_field(vec2 uv, vec2 texelSize, vec3 color) {
 }
 
 vec3 volumetric_fog(vec2 uv, vec3 color) {
+    vec4 fogSample = texture(fogTexture, uv);
+    vec3 scatteredLight = fogSample.rgb;
+    float transmittance = fogSample.a;
+
+    // If the fog texture has data (non-zero scattered light or transmittance < 1),
+    // use the compute-based volumetric fog. Otherwise fall back to simple fog.
+    if (dot(scatteredLight, scatteredLight) > 0.0001 || transmittance < 0.999) {
+        return color * transmittance + scatteredLight;
+    }
+
+    // Fallback: simple screen-space fog
     vec2 p = uv - 0.5;
     float radialDepth = smoothstep(0.1, 0.92, length(p));
     float horizon = smoothstep(0.20, 1.0, uv.y);
@@ -523,7 +535,6 @@ vec3 volumetric_fog(vec2 uv, vec3 color) {
     vec2 lightUvB = vec2(0.82, 0.24);
     float shaftA = pow(max(0.0, 1.0 - length((uv - lightUvA) * vec2(1.0, 1.6))), 4.0);
     float shaftB = pow(max(0.0, 1.0 - length((uv - lightUvB) * vec2(1.0, 1.6))), 4.0);
-    // Horror aesthetic: greenish-yellow fluorescent shafts for A, and dim amber/warm tone for B
     vec3 shaftColor = vec3(0.18, 0.22, 0.08) * shaftA + vec3(0.12, 0.10, 0.06) * shaftB;
 
     float density = settings.fog_density * (0.45 + horizon * 0.95 + radialDepth * 0.55);

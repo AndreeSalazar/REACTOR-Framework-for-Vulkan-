@@ -793,6 +793,25 @@ impl Reactor {
                     );
                 }
 
+                // ── Volumetric Fog Compute Pass ──
+                if self.post_process.fog_pipeline.is_some()
+                    && self.post_process.settings.is_effect_enabled(crate::graphics::post_process::PostProcessEffect::VolumetricFog)
+                {
+                    self.post_process.dispatch_volumetric_fog(
+                        self.context.ash_device(),
+                        command_buffer,
+                        image_index as usize,
+                        self.camera_view,
+                        self.camera_proj,
+                        self.camera_pos,
+                        scene.sun_direction,
+                        glam::Vec3::new(1.0, 0.95, 0.85),
+                        self.camera_near,
+                        self.camera_far,
+                        self.post_process.last_time + self.post_process.delta_time,
+                    );
+                }
+
                 // Transition swapchain image from UNDEFINED to COLOR_ATTACHMENT_OPTIMAL
                 let swapchain_barrier = vk::ImageMemoryBarrier::default()
                     .old_layout(vk::ImageLayout::UNDEFINED)

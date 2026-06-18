@@ -379,6 +379,13 @@ pub struct PostProcessPipeline {
     pub taa_descriptor_pool: Option<vk::DescriptorPool>,
     pub taa_descriptor_sets: Vec<vk::DescriptorSet>,
 
+    // ── Volumetric Fog (Compute) ──
+    pub fog_pipeline: Option<crate::compute::ComputePipeline>,
+    pub fog_descriptor_layout: Option<vk::DescriptorSetLayout>,
+    pub fog_descriptor_pool: Option<vk::DescriptorPool>,
+    pub fog_descriptor_sets: Vec<vk::DescriptorSet>,
+    pub fog_output_images: Vec<crate::graphics::Image>,
+
     pub lut_texture: Option<crate::resources::texture::Texture>,
     pub device: Option<crate::core::arc_handle::ArcDevice>,
 }
@@ -418,6 +425,11 @@ impl PostProcessPipeline {
             taa_descriptor_layout: None,
             taa_descriptor_pool: None,
             taa_descriptor_sets: Vec::new(),
+            fog_pipeline: None,
+            fog_descriptor_layout: None,
+            fog_descriptor_pool: None,
+            fog_descriptor_sets: Vec::new(),
+            fog_output_images: Vec::new(),
             lut_texture: None,
             device: None,
         }
@@ -462,6 +474,11 @@ impl PostProcessPipeline {
             taa_descriptor_layout: None,
             taa_descriptor_pool: None,
             taa_descriptor_sets: Vec::new(),
+            fog_pipeline: None,
+            fog_descriptor_layout: None,
+            fog_descriptor_pool: None,
+            fog_descriptor_sets: Vec::new(),
+            fog_output_images: Vec::new(),
             lut_texture: None,
             device: None,
         }
@@ -524,8 +541,15 @@ impl PostProcessPipeline {
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                 .descriptor_count(1)
                 .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(6)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT),
         ];
-        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&pp_bindings);
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default()
+            .bindings(&pp_bindings)
+            .flags(vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL);
         let descriptor_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
 
         // 2. Create Pipeline Layout
@@ -650,14 +674,15 @@ impl PostProcessPipeline {
         let pool_sizes = [
             vk::DescriptorPoolSize::default()
                 .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .descriptor_count(image_count * 5),
+                .descriptor_count(image_count * 6),
             vk::DescriptorPoolSize::default()
                 .ty(vk::DescriptorType::STORAGE_BUFFER)
                 .descriptor_count(image_count),
         ];
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .pool_sizes(&pool_sizes)
-            .max_sets(image_count);
+            .max_sets(image_count)
+            .flags(vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND);
         let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None)? };
 
         // 5. Allocate Descriptor Sets
@@ -758,14 +783,15 @@ impl PostProcessPipeline {
             let pool_sizes = [
                 vk::DescriptorPoolSize::default()
                     .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .descriptor_count(image_count * 5),
+                    .descriptor_count(image_count * 6),
                 vk::DescriptorPoolSize::default()
                     .ty(vk::DescriptorType::STORAGE_BUFFER)
                     .descriptor_count(image_count),
             ];
             let pool_info = vk::DescriptorPoolCreateInfo::default()
                 .pool_sizes(&pool_sizes)
-                .max_sets(image_count);
+                .max_sets(image_count)
+                .flags(vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND);
             let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None)? };
             let layouts = vec![descriptor_layout; image_count as usize];
             let alloc_info = vk::DescriptorSetAllocateInfo::default()
@@ -885,7 +911,30 @@ impl PostProcessPipeline {
 
         // Bloom descriptors reference the offscreen image views and sampler, so
         // they must be rebuilt whenever swapchain-sized images are recreated.
-        self.init_bloom(ctx, allocator, width, height, image_count)?;
+        self.init_bloom(ctx, allocator.clone(), width, height, image_count)?;
+
+        // Initialize Volumetric Fog compute resources
+        self.init_fog(ctx, allocator, width, height, image_count)?;
+
+        // Write binding 6 (fog texture) to each descriptor set
+        if !self.fog_output_images.is_empty() {
+            let fog_sampler = self.sampler.unwrap();
+            for i in 0..image_count as usize {
+                let fog_info = vk::DescriptorImageInfo::default()
+                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    .image_view(self.fog_output_images[i].view)
+                    .sampler(fog_sampler);
+                let fog_write = vk::WriteDescriptorSet::default()
+                    .dst_set(self.descriptor_sets[i])
+                    .dst_binding(6)
+                    .dst_array_element(0)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .image_info(std::slice::from_ref(&fog_info));
+                unsafe {
+                    device.update_descriptor_sets(&[fog_write], &[]);
+                }
+            }
+        }
 
         Ok(())
     }
@@ -1754,7 +1803,9 @@ impl PostProcessPipeline {
                 .stage_flags(vk::ShaderStageFlags::COMPUTE),
         ];
 
-        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default()
+            .bindings(&bindings)
+            .flags(vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL);
         let descriptor_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
 
         // 2. Create Compute Pipeline (16 bytes push constants for TaaParams)
@@ -1775,7 +1826,8 @@ impl PostProcessPipeline {
         ];
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .pool_sizes(&pool_sizes)
-            .max_sets(image_count);
+            .max_sets(image_count)
+            .flags(vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND);
         let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None)? };
 
         // 4. Allocate Descriptor Sets
@@ -1804,6 +1856,288 @@ impl PostProcessPipeline {
             if let Some(layout) = self.taa_descriptor_layout.take() {
                 device.destroy_descriptor_set_layout(layout, None);
             }
+        }
+    }
+
+    fn init_fog(
+        &mut self,
+        ctx: &VulkanContext,
+        allocator: Arc<Mutex<Allocator>>,
+        width: u32,
+        height: u32,
+        image_count: u32,
+    ) -> crate::core::error::ReactorResult<()> {
+        let device = ctx.ash_device();
+
+        // 1. Create Descriptor Set Layout
+        let bindings = [
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::COMPUTE),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(1)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::COMPUTE),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(2)
+                .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::COMPUTE),
+        ];
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+        let descriptor_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
+
+        // 2. Create Compute Pipeline (152 bytes push constants for FogParams)
+        let spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
+            "../../shaders/post/volumetric_fog.spv"
+        )))
+        .unwrap();
+        let pipeline =
+            crate::compute::ComputePipeline::new(ctx, &spv, &[descriptor_layout], Some(152))?;
+
+        // 3. Create Descriptor Pool
+        let pool_sizes = [
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(image_count * 2),
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::STORAGE_IMAGE)
+                .descriptor_count(image_count),
+        ];
+        let pool_info = vk::DescriptorPoolCreateInfo::default()
+            .pool_sizes(&pool_sizes)
+            .max_sets(image_count);
+        let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None)? };
+
+        // 4. Allocate Descriptor Sets
+        let layouts = vec![descriptor_layout; image_count as usize];
+        let alloc_info = vk::DescriptorSetAllocateInfo::default()
+            .descriptor_pool(descriptor_pool)
+            .set_layouts(&layouts);
+        let descriptor_sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
+
+        // 5. Create Fog Output Images (RGBA16F for scattered light + transmittance)
+        self.fog_output_images.clear();
+        for _ in 0..image_count as usize {
+            let img = Image::new(
+                ctx,
+                allocator.clone(),
+                width,
+                height,
+                vk::Format::R16G16B16A16_SFLOAT,
+                vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::SAMPLED,
+                vk::ImageAspectFlags::COLOR,
+                1,
+            )?;
+            self.fog_output_images.push(img);
+        }
+
+        self.fog_pipeline = Some(pipeline);
+        self.fog_descriptor_layout = Some(descriptor_layout);
+        self.fog_descriptor_pool = Some(descriptor_pool);
+        self.fog_descriptor_sets = descriptor_sets;
+
+        Ok(())
+    }
+
+    fn destroy_fog_resources(&mut self, device: &ash::Device) {
+        self.fog_descriptor_sets.clear();
+        self.fog_pipeline = None;
+        self.fog_output_images.clear();
+        unsafe {
+            if let Some(pool) = self.fog_descriptor_pool.take() {
+                device.destroy_descriptor_pool(pool, None);
+            }
+            if let Some(layout) = self.fog_descriptor_layout.take() {
+                device.destroy_descriptor_set_layout(layout, None);
+            }
+        }
+    }
+
+    pub fn dispatch_volumetric_fog(
+        &mut self,
+        device: &ash::Device,
+        command_buffer: vk::CommandBuffer,
+        image_index: usize,
+        camera_view: glam::Mat4,
+        camera_proj: glam::Mat4,
+        camera_pos: glam::Vec3,
+        sun_direction: glam::Vec3,
+        sun_color: glam::Vec3,
+        near: f32,
+        far: f32,
+        time: f32,
+    ) {
+        let Some(pipeline) = self.fog_pipeline.as_ref() else {
+            return;
+        };
+        let Some(descriptor_set) = self.fog_descriptor_sets.get(image_index) else {
+            return;
+        };
+        let sampler = match self.sampler {
+            Some(s) => s,
+            None => return,
+        };
+
+        let width = self.fog_output_images.first().map(|i| i.extent.width).unwrap_or(1);
+        let height = self.fog_output_images.first().map(|i| i.extent.height).unwrap_or(1);
+
+        // Transition fog output image to GENERAL for compute write
+        let to_general = vk::ImageMemoryBarrier::default()
+            .old_layout(vk::ImageLayout::UNDEFINED)
+            .new_layout(vk::ImageLayout::GENERAL)
+            .src_access_mask(vk::AccessFlags::empty())
+            .dst_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .image(self.fog_output_images[image_index].handle)
+            .subresource_range(vk::ImageSubresourceRange::default()
+                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .base_mip_level(0)
+                .level_count(1)
+                .base_array_layer(0)
+                .layer_count(1));
+
+        unsafe {
+            device.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[to_general],
+            );
+        }
+
+        // Update descriptor set: binding 0 = depth, binding 1 = scene, binding 2 = fog output
+        let depth_info = vk::DescriptorImageInfo::default()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(self.depth_resolved_images.first().map(|i| i.view).unwrap_or(
+                self.offscreen_images.first().map(|i| i.view).unwrap_or(vk::ImageView::null()),
+            ))
+            .sampler(sampler);
+
+        let scene_info = vk::DescriptorImageInfo::default()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(self.offscreen_images[image_index].view)
+            .sampler(sampler);
+
+        let fog_output_info = vk::DescriptorImageInfo::default()
+            .image_layout(vk::ImageLayout::GENERAL)
+            .image_view(self.fog_output_images[image_index].view);
+
+        let writes = [
+            vk::WriteDescriptorSet::default()
+                .dst_set(*descriptor_set)
+                .dst_binding(0)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .image_info(std::slice::from_ref(&depth_info)),
+            vk::WriteDescriptorSet::default()
+                .dst_set(*descriptor_set)
+                .dst_binding(1)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .image_info(std::slice::from_ref(&scene_info)),
+            vk::WriteDescriptorSet::default()
+                .dst_set(*descriptor_set)
+                .dst_binding(2)
+                .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                .image_info(std::slice::from_ref(&fog_output_info)),
+        ];
+
+        unsafe {
+            device.update_descriptor_sets(&writes, &[]);
+        }
+
+        // Bind and dispatch
+        pipeline.bind(command_buffer, device);
+        unsafe {
+            device.cmd_bind_descriptor_sets(
+                command_buffer,
+                vk::PipelineBindPoint::COMPUTE,
+                pipeline.layout,
+                0,
+                &[*descriptor_set],
+                &[],
+            );
+        }
+
+        let inv_view_proj = (camera_proj * camera_view).inverse();
+        let light_dir_view = camera_view.transform_vector3(-sun_direction.normalize()).normalize();
+
+        let mut push_bytes = [0u8; 152];
+        let mut offset = 0;
+
+        let write_f32 = |push: &mut [u8; 152], offset: &mut usize, val: f32| {
+            push[*offset..*offset + 4].copy_from_slice(&val.to_ne_bytes());
+            *offset += 4;
+        };
+        let write_vec4 = |push: &mut [u8; 152], offset: &mut usize, v: glam::Vec4| {
+            write_f32(push, offset, v.x);
+            write_f32(push, offset, v.y);
+            write_f32(push, offset, v.z);
+            write_f32(push, offset, v.w);
+        };
+        let write_mat4 = |push: &mut [u8; 152], offset: &mut usize, m: glam::Mat4| {
+            for col in m.to_cols_array() {
+                write_f32(push, offset, col);
+            }
+        };
+
+        write_mat4(&mut push_bytes, &mut offset, inv_view_proj);
+        write_vec4(&mut push_bytes, &mut offset, glam::Vec4::new(camera_pos.x, camera_pos.y, camera_pos.z, 0.0));
+        write_vec4(&mut push_bytes, &mut offset, glam::Vec4::new(light_dir_view.x, light_dir_view.y, light_dir_view.z, 1.0));
+        write_vec4(&mut push_bytes, &mut offset, glam::Vec4::new(sun_color.x, sun_color.y, sun_color.z, 1.0));
+        write_f32(&mut push_bytes, &mut offset, width as f32);
+        write_f32(&mut push_bytes, &mut offset, height as f32);
+        write_f32(&mut push_bytes, &mut offset, self.settings.fog_density);
+        write_f32(&mut push_bytes, &mut offset, self.settings.fog_scatter);
+        write_f32(&mut push_bytes, &mut offset, time);
+        write_f32(&mut push_bytes, &mut offset, near);
+        write_f32(&mut push_bytes, &mut offset, far);
+        write_f32(&mut push_bytes, &mut offset, 0.35);
+        write_f32(&mut push_bytes, &mut offset, -1.0);
+        push_bytes[offset..offset + 4].copy_from_slice(&48u32.to_ne_bytes()); offset += 4;
+        push_bytes[offset..offset + 4].copy_from_slice(&0u32.to_ne_bytes()); offset += 4;
+        unsafe {
+            device.cmd_push_constants(
+                command_buffer,
+                pipeline.layout,
+                vk::ShaderStageFlags::COMPUTE,
+                0,
+                &push_bytes,
+            );
+
+            let dispatch_x = (width + 7) / 8;
+            let dispatch_y = (height + 7) / 8;
+            device.cmd_dispatch(command_buffer, dispatch_x, dispatch_y, 1);
+        }
+
+        // Transition fog output to SHADER_READ_ONLY for fragment sampling
+        let to_read = vk::ImageMemoryBarrier::default()
+            .old_layout(vk::ImageLayout::GENERAL)
+            .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ)
+            .image(self.fog_output_images[image_index].handle)
+            .subresource_range(vk::ImageSubresourceRange::default()
+                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .base_mip_level(0)
+                .level_count(1)
+                .base_array_layer(0)
+                .layer_count(1));
+
+        unsafe {
+            device.cmd_pipeline_barrier(
+                command_buffer,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[to_read],
+            );
         }
     }
 
@@ -2053,10 +2387,11 @@ impl Drop for PostProcessPipeline {
     fn drop(&mut self) {
         self.exposure_buffers.clear();
         self.auto_exposure_pipeline = None;
-        if let Some(device) = self.device.clone() {
+            if let Some(device) = self.device.clone() {
             self.destroy_depth_resolve_resources(&device);
             self.destroy_bloom_resources(&device);
             self.destroy_taa_resources(&device);
+            self.destroy_fog_resources(&device);
             unsafe {
                 if let Some(sampler) = self.sampler.take() {
                     device.destroy_sampler(sampler, None);
