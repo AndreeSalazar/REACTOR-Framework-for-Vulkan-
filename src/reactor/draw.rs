@@ -465,11 +465,32 @@ impl Reactor {
                 );
             }
 
+            if let Some(ref gbuffer) = self.gbuffer {
+                for image_handle in gbuffer.images() {
+                    start_barriers.push(
+                        vk::ImageMemoryBarrier::default()
+                            .old_layout(vk::ImageLayout::UNDEFINED)
+                            .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                            .src_access_mask(vk::AccessFlags::empty())
+                            .dst_access_mask(vk::AccessFlags::SHADER_READ)
+                            .image(image_handle)
+                            .subresource_range(vk::ImageSubresourceRange {
+                                aspect_mask: vk::ImageAspectFlags::COLOR,
+                                base_mip_level: 0,
+                                level_count: 1,
+                                base_array_layer: 0,
+                                layer_count: 1,
+                            }),
+                    );
+                }
+            }
+
             self.context.device.cmd_pipeline_barrier(
                 command_buffer,
                 vk::PipelineStageFlags::TOP_OF_PIPE,
                 vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
-                    | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+                    | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS
+                    | vk::PipelineStageFlags::FRAGMENT_SHADER,
                 vk::DependencyFlags::empty(),
                 &[],
                 &[],

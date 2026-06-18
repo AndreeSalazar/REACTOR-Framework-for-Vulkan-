@@ -576,7 +576,8 @@ impl Reactor {
         ];
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .pool_sizes(&pool_sizes)
-            .max_sets(MAX_FRAMES_IN_FLIGHT as u32);
+            .max_sets(MAX_FRAMES_IN_FLIGHT as u32)
+            .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET);
         let shadow_descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None)? };
 
         // 6. Alloc Sets

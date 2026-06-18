@@ -1823,16 +1823,27 @@ impl PostProcessPipeline {
         };
 
         // ── 1. Transition layouts dynamically for history ping-pong images ──
-        let prev_old_layout = if history.frame_index == 0 { vk::ImageLayout::UNDEFINED } else { vk::ImageLayout::GENERAL };
+        //
+        // After each TAA dispatch:
+        //   - current color is transitioned GENERAL → SHADER_READ_ONLY (post_resolve_barrier below)
+        //   - current depth stays in GENERAL (no post-dispatch barrier)
+        //   - previous color/depth stay in SHADER_READ_ONLY (sampled only, no barrier after read)
+        //
+        // So when roles swap via advance():
+        //   new previous (was current): color = SHADER_READ_ONLY, depth = GENERAL
+        //   new current  (was previous): both = SHADER_READ_ONLY
+        let prev_color_old_layout = if history.frame_index == 0 { vk::ImageLayout::UNDEFINED } else { vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL };
+        let prev_depth_old_layout = if history.frame_index == 0 { vk::ImageLayout::UNDEFINED } else { vk::ImageLayout::GENERAL };
         let curr_old_layout = if history.frame_index == 0 { vk::ImageLayout::UNDEFINED } else { vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL };
-        let prev_src_access = if history.frame_index == 0 { vk::AccessFlags::empty() } else { vk::AccessFlags::SHADER_WRITE };
+        let prev_color_src_access = if history.frame_index == 0 { vk::AccessFlags::empty() } else { vk::AccessFlags::SHADER_READ };
+        let prev_depth_src_access = if history.frame_index == 0 { vk::AccessFlags::empty() } else { vk::AccessFlags::SHADER_WRITE };
         let curr_src_access = if history.frame_index == 0 { vk::AccessFlags::empty() } else { vk::AccessFlags::SHADER_READ };
         let src_stage = if history.frame_index == 0 { vk::PipelineStageFlags::TOP_OF_PIPE } else { vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::FRAGMENT_SHADER };
 
         let prev_color_barrier = vk::ImageMemoryBarrier::default()
-            .old_layout(prev_old_layout)
+            .old_layout(prev_color_old_layout)
             .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .src_access_mask(prev_src_access)
+            .src_access_mask(prev_color_src_access)
             .dst_access_mask(vk::AccessFlags::SHADER_READ)
             .image(history.previous_color().handle)
             .subresource_range(vk::ImageSubresourceRange::default()
@@ -1843,9 +1854,9 @@ impl PostProcessPipeline {
                 .layer_count(1));
 
         let prev_depth_barrier = vk::ImageMemoryBarrier::default()
-            .old_layout(prev_old_layout)
+            .old_layout(prev_depth_old_layout)
             .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .src_access_mask(prev_src_access)
+            .src_access_mask(prev_depth_src_access)
             .dst_access_mask(vk::AccessFlags::SHADER_READ)
             .image(history.previous_depth().handle)
             .subresource_range(vk::ImageSubresourceRange::default()
