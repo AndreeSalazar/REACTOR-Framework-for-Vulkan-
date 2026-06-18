@@ -79,7 +79,8 @@ impl<T: Clone + Lerp> ValueOverLifetime<T> {
             Self::Linear { start, end } => T::lerp(start, end, t),
             Self::Curve(points) => {
                 if points.is_empty() {
-                    panic!("Empty curve");
+                    log::warn!("ValueOverLifetime::Curve: empty curve, returning default");
+                    return T::lerp(&T::default_for_curve(), &T::default_for_curve(), 0.0);
                 }
                 if points.len() == 1 {
                     return points[0].1.clone();
@@ -101,11 +102,15 @@ impl<T: Clone + Lerp> ValueOverLifetime<T> {
 
 pub trait Lerp {
     fn lerp(a: &Self, b: &Self, t: f32) -> Self;
+    fn default_for_curve() -> Self;
 }
 
 impl Lerp for f32 {
     fn lerp(a: &Self, b: &Self, t: f32) -> Self {
         a + (b - a) * t
+    }
+    fn default_for_curve() -> Self {
+        0.0
     }
 }
 
@@ -113,11 +118,17 @@ impl Lerp for Vec3 {
     fn lerp(a: &Self, b: &Self, t: f32) -> Self {
         a.lerp(*b, t)
     }
+    fn default_for_curve() -> Self {
+        Vec3::ZERO
+    }
 }
 
 impl Lerp for Vec4 {
     fn lerp(a: &Self, b: &Self, t: f32) -> Self {
         a.lerp(*b, t)
+    }
+    fn default_for_curve() -> Self {
+        Vec4::ZERO
     }
 }
 

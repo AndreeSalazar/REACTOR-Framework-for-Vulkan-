@@ -459,17 +459,18 @@ impl Reactor {
             crate::graphics::shadows::ShadowConfig::default(),
         );
 
-        let width = 2048;
-        let height = 2048;
+        let width = shadow_map.config.resolution;
+        let height = shadow_map.config.resolution;
+        let cascade_count = shadow_map.config.cascade_count;
         let format = vk::Format::D32_SFLOAT;
         let device = self.context.ash_device();
 
-        // 1. Crear Imagen Texture Array de 4 capas
+        // 1. Crear Imagen Texture Array de N capas
         let image_info = vk::ImageCreateInfo::default()
             .image_type(vk::ImageType::TYPE_2D)
             .extent(vk::Extent3D { width, height, depth: 1 })
             .mip_levels(1)
-            .array_layers(4)
+            .array_layers(cascade_count)
             .format(format)
             .tiling(vk::ImageTiling::OPTIMAL)
             .initial_layout(vk::ImageLayout::UNDEFINED)
@@ -508,7 +509,7 @@ impl Reactor {
         let shadow_memory = unsafe { device.allocate_memory(&alloc_info, None)? };
         unsafe { device.bind_image_memory(shadow_image, shadow_memory, 0)? };
 
-        // 2. Crear Vistas (1 Array de 4 capas y 4 individuales)
+        // 2. Crear Vistas (1 Array de N capas y N individuales)
         let array_view_info = vk::ImageViewCreateInfo::default()
             .image(shadow_image)
             .view_type(vk::ImageViewType::TYPE_2D_ARRAY)
@@ -518,12 +519,12 @@ impl Reactor {
                 base_mip_level: 0,
                 level_count: 1,
                 base_array_layer: 0,
-                layer_count: 4,
+                layer_count: cascade_count,
             });
         let shadow_array_view = unsafe { device.create_image_view(&array_view_info, None)? };
 
-        let mut shadow_image_views = Vec::with_capacity(4);
-        for layer in 0..4 {
+        let mut shadow_image_views = Vec::with_capacity(cascade_count as usize);
+        for layer in 0..cascade_count {
             let view_info = vk::ImageViewCreateInfo::default()
                 .image(shadow_image)
                 .view_type(vk::ImageViewType::TYPE_2D)
@@ -689,7 +690,7 @@ impl Reactor {
         self.shadow_descriptor_sets = shadow_descriptor_sets;
         self.shadow_uniform_buffers = shadow_uniform_buffers;
 
-        println!("✅ CSM Shadow Maps initialized: 4 cascades @ 2048x2048");
+        println!("✅ CSM Shadow Maps initialized: {} cascades @ {}x{}", cascade_count, width, height);
 
         Ok(())
     }

@@ -149,6 +149,9 @@ impl Reactor {
 
             // ── 3.1. CSM Shadow Pass ──
             if self.shadow_map.is_some() && self.shadow_pipeline.is_some() {
+                let shadow_map = self.shadow_map.as_ref().unwrap();
+                let cascade_count = shadow_map.config.cascade_count;
+                let shadow_resolution = shadow_map.config.resolution as f32;
                 let sun_dir = scene.sun_direction;
                 if let Some(ref mut sm) = self.shadow_map {
                     sm.set_light_direction(sun_dir);
@@ -179,7 +182,7 @@ impl Reactor {
                         base_mip_level: 0,
                         level_count: 1,
                         base_array_layer: 0,
-                        layer_count: 4,
+                        layer_count: cascade_count,
                     });
 
                 self.context.device.cmd_pipeline_barrier(
@@ -192,9 +195,9 @@ impl Reactor {
                     &[shadow_start_barrier],
                 );
 
-                for layer in 0..4 {
+                for layer in 0..cascade_count {
                     let depth_attachment = vk::RenderingAttachmentInfo::default()
-                        .image_view(self.shadow_image_views[layer])
+                        .image_view(self.shadow_image_views[layer as usize])
                         .image_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
                         .load_op(vk::AttachmentLoadOp::CLEAR)
                         .store_op(vk::AttachmentStoreOp::STORE)
@@ -205,7 +208,7 @@ impl Reactor {
                     let rendering_info = vk::RenderingInfo::default()
                         .render_area(vk::Rect2D {
                             offset: vk::Offset2D { x: 0, y: 0 },
-                            extent: vk::Extent2D { width: 2048, height: 2048 },
+                            extent: vk::Extent2D { width: shadow_resolution as u32, height: shadow_resolution as u32 },
                         })
                         .layer_count(1)
                         .depth_attachment(&depth_attachment);
@@ -217,14 +220,14 @@ impl Reactor {
                     let viewport = vk::Viewport {
                         x: 0.0,
                         y: 0.0,
-                        width: 2048.0,
-                        height: 2048.0,
+                        width: shadow_resolution,
+                        height: shadow_resolution,
                         min_depth: 0.0,
                         max_depth: 1.0,
                     };
                     let scissor = vk::Rect2D {
                         offset: vk::Offset2D { x: 0, y: 0 },
-                        extent: vk::Extent2D { width: 2048, height: 2048 },
+                        extent: vk::Extent2D { width: shadow_resolution as u32, height: shadow_resolution as u32 },
                     };
                     self.context
                         .device
@@ -305,7 +308,7 @@ impl Reactor {
                         base_mip_level: 0,
                         level_count: 1,
                         base_array_layer: 0,
-                        layer_count: 4,
+                        layer_count: cascade_count,
                     });
 
                 self.context.device.cmd_pipeline_barrier(
