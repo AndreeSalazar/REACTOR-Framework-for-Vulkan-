@@ -908,11 +908,7 @@ impl PostProcessPipeline {
             } else {
                 self.depth_resolved_images[i].view
             };
-            let depth_layout = if sample_depth {
-                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
-            } else {
-                vk::ImageLayout::GENERAL
-            };
+            let depth_layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
             let depth_info = vk::DescriptorImageInfo::default()
                 .image_layout(depth_layout)
                 .image_view(depth_or_fallback_view)
@@ -2716,7 +2712,7 @@ impl PostProcessPipeline {
         let spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
             "../../shaders/compute/light_cull.spv"
         ))).unwrap();
-        let pipeline = crate::compute::ComputePipeline::new(ctx, &spv, &[descriptor_layout], Some(220))?;
+        let pipeline = crate::compute::ComputePipeline::new(ctx, &spv, &[descriptor_layout], Some(224))?;
         self.light_cull_pipeline = Some(pipeline);
 
         let light_buffer = Buffer::new(ctx, allocator.clone(), (max_lights as usize * 32) as u64,
@@ -2751,6 +2747,40 @@ impl PostProcessPipeline {
         let alloc_info = vk::DescriptorSetAllocateInfo::default().descriptor_pool(descriptor_pool).set_layouts(&layouts);
         self.light_cull_descriptor_sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
 
+        // Write initial descriptors so sets are valid before first dispatch
+        let light_buf = self.light_cull_light_buffer.as_ref().unwrap().handle;
+        let tile_buf = self.light_cull_tile_buffer.as_ref().unwrap().handle;
+        let index_buf = self.light_cull_index_buffer.as_ref().unwrap().handle;
+        let atomic_buf = self.light_cull_atomic_buffer.as_ref().unwrap().handle;
+
+        for i in 0..image_count as usize {
+            let light_info = vk::DescriptorBufferInfo::default().buffer(light_buf).offset(0).range(vk::WHOLE_SIZE);
+            let tile_info = vk::DescriptorBufferInfo::default().buffer(tile_buf).offset(0).range(vk::WHOLE_SIZE);
+            let index_info = vk::DescriptorBufferInfo::default().buffer(index_buf).offset(0).range(vk::WHOLE_SIZE);
+            let atomic_info = vk::DescriptorBufferInfo::default().buffer(atomic_buf).offset(0).range(4);
+
+            // Use SHADER_READ_ONLY_OPTIMAL — matches depth image layout after depth_resolve
+            let dummy_info = vk::DescriptorImageInfo::default()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(self.offscreen_images.first().map(|i| i.view).unwrap_or(vk::ImageView::null()))
+                .sampler(self.sampler.unwrap_or(vk::Sampler::null()));
+
+            let writes = [
+                vk::WriteDescriptorSet::default().dst_set(self.light_cull_descriptor_sets[i]).dst_binding(0)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER).buffer_info(std::slice::from_ref(&light_info)),
+                vk::WriteDescriptorSet::default().dst_set(self.light_cull_descriptor_sets[i]).dst_binding(1)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER).buffer_info(std::slice::from_ref(&tile_info)),
+                vk::WriteDescriptorSet::default().dst_set(self.light_cull_descriptor_sets[i]).dst_binding(2)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER).buffer_info(std::slice::from_ref(&index_info)),
+                vk::WriteDescriptorSet::default().dst_set(self.light_cull_descriptor_sets[i]).dst_binding(3)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER).buffer_info(std::slice::from_ref(&atomic_info)),
+                vk::WriteDescriptorSet::default().dst_set(self.light_cull_descriptor_sets[i]).dst_binding(4)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .image_info(std::slice::from_ref(&dummy_info)),
+            ];
+            unsafe { device.update_descriptor_sets(&writes, &[]); }
+        }
+
         Ok(())
     }
 
@@ -2778,7 +2808,7 @@ impl PostProcessPipeline {
             device.cmd_bind_descriptor_sets(command_buffer, vk::PipelineBindPoint::COMPUTE,
                 pipeline.layout, 0, &[*descriptor_set], &[]);
 
-            let mut pb = [0u8; 220];
+            let mut pb = [0u8; 224];
             let mut o = 0usize;
             for &v in &view.to_cols_array() { pb[o..o+4].copy_from_slice(&v.to_ne_bytes()); o += 4; }
             for &v in &projection.to_cols_array() { pb[o..o+4].copy_from_slice(&v.to_ne_bytes()); o += 4; }
