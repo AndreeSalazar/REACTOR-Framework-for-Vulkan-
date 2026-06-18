@@ -15,6 +15,7 @@ layout(binding = 4) uniform sampler2D lutTexture;
 layout(binding = 5) uniform sampler2D motionTexture;
 layout(binding = 6) uniform sampler2D fogTexture;
 layout(binding = 7) uniform sampler2D aoTexture;
+layout(binding = 8) uniform sampler2D flareTexture;
 
 layout(push_constant) uniform PostProcessSettings {
     // Vignette
@@ -955,6 +956,12 @@ void main() {
     {
         float gtao = texture(aoTexture, uv).r;
         color *= gtao;
+    }
+
+    // 7.6. Lens Flare — additive bloom-based ghost + halo + starburst (from compute pass)
+    {
+        vec3 flare = texture(flareTexture, uv).rgb;
+        color += flare * settings.flare_intensity;
     }
 
     // 7.55. Screen-Space Motion Blur (velocity-based directional blur)

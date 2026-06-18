@@ -288,7 +288,7 @@ impl Pipeline {
         let push_constant_range = vk::PushConstantRange {
             stage_flags: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
             offset: 0,
-            size: 256,
+            size: 320,
         };
 
         let push_constant_ranges = [push_constant_range];

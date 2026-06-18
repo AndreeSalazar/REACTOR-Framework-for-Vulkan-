@@ -8,10 +8,12 @@ layout(location = 0) out vec3 vWorldNormal;
 layout(location = 1) out vec2 vUV;
 layout(location = 2) out vec3 vWorldPos;
 layout(location = 3) out vec4 vColor;
+layout(location = 4) out vec2 vMotion;
 
 layout(push_constant) uniform Constants {
     mat4 mvp;
     mat4 model;
+    mat4 prev_mvp;
     vec4 camera_pos;
     vec4 light_pos;
     vec4 color;
@@ -19,8 +21,14 @@ layout(push_constant) uniform Constants {
 
 void main() {
     vec4 world_pos = push.model * vec4(position, 1.0);
-    gl_Position = push.mvp * vec4(position, 1.0);
+    vec4 clip_pos = push.mvp * vec4(position, 1.0);
+    vec4 prev_clip_pos = push.prev_mvp * vec4(position, 1.0);
 
+    vec2 ndc = clip_pos.xy / max(clip_pos.w, 1e-6);
+    vec2 prev_ndc = prev_clip_pos.xy / max(prev_clip_pos.w, 1e-6);
+    vMotion = ndc - prev_ndc;
+
+    gl_Position = clip_pos;
     vWorldNormal = normalize(mat3(push.model) * normal);
     vWorldPos = world_pos.xyz;
     vUV = uv;

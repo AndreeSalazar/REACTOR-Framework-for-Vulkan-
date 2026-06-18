@@ -4,6 +4,7 @@ layout(location = 0) in vec3 vWorldNormal;
 layout(location = 1) in vec2 vUV;
 layout(location = 2) in vec3 vWorldPos;
 layout(location = 3) in vec4 vColor;
+layout(location = 4) in vec2 vMotion;
 
 layout(location = 0) out vec4 outAlbedoAo;
 layout(location = 1) out vec4 outNormalMaterial;
@@ -13,8 +14,9 @@ layout(location = 3) out vec4 outMotionDepthFlags;
 layout(push_constant) uniform Constants {
     mat4 mvp;
     mat4 model;
-    vec4 camera_pos; // camera_pos.w = metallic
-    vec4 light_pos;  // light_pos.w = roughness
+    mat4 prev_mvp;
+    vec4 camera_pos;
+    vec4 light_pos;
     vec4 color;
 } push;
 
@@ -40,5 +42,5 @@ void main() {
     outAlbedoAo = vec4(albedo, ao);
     outNormalMaterial = vec4(encode_octahedral(normal), metallic, roughness);
     outEmissiveMaterial = vec4(0.0, 0.0, 0.0, material_id);
-    outMotionDepthFlags = vec4(0.0, 0.0, gl_FragCoord.z, flags);
+    outMotionDepthFlags = vec4(vMotion, gl_FragCoord.z, flags);
 }

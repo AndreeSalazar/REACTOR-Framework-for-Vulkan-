@@ -333,6 +333,7 @@ impl Reactor {
             light_pos: glam::Vec4::new(5.0, 5.0, 5.0, 1.0),
             camera_view: glam::Mat4::IDENTITY,
             camera_proj: glam::Mat4::IDENTITY,
+            prev_view_projection: glam::Mat4::IDENTITY,
             camera_near: 0.1,
             camera_far: 1000.0,
             post_process,

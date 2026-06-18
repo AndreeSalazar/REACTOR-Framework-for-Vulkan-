@@ -614,11 +614,13 @@ impl Reactor {
                 }
 
                 let mvp = local_vp * object.transform;
+                let prev_mvp = self.prev_view_projection * object.transform;
 
                 #[repr(C)]
                 struct PushConstants {
                     mvp: glam::Mat4,
                     model: glam::Mat4,
+                    prev_mvp: glam::Mat4,
                     camera_pos: glam::Vec4,
                     light_pos: glam::Vec4,
                     color: glam::Vec4,
@@ -627,23 +629,24 @@ impl Reactor {
                 let push = PushConstants {
                     mvp,
                     model: object.transform,
+                    prev_mvp,
                     camera_pos: glam::Vec4::new(
                         self.camera_pos.x,
                         self.camera_pos.y,
                         self.camera_pos.z,
-                        object.metallic, // pack metallic in camera_pos.w
+                        object.metallic,
                     ),
                     light_pos: glam::Vec4::new(
                         self.light_pos.x,
                         self.light_pos.y,
                         self.light_pos.z,
-                        object.roughness, // pack roughness in light_pos.w
+                        object.roughness,
                     ),
                     color: glam::Vec4::new(
                         object.color.x,
                         object.color.y,
                         object.color.z,
-                        object.anisotropy, // pack anisotropy in color.w
+                        object.anisotropy,
                     ),
                     emission: object.emission,
                 };
@@ -684,6 +687,8 @@ impl Reactor {
             }
 
             self.context.device.cmd_end_rendering(command_buffer);
+
+            self.prev_view_projection = self.camera_proj * self.camera_view;
 
             // ── Render Screen-Space Decals (Fase 20) ──
             if use_post_process && !self.decals.is_empty() {
@@ -875,6 +880,21 @@ impl Reactor {
                         glam::Vec3::new(1.0, 0.95, 0.85),
                         self.camera_near,
                         self.camera_far,
+                        self.post_process.last_time + self.post_process.delta_time,
+                    );
+                }
+
+                if self.post_process.lens_flare_pipeline.is_some()
+                    && self.post_process
+                        .settings
+                        .is_effect_enabled(crate::graphics::post_process::PostProcessEffect::AnamorphicFlares)
+                {
+                    self.post_process.dispatch_lens_flare(
+                        self.context.ash_device(),
+                        command_buffer,
+                        image_index as usize,
+                        self.swapchain.extent.width,
+                        self.swapchain.extent.height,
                         self.post_process.last_time + self.post_process.delta_time,
                     );
                 }

@@ -485,3 +485,58 @@ xenofall/
 ## Frase guía
 
 > REACTOR no intenta simular todo el universo cada frame. REACTOR recuerda lo estable, recalcula lo importante y usa la cámara como definición de realidad visual.
+
+---
+
+## Estado de implementación — sesión 18-Jun-2026
+
+### Aplicado en esta sesión
+
+| Feature | Archivo | Líneas | Estado |
+|---|---|---|---|
+| **Motion vectors reales** | `shaders/deferred/gbuffer.vert/.frag` | +10/-3 | ✅ Activo. `vMotion` se calcula como diferencia NDC entre frame actual y previo. Almacenado en GBuffer `MotionDepthFlags` (canales R/G). TAA ya consumía estos canales, ahora con datos reales. |
+| **`prev_mvp` en push constants** | `src/reactor/draw.rs` | +11/-3 | ✅ Activo. Push constants del pase de geometría ahora incluye `prev_mvp = prev_vp * object.transform` (192 → 288 bytes totales; pipeline.rs range 256 → 320). |
+| **`prev_view_projection` en Reactor** | `src/reactor/mod.rs`, `init.rs`, `draw.rs` | +5/-1 | ✅ Activo. Campo nuevo en `Reactor`, se actualiza al final de `draw_scene` con `self.camera_proj * self.camera_view` (sin jitter para historial estable). |
+| **Lens flare GPU pass** | `src/graphics/post_process.rs`, `shaders/post/post_process.frag` | +250/-0 | ✅ Activo. Init + dispatch + destroy + binding 8 en post-process layout + sampling en fragment shader final. |
+| **Post-process layout: binding 8 (flare)** | `src/graphics/post_process.rs` | +6/-0 | ✅ Activo. Nuevo `COMBINED_IMAGE_SAMPLER` para `flareTexture` en el layout del fragment post-process. |
+
+### Verificado
+
+- `cargo build --example xenofall`: **clean** (0 errores, 0 nuevos warnings)
+- 32 shaders compilados sin errores
+- Diff: 8 archivos modificados, ~280 líneas añadidas
+
+### Diferido a sesiones dedicadas
+
+| Feature | Estimación | Por qué se difiere |
+|---|---|---|
+| **Volumetric clouds** | 300+ líneas Rust + 3D noise generation (Worley/Perlin-Worley, 128³ + 32³) | Requiere pipeline completo de generación procedural de texturas 3D + upload con staging buffer + one-shot command buffer. El shader ya existe (`volumetric_clouds.comp`) y está listo para integrar. |
+| **FSR 2.2-style temporal upscaler** | 500+ líneas (compute shader con edge-aware + temporal accumulation + RCAS) | Requiere compute shader propio con análisis de bordes Lanczos, history clipping, anti-ghosting y RCAS sharpening. Sin vendor lock-in (sin DLSS). |
+| **DOF (depth of field) bokeh** | 250+ líneas | Compute shader de gather hexagonal + CoC por depth + sample en post-process. |
+
+### Decisión de scope
+
+Las features de arriba (clouds, FSR, DOF) son **proyectos completos en sí mismos** que merecen sesiones dedicadas con validación, profiling y ajuste fino. Aplicarlas en una sola sesión comprometería la calidad.
+
+### Decisión sobre upscaling
+
+**REACTOR NO incluirá DLSS** (exclusivo de NVIDIA RTX). Las alternativas vendor-agnostic que se evaluarán:
+
+- **FSR 2.2/3.1** (AMD, MIT licensed) — primera opción
+- **XeSS** (Intel) — segunda opción
+- **Implementación propia temporal** (estilo FSR 2 con Lanczos + history) — opción final, máximo control
+
+El requisito es: **funciona en AMD, Intel, NVIDIA** sin lock-in de hardware.
+
+### Notas de validación
+
+Esta sesión validó la compilación pero no ejecutó xenofall (entorno headless). Para validar visualmente:
+
+```bash
+cargo run --example xenofall
+```
+
+Verificar:
+- Motion vectors: personajes en movimiento no dejan estela en TAA
+- Lens flare: al mirar al sol (o cualquier fuente bright), ghosts + halo + starburst visibles
+- 0 errores de validación Vulkan en la consola

@@ -76,6 +76,7 @@ pub struct Reactor {
     pub light_pos: glam::Vec4,
     pub camera_view: glam::Mat4,
     pub camera_proj: glam::Mat4,
+    pub prev_view_projection: glam::Mat4,
     pub camera_near: f32,
     pub camera_far: f32,
     pub post_process: crate::graphics::post_process::PostProcessPipeline,

@@ -31,6 +31,22 @@ Aprovecha el sistema de tipos, ownership y RAII de Rust para garantizar **seguri
 
 ---
 
+## ⭐ Última sesión (18-Jun-2026)
+
+Features añadidas en esta sesión:
+
+- **Motion vectors reales** desde vertex shader: el GBuffer ahora contiene vectores de movimiento por píxel, calculados como diferencia NDC entre el frame actual y el anterior. **TAA ahora maneja correctamente el movimiento de objetos** (no más estelas en personajes en movimiento).
+- **Lens flare GPU pass**: ghosts, halo y starburst físicamente inspirado en UE5/CoD. Lee del mip 2-3 del bloom, genera la dispersión cromática y se compone aditivamente en el shader de post-process.
+- **Validación Vulkan limpia**: 0 errores de validación en la compilación limpia.
+
+### Roadmap inmediato (deferido a sesiones dedicadas)
+
+- 🌥️ **Volumetric clouds** (Horizon Zero Dawn / RDR2 style) — requiere generación de texturas 3D procedurales
+- 📈 **FSR 2.2-style upscaler propio** — vendor-agnostic, sin DLSS, sin NVIDIA lock-in
+- 🔍 **Depth of Field bokeh** — gather hexagonal + circle of confusion
+
+---
+
 ## 🧭 Filosofía — Por qué existe REACTOR
 
 Vulkan es la API gráfica moderna más explícita y veloz del mercado, pero también la
@@ -124,7 +140,7 @@ Es **el único lugar donde existe `unsafe`** en todo el framework.
 | `depth.rs` | Z-buffer con formato detectado (D32_SFLOAT / D24_S8 / D16) | Auto-fallback según GPU |
 | `msaa.rs` | Multi-Sample Anti-Aliasing 2x/4x/8x/16x (color + depth resolve) | Smooth edges sin shaders extra |
 | `shadows.rs` | Shadow maps (directional + spot + omnidireccional con cubemap) | PCF de 3x3/5x5; bias automático |
-| `post_process.rs` | Pipeline de post-process con push constants compactos | Vignette, Bloom, ToneMap (ACES), Chromatic, Film Grain, FXAA, Sharpen, SSGI, Volumetric Fog, LUT, SSR, Path-Traced Resolve, Anamorphic Flares, **Pause Overlay** |
+| `post_process.rs` | Pipeline de post-process con push constants compactos | Vignette, Bloom, ToneMap (ACES/AgX), Chromatic, Film Grain, FXAA, Sharpen, **TAA con motion vectors reales**, **Lens Flare (ghosts + halo + starburst)**, GTAO, Clustered Light Culling, Volumetric Fog, SSGI, SSR, Path-Traced Resolve, **Motion Blur**, **DoF (Depth of Field)**, Anamorphic Flares, **Pause Overlay** |
 | `bindless.rs` | Descriptor indexing (`VK_EXT_descriptor_indexing`) — texturas/buffers por índice | Permite miles de materiales con un solo set; base para ray tracing |
 | `indirect.rs` | `vkCmdDrawIndexedIndirect` + GPU-driven rendering | La GPU genera sus propios draw calls |
 | `mesh_shader.rs` | Mesh shaders (`VK_EXT_mesh_shader`) opt-in | Sustituye al pipeline tradicional cuando el HW lo soporta |
