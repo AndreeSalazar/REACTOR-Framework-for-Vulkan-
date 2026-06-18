@@ -587,12 +587,14 @@ impl Reactor {
                             command_buffer,
                             object.material.pipeline.layout,
                             true,
+                            object.material.has_shadow_set,
                         );
-                    } else if !self.shadow_descriptor_sets.is_empty() {
+                    } else if object.material.has_shadow_set {
                         self.bind_reactor_system_descriptors(
                             command_buffer,
                             object.material.pipeline.layout,
                             false,
+                            object.material.has_shadow_set,
                         );
                     }
                 }
@@ -1626,6 +1628,7 @@ impl Reactor {
         command_buffer: vk::CommandBuffer,
         pipeline_layout: vk::PipelineLayout,
         bind_ibl: bool,
+        has_shadow_set: bool,
     ) {
         // Set 1: IBL Textures (irradiance + prefiltered + BRDF LUT + params)
         if bind_ibl {
@@ -1642,7 +1645,7 @@ impl Reactor {
         }
 
         // Set 2: Cascaded Shadow Maps
-        if !self.shadow_descriptor_sets.is_empty() {
+        if has_shadow_set && !self.shadow_descriptor_sets.is_empty() {
             self.context.device.cmd_bind_descriptor_sets(
                 command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,

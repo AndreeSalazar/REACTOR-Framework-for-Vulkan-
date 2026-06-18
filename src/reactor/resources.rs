@@ -38,17 +38,49 @@ impl Reactor {
 
     /// Crea un material sin texturas usando *Dynamic Rendering*.
     pub fn create_material(&self, vert_code: &[u32], frag_code: &[u32]) -> ReactorResult<Material> {
-        Material::new_with_msaa(
+        use crate::resources::material::MaterialBuilder;
+
+        let empty_layout = unsafe {
+            self.context
+                .device
+                .create_descriptor_set_layout(
+                    &ash::vk::DescriptorSetLayoutCreateInfo::default(),
+                    None,
+                )
+                .map_err(|e| {
+                    crate::core::error::ReactorError::with_source(
+                        crate::core::error::ErrorCode::VulkanPipelineCreation,
+                        "Failed to create empty descriptor set layout for simple material",
+                        e,
+                    )
+                })?
+        };
+
+        let mut builder = MaterialBuilder::new(vert_code.to_vec(), frag_code.to_vec())
+            .msaa(self.msaa_samples)
+            .fragment_shading_rate(self.context.supports_fragment_shading_rate())
+            .descriptor_layout(empty_layout); // set = 0
+
+        if let Some(shadow_layout) = self.shadow_descriptor_layout {
+            builder = builder
+                .has_shadow_set(true)
+                .descriptor_layout(empty_layout)   // set = 1 (dummy padding so shadow lands at set 2)
+                .descriptor_layout(shadow_layout); // set = 2 (Sombras)
+        }
+
+        let mut mat = builder.build(
             &self.context,
-            None, // Dynamic Rendering
-            vert_code,
-            frag_code,
+            None,
             self.swapchain.extent.width,
             self.swapchain.extent.height,
-            self.msaa_samples,
             self.swapchain.format,
             Some(self.depth_format),
-        )
+        )?;
+
+        mat.descriptor_layout = Some(empty_layout);
+        mat.device = Some(self.context.device.clone());
+
+        Ok(mat)
     }
 
     /// Crea un material con textura difusa usando *Dynamic Rendering*.
@@ -58,18 +90,92 @@ impl Reactor {
         frag_code: &[u32],
         texture: &Texture,
     ) -> ReactorResult<Material> {
-        Material::with_texture(
-            &self.context,
-            None, // Dynamic Rendering
-            vert_code,
-            frag_code,
-            self.swapchain.extent.width,
-            self.swapchain.extent.height,
-            texture,
-            self.msaa_samples,
-            self.swapchain.format,
-            Some(self.depth_format),
-        )
+        use crate::resources::material::MaterialBuilder;
+        use ash::vk;
+
+        let sampler_binding = vk::DescriptorSetLayoutBinding::default()
+            .binding(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::FRAGMENT);
+
+        let bindings = [sampler_binding];
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+
+        let descriptor_layout = unsafe {
+            self.context
+                .device
+                .create_descriptor_set_layout(&layout_info, None)?
+        };
+
+        let pool_size = vk::DescriptorPoolSize::default()
+            .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(1);
+
+        let pool_sizes = [pool_size];
+        let pool_info = vk::DescriptorPoolCreateInfo::default()
+            .pool_sizes(&pool_sizes)
+            .max_sets(1);
+
+        let descriptor_pool = unsafe {
+            self.context.device.create_descriptor_pool(&pool_info, None)?
+        };
+
+        let layouts = [descriptor_layout];
+        let alloc_info = vk::DescriptorSetAllocateInfo::default()
+            .descriptor_pool(descriptor_pool)
+            .set_layouts(&layouts);
+
+        let descriptor_sets = unsafe {
+            self.context.device.allocate_descriptor_sets(&alloc_info)?
+        };
+        let descriptor_set = descriptor_sets[0];
+
+        let image_info = vk::DescriptorImageInfo::default()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(texture.view())
+            .sampler(texture.sampler_handle());
+
+        let image_infos = [image_info];
+        let write = vk::WriteDescriptorSet::default()
+            .dst_set(descriptor_set)
+            .dst_binding(0)
+            .dst_array_element(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .image_info(&image_infos);
+
+        unsafe {
+            self.context.device.update_descriptor_sets(&[write], &[]);
+        }
+
+        let mut builder = MaterialBuilder::new(vert_code.to_vec(), frag_code.to_vec())
+            .msaa(self.msaa_samples)
+            .fragment_shading_rate(self.context.supports_fragment_shading_rate())
+            .descriptor_layout(descriptor_layout); // set = 0
+
+        if let Some(shadow_layout) = self.shadow_descriptor_layout {
+            builder = builder
+                .has_shadow_set(true)
+                .descriptor_layout(descriptor_layout) // set = 1 (dummy padding so shadow lands at set 2)
+                .descriptor_layout(shadow_layout);    // set = 2 (Sombras)
+        }
+
+        let mut mat = builder
+            .build(
+                &self.context,
+                None,
+                self.swapchain.extent.width,
+                self.swapchain.extent.height,
+                self.swapchain.format,
+                Some(self.depth_format),
+            )?;
+
+        mat.descriptor_set = Some(descriptor_set);
+        mat.descriptor_pool = Some(descriptor_pool);
+        mat.descriptor_layout = Some(descriptor_layout);
+        mat.device = Some(self.context.device.clone());
+
+        Ok(mat)
     }
 
     /// Crea un material con IBL (Image-Based Lighting) usando *Dynamic Rendering*.
@@ -110,7 +216,9 @@ impl Reactor {
             .descriptor_layout(ibl_set_layout); // set = 1 (IBL textures)
 
         if let Some(shadow_layout) = self.shadow_descriptor_layout {
-            builder = builder.descriptor_layout(shadow_layout); // set = 2 (Sombras)
+            builder = builder
+                .has_shadow_set(true)
+                .descriptor_layout(shadow_layout); // set = 2 (Sombras)
         }
 
         let mut mat = builder
@@ -296,7 +404,9 @@ impl Reactor {
             .descriptor_layout(ibl_set_layout);     // set = 1
 
         if let Some(shadow_layout) = self.shadow_descriptor_layout {
-            builder = builder.descriptor_layout(shadow_layout); // set = 2 (Sombras)
+            builder = builder
+                .has_shadow_set(true)
+                .descriptor_layout(shadow_layout); // set = 2 (Sombras)
         }
 
         let mut mat = builder

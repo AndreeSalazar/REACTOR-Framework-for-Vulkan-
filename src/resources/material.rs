@@ -13,6 +13,7 @@ pub struct Material {
     pub descriptor_layout: Option<vk::DescriptorSetLayout>,
     pub kept_textures: Vec<crate::resources::texture::Texture>,
     pub uses_ibl: bool,
+    pub has_shadow_set: bool,
     pub(crate) device: Option<ArcDevice>,
 }
 
@@ -76,6 +77,7 @@ impl Material {
             descriptor_layout: None,
             kept_textures: Vec::new(),
             uses_ibl: false,
+            has_shadow_set: false,
             device: None,
         })
     }
@@ -112,6 +114,7 @@ impl Material {
             descriptor_layout: None,
             kept_textures: Vec::new(),
             uses_ibl: false,
+            has_shadow_set: false,
             device: None,
         })
     }
@@ -210,6 +213,7 @@ impl Material {
             descriptor_layout: Some(descriptor_layout),
             kept_textures: Vec::new(),
             uses_ibl: false,
+            has_shadow_set: false,
             device: Some(ctx.device.clone()),
         })
     }
@@ -268,6 +272,7 @@ pub struct MaterialBuilder {
     pub config: PipelineConfig,
     pub descriptor_layouts: Vec<vk::DescriptorSetLayout>,
     pub uses_ibl: bool,
+    pub has_shadow_set: bool,
 }
 
 impl MaterialBuilder {
@@ -278,6 +283,7 @@ impl MaterialBuilder {
             config: PipelineConfig::default(),
             descriptor_layouts: Vec::new(),
             uses_ibl: false,
+            has_shadow_set: false,
         }
     }
 
@@ -327,6 +333,11 @@ impl MaterialBuilder {
         self
     }
 
+    pub fn has_shadow_set(mut self, v: bool) -> Self {
+        self.has_shadow_set = v;
+        self
+    }
+
     pub fn build(
         self,
         ctx: &VulkanContext,
@@ -349,6 +360,7 @@ impl MaterialBuilder {
             depth_format,
         )?;
         mat.uses_ibl = self.uses_ibl;
+        mat.has_shadow_set = self.has_shadow_set;
         Ok(mat)
     }
 }
