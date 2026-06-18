@@ -1172,7 +1172,7 @@ impl PostProcessPipeline {
 
             let ready_for_sampling = vk::ImageMemoryBarrier::default()
                 .old_layout(vk::ImageLayout::GENERAL)
-                .new_layout(vk::ImageLayout::GENERAL)
+                .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
                 .src_access_mask(vk::AccessFlags::SHADER_WRITE)
                 .dst_access_mask(vk::AccessFlags::SHADER_READ)
                 .image(resolved.handle)
@@ -1895,8 +1895,8 @@ impl PostProcessPipeline {
             "../../shaders/post/volumetric_fog.spv"
         )))
         .unwrap();
-        let pipeline =
-            crate::compute::ComputePipeline::new(ctx, &spv, &[descriptor_layout], Some(152))?;
+            let pipeline =
+            crate::compute::ComputePipeline::new(ctx, &spv, &[descriptor_layout], Some(156))?;
 
         // 3. Create Descriptor Pool
         let pool_sizes = [
@@ -2066,20 +2066,20 @@ impl PostProcessPipeline {
         let inv_view_proj = (camera_proj * camera_view).inverse();
         let light_dir_view = camera_view.transform_vector3(-sun_direction.normalize()).normalize();
 
-        let mut push_bytes = [0u8; 152];
+        let mut push_bytes = [0u8; 156];
         let mut offset = 0;
 
-        let write_f32 = |push: &mut [u8; 152], offset: &mut usize, val: f32| {
+        let write_f32 = |push: &mut [u8; 156], offset: &mut usize, val: f32| {
             push[*offset..*offset + 4].copy_from_slice(&val.to_ne_bytes());
             *offset += 4;
         };
-        let write_vec4 = |push: &mut [u8; 152], offset: &mut usize, v: glam::Vec4| {
+        let write_vec4 = |push: &mut [u8; 156], offset: &mut usize, v: glam::Vec4| {
             write_f32(push, offset, v.x);
             write_f32(push, offset, v.y);
             write_f32(push, offset, v.z);
             write_f32(push, offset, v.w);
         };
-        let write_mat4 = |push: &mut [u8; 152], offset: &mut usize, m: glam::Mat4| {
+        let write_mat4 = |push: &mut [u8; 156], offset: &mut usize, m: glam::Mat4| {
             for col in m.to_cols_array() {
                 write_f32(push, offset, col);
             }

@@ -366,6 +366,7 @@ impl Reactor {
         };
 
         reactor.init_decals()?;
+        reactor.init_shadows()?;
         Ok(reactor)
     }
 }
