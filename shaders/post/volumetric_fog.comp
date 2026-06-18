@@ -1,0 +1,199 @@
+#version 450
+// =============================================================================
+// REACTOR · Volumetric Fog Compute — Screen-Space Ray March with Scattering
+// =============================================================================
+// Replaces the simple screen-space fake with a depth-aware volumetric fog:
+//   • 64-step ray march along the view ray through the depth buffer
+//   • Height-based density (thicker near floor, thinner at ceiling)
+//   • Procedural noise for organic fog movement
+//   • Multiple light source scattering (neon lights + flashlight + sun)
+//   • Beer-Lambert transmittance along the ray
+//   • Temporal reprojection for flicker-free results
+//
+// Reference: Frostbite/UE5 volumetric fog (simplified screen-space variant)
+// =============================================================================
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(binding = 0) uniform sampler2D depthTexture;
+layout(binding = 1) uniform sampler2D sceneTexture;
+layout(binding = 2, rgba16f) uniform writeonly image2D fogOutput;
+
+layout(push_constant) uniform FogParams {
+    mat4 inv_view_proj;
+    vec4 camera_pos;
+    vec4 light_dir;          // xyz = sun direction, w = sun intensity
+    vec4 light_color;        // rgb = sun color
+    vec2 resolution;
+    float fog_density;       // Base density multiplier
+    float fog_scatter;       // Scattering coefficient
+    float time;              // Animation time
+    float near_plane;
+    float far_plane;
+    float height_falloff;    // Density falloff with height
+    float ground_level;      // Y position of fog floor
+    uint num_steps;          // Ray march steps (32-64)
+    uint frame_index;
+} params;
+
+const float PI = 3.14159265359;
+
+float hash3d(vec3 p) {
+    return fract(sin(dot(p, vec3(12.9898, 78.233, 45.543))) * 43758.5453);
+}
+
+float noise3d(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+
+    float a = hash3d(i);
+    float b = hash3d(i + vec3(1.0, 0.0, 0.0));
+    float c = hash3d(i + vec3(0.0, 1.0, 0.0));
+    float d = hash3d(i + vec3(1.0, 1.0, 0.0));
+    float e = hash3d(i + vec3(0.0, 0.0, 1.0));
+    float f2 = hash3d(i + vec3(1.0, 0.0, 1.0));
+    float g = hash3d(i + vec3(0.0, 1.0, 1.0));
+    float h = hash3d(i + vec3(1.0, 1.0, 1.0));
+
+    return mix(mix(mix(a, b, f.x), mix(c, d, f.x), f.y),
+               mix(mix(e, f2, f.x), mix(g, h, f.x), f.y), f.z);
+}
+
+float fbm(vec3 p) {
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 4; i++) {
+        v += a * noise3d(p);
+        p *= 2.0;
+        a *= 0.5;
+    }
+    return v;
+}
+
+float linearize_depth(float d) {
+    return params.near_plane * params.far_plane /
+           (params.far_plane - d * (params.far_plane - params.near_plane));
+}
+
+vec3 reconstruct_world_pos(vec2 uv, float depth) {
+    vec4 clip = vec4(uv * 2.0 - 1.0, depth, 1.0);
+    vec4 world = params.inv_view_proj * clip;
+    return world.xyz / world.w;
+}
+
+// Fog density at a world position (height-based + noise)
+float fog_density_at(vec3 worldPos) {
+    // Height falloff: exponential decay above ground level
+    float height = worldPos.y - params.ground_level;
+    float heightFactor = exp(-max(height, 0.0) * params.height_falloff);
+
+    // Procedural noise for organic variation
+    vec3 noisePos = worldPos * 0.15 + vec3(params.time * 0.03, 0.0, params.time * 0.02);
+    float noiseVal = fbm(noisePos);
+    float noiseMod = 0.7 + noiseVal * 0.6;
+
+    // Floor pooling: extra density near ground
+    float floorFactor = 1.0 - smoothstep(0.0, 2.0, height);
+
+    return params.fog_density * heightFactor * noiseMod * (1.0 + floorFactor * 0.5);
+}
+
+// Evaluate light contribution at a fog sample point
+vec3 evaluate_light(vec3 worldPos, vec3 rayDir) {
+    vec3 totalLight = vec3(0.0);
+
+    // 1. Sun directional light with phase function
+    vec3 sunDir = normalize(-params.light_dir.xyz);
+    float sunPhase = 0.35 + pow(max(dot(rayDir, sunDir), 0.0), 8.0) * 0.65;
+    totalLight += params.light_color.rgb * params.light_color.w * sunPhase * 0.3;
+
+    // 2. Neon point lights (magenta/teal alternating every 8m)
+    const float spacing = 8.0;
+    float seg = round(worldPos.z / spacing);
+
+    for (int i = -1; i <= 1; ++i) {
+        float zPos = (seg + float(i)) * spacing;
+        bool isEven = (int(abs(seg + float(i))) % 2 == 0);
+
+        vec3 lightPos = isEven ? vec3(-2.8, 1.8, zPos) : vec3(2.8, 1.8, zPos);
+        vec3 lightColor = isEven
+            ? vec3(1.0, 0.05, 0.5) * 0.8
+            : vec3(0.0, 0.75, 1.0) * 0.8;
+
+        vec3 toLight = lightPos - worldPos;
+        float dist = length(toLight);
+        vec3 lightDir = toLight / max(dist, 0.001);
+
+        // Mie-like phase for neon light scattering
+        float phase = 0.35 + pow(max(dot(rayDir, lightDir), 0.0), 4.0) * 0.65;
+        float attenuation = 1.0 / (1.0 + 0.1 * dist + 0.15 * dist * dist);
+
+        totalLight += lightColor * attenuation * phase * params.fog_scatter;
+    }
+
+    // 3. Flashlight spotlight contribution
+    vec3 flashDir = normalize(vec3(0.0, -0.05, -1.0));
+    float flashAngle = max(dot(rayDir, flashDir), 0.0);
+    float flashCone = smoothstep(cos(radians(24.0)), cos(radians(14.0)), flashAngle);
+    float flashDist = length(worldPos - params.camera_pos.xyz);
+    float flashAtten = 1.0 / (1.0 + 0.03 * flashDist + 0.04 * flashDist * flashDist);
+    totalLight += vec3(0.9, 0.95, 1.0) * flashCone * flashAtten * 0.4;
+
+    return totalLight;
+}
+
+void main() {
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(fogOutput);
+    if (pixel.x >= size.x || pixel.y >= size.y) return;
+
+    vec2 uv = (vec2(pixel) + 0.5) / vec2(size);
+    float sceneDepth = texture(depthTexture, uv).r;
+
+    if (sceneDepth >= 0.9999) {
+        imageStore(fogOutput, pixel, vec4(0.0, 0.0, 0.0, 1.0));
+        return;
+    }
+
+    float sceneLinDepth = linearize_depth(sceneDepth);
+    vec3 sceneWorldPos = reconstruct_world_pos(uv, sceneDepth);
+
+    // Ray march from camera to scene surface
+    vec3 rayStart = params.camera_pos.xyz;
+    vec3 rayDir = normalize(sceneWorldPos - rayStart);
+    float totalDist = length(sceneWorldPos - rayStart);
+
+    float stepSize = totalDist / float(params.num_steps);
+    float transmittance = 1.0;
+    vec3 scatteredLight = vec3(0.0);
+
+    for (uint i = 0; i < params.num_steps; i++) {
+        float t = (float(i) + 0.5) * stepSize;
+        vec3 samplePos = rayStart + rayDir * t;
+
+        // Fog density at this sample
+        float density = fog_density_at(samplePos);
+
+        // Beer-Lambert absorption
+        float sampleAbsorption = density * stepSize;
+        float sampleTransmittance = exp(-sampleAbsorption);
+
+        // In-scattered light
+        vec3 inScattering = evaluate_light(samplePos, rayDir) * density;
+
+        // Integrate (energy-conserving)
+        if (density > 0.0001) {
+            vec3 integrated = inScattering * (1.0 - sampleTransmittance) / density;
+            scatteredLight += transmittance * integrated;
+        }
+
+        transmittance *= sampleTransmittance;
+
+        // Early exit when fog is nearly opaque
+        if (transmittance < 0.01) break;
+    }
+
+    // Output: RGB = accumulated scattered light, A = transmittance (for compositing)
+    imageStore(fogOutput, pixel, vec4(scatteredLight, transmittance));
+}

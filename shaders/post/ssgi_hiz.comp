@@ -216,9 +216,23 @@ void main() {
     
     indirect *= params.gi_intensity;
     
-    // ── Temporal accumulation ──
+    // ── Temporal accumulation with adaptive blending ──
     vec3 history = texture(historyTexture, uv).rgb;
-    vec3 result = mix(indirect, history, params.temporal_blend);
+    
+    // Variance-based history rejection: compare current and history luminance
+    float currentLuma = dot(indirect, vec3(0.2126, 0.7152, 0.0722));
+    float historyLuma = dot(history, vec3(0.2126, 0.7152, 0.0722));
+    float lumaDiff = abs(currentLuma - historyLuma) / max(max(currentLuma, historyLuma), 0.001);
+    
+    // Reduce history weight when there's a large luminance change (disocclusion / sudden lighting change)
+    float adaptiveBlend = params.temporal_blend * (1.0 - smoothstep(0.1, 0.5, lumaDiff));
+    
+    // Also reduce history weight at screen edges
+    vec2 edgeFade = smoothstep(vec2(0.0), vec2(0.05), uv) * smoothstep(vec2(0.0), vec2(0.05), 1.0 - uv);
+    float edgeFactor = edgeFade.x * edgeFade.y;
+    adaptiveBlend *= edgeFactor;
+    
+    vec3 result = mix(indirect, history, clamp(adaptiveBlend, 0.0, 0.95));
     
     imageStore(giOutput, pixel, vec4(max(result, vec3(0.0)), 1.0));
 }
