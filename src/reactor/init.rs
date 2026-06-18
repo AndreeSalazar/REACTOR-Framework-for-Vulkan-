@@ -400,7 +400,8 @@ impl Reactor {
                 .stage_flags(vk::ShaderStageFlags::FRAGMENT),
         ];
 
-        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings)
+            .flags(vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL);
         let decal_descriptor_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
 
         // 2. Cargar código de shaders desde el cookbook/asset manager

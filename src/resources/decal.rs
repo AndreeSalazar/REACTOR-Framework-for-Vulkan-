@@ -43,7 +43,8 @@ impl Decal {
         ];
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .pool_sizes(&pool_sizes)
-            .max_sets(1);
+            .max_sets(1)
+            .flags(vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND);
         let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None)? };
 
         // 2. Allocate descriptor set

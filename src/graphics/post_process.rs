@@ -1041,7 +1041,8 @@ impl PostProcessPipeline {
                 .descriptor_count(1)
                 .stage_flags(vk::ShaderStageFlags::COMPUTE),
         ];
-        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings)
+            .flags(vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL);
         let descriptor_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
 
         let spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
@@ -1061,7 +1062,8 @@ impl PostProcessPipeline {
         ];
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .pool_sizes(&pool_sizes)
-            .max_sets(image_count);
+            .max_sets(image_count)
+            .flags(vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND);
         let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None)? };
 
         let layouts = vec![descriptor_layout; image_count as usize];
@@ -1192,7 +1194,7 @@ impl PostProcessPipeline {
 
         let to_general = vk::ImageMemoryBarrier::default()
             .old_layout(if initialized {
-                vk::ImageLayout::GENERAL
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
             } else {
                 vk::ImageLayout::UNDEFINED
             })
@@ -1319,7 +1321,8 @@ impl PostProcessPipeline {
                 .stage_flags(vk::ShaderStageFlags::COMPUTE),
         ];
         let bloom_layout_info =
-            vk::DescriptorSetLayoutCreateInfo::default().bindings(&bloom_bindings);
+            vk::DescriptorSetLayoutCreateInfo::default().bindings(&bloom_bindings)
+                .flags(vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL);
         let bloom_desc_layout =
             unsafe { device.create_descriptor_set_layout(&bloom_layout_info, None)? };
 
@@ -1407,7 +1410,8 @@ impl PostProcessPipeline {
         ];
         let bloom_pool_info = vk::DescriptorPoolCreateInfo::default()
             .pool_sizes(&pool_sizes)
-            .max_sets(total_sets);
+            .max_sets(total_sets)
+            .flags(vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND);
         let bloom_desc_pool = unsafe { device.create_descriptor_pool(&bloom_pool_info, None)? };
 
         // 5. Allocate and write bloom descriptor sets
@@ -1965,7 +1969,8 @@ impl PostProcessPipeline {
                 .descriptor_count(1)
                 .stage_flags(vk::ShaderStageFlags::COMPUTE),
         ];
-        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings)
+            .flags(vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL);
         let descriptor_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
 
         // 2. Create Compute Pipeline (152 bytes push constants for FogParams)
@@ -1987,7 +1992,8 @@ impl PostProcessPipeline {
         ];
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .pool_sizes(&pool_sizes)
-            .max_sets(image_count);
+            .max_sets(image_count)
+            .flags(vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND);
         let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None)? };
 
         // 4. Allocate Descriptor Sets
@@ -2177,7 +2183,7 @@ impl PostProcessPipeline {
         write_f32(&mut push_bytes, &mut offset, 0.35);
         write_f32(&mut push_bytes, &mut offset, -1.0);
         push_bytes[offset..offset + 4].copy_from_slice(&48u32.to_ne_bytes()); offset += 4;
-        push_bytes[offset..offset + 4].copy_from_slice(&0u32.to_ne_bytes()); offset += 4;
+        push_bytes[offset..offset + 4].copy_from_slice(&0u32.to_ne_bytes());
         unsafe {
             device.cmd_push_constants(
                 command_buffer,
@@ -2508,7 +2514,8 @@ impl PostProcessPipeline {
                 .descriptor_count(1)
                 .stage_flags(vk::ShaderStageFlags::COMPUTE),
         ];
-        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings)
+            .flags(vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL);
         let descriptor_layout =
             unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
         self.gtao_descriptor_layout = Some(descriptor_layout);
@@ -2616,7 +2623,7 @@ impl PostProcessPipeline {
         let initialized = self.gtao_initialized.get(image_index).copied().unwrap_or(false);
 
         let to_general = vk::ImageMemoryBarrier::default()
-            .old_layout(if initialized { vk::ImageLayout::GENERAL } else { vk::ImageLayout::UNDEFINED })
+            .old_layout(if initialized { vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL } else { vk::ImageLayout::UNDEFINED })
             .new_layout(vk::ImageLayout::GENERAL)
             .src_access_mask(if initialized { vk::AccessFlags::SHADER_READ } else { vk::AccessFlags::empty() })
             .dst_access_mask(vk::AccessFlags::SHADER_WRITE)
@@ -2705,7 +2712,8 @@ impl PostProcessPipeline {
             vk::DescriptorSetLayoutBinding::default().binding(3).descriptor_type(vk::DescriptorType::STORAGE_BUFFER).descriptor_count(1).stage_flags(vk::ShaderStageFlags::COMPUTE),
             vk::DescriptorSetLayoutBinding::default().binding(4).descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER).descriptor_count(1).stage_flags(vk::ShaderStageFlags::COMPUTE),
         ];
-        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings)
+            .flags(vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL);
         let descriptor_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
         self.light_cull_descriptor_layout = Some(descriptor_layout);
 
