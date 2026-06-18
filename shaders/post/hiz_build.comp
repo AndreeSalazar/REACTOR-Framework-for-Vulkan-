@@ -1,0 +1,29 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(binding = 0) uniform sampler2D u_src_depth;
+layout(binding = 1, r32f) uniform writeonly image2D u_dst_mip;
+
+layout(push_constant) uniform HizParams {
+    ivec2 src_offset;
+    int src_mip_level;
+    int pad;
+} params;
+
+void main() {
+    ivec2 dst = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 dst_size = imageSize(u_dst_mip);
+    if (dst.x >= dst_size.x || dst.y >= dst_size.y) {
+        return;
+    }
+
+    ivec2 src = (dst * 2) + params.src_offset;
+    float c00 = texelFetch(u_src_depth, src, params.src_mip_level).r;
+    float c10 = texelFetch(u_src_depth, src + ivec2(1, 0), params.src_mip_level).r;
+    float c01 = texelFetch(u_src_depth, src + ivec2(0, 1), params.src_mip_level).r;
+    float c11 = texelFetch(u_src_depth, src + ivec2(1, 1), params.src_mip_level).r;
+
+    float min_d = min(min(c00, c10), min(c01, c11));
+    imageStore(u_dst_mip, dst, vec4(min_d, 0.0, 0.0, 0.0));
+}

@@ -638,11 +638,11 @@ impl PostProcessPipeline {
 
         // 3. Create Pipeline
         let vert_spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
-            "../../shaders/post_process_vert.spv"
+            "../../../shaders/post_process_vert.spv"
         )))
         .unwrap();
         let frag_spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
-            "../../shaders/post_process_frag.spv"
+            "../../../shaders/post_process_frag.spv"
         )))
         .unwrap();
 
@@ -891,7 +891,7 @@ impl PostProcessPipeline {
 
         // Initialize Auto-Exposure compute pipeline
         let ae_spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
-            "../../shaders/post/auto_exposure.spv"
+            "../../../shaders/post/auto_exposure.spv"
         )))
         .unwrap();
         let ae_pipeline = crate::compute::ComputePipeline::new(
@@ -1095,7 +1095,7 @@ impl PostProcessPipeline {
         let descriptor_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
 
         let spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
-            "../../shaders/post/depth_resolve.spv"
+            "../../../shaders/post/depth_resolve.spv"
         )))
         .unwrap();
         let pipeline =
@@ -1377,11 +1377,11 @@ impl PostProcessPipeline {
 
         // 2. Create bloom compute pipelines from pre-compiled SPIR-V
         let down_spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
-            "../../shaders/post/bloom_downsample.spv"
+            "../../../shaders/post/bloom_downsample.spv"
         )))
         .unwrap();
         let up_spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
-            "../../shaders/post/bloom_upsample.spv"
+            "../../../shaders/post/bloom_upsample.spv"
         )))
         .unwrap();
 
@@ -1941,7 +1941,7 @@ impl PostProcessPipeline {
 
         // 2. Create Compute Pipeline (16 bytes push constants for TaaParams)
         let spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
-            "../../shaders/post/taa_resolve.spv"
+            "../../../shaders/post/taa_resolve.spv"
         )))
         .unwrap();
         let pipeline = crate::compute::ComputePipeline::new(ctx, &spv, &[descriptor_layout], Some(16))?;
@@ -2024,7 +2024,7 @@ impl PostProcessPipeline {
 
         // 2. Create Compute Pipeline (152 bytes push constants for FogParams)
         let spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
-            "../../shaders/post/volumetric_fog.spv"
+            "../../../shaders/post/volumetric_fog.spv"
         )))
         .unwrap();
             let pipeline =
@@ -2301,7 +2301,7 @@ impl PostProcessPipeline {
         let descriptor_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
 
         let spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
-            "../../shaders/post/lens_flare.spv"
+            "../../../shaders/post/lens_flare.spv"
         )))
         .unwrap();
         let pipeline = crate::compute::ComputePipeline::new(ctx, &spv, &[descriptor_layout], Some(48))?;
@@ -2805,7 +2805,7 @@ impl PostProcessPipeline {
         self.gtao_descriptor_layout = Some(descriptor_layout);
 
         let spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
-            "../../shaders/post/gtao.spv"
+            "../../../shaders/post/gtao.spv"
         )))
         .unwrap();
         let pipeline =
@@ -3002,7 +3002,7 @@ impl PostProcessPipeline {
         self.light_cull_descriptor_layout = Some(descriptor_layout);
 
         let spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
-            "../../shaders/compute/light_cull.spv"
+            "../../../shaders/compute/light_cull.spv"
         ))).unwrap();
         let pipeline = crate::compute::ComputePipeline::new(ctx, &spv, &[descriptor_layout], Some(224))?;
         self.light_cull_pipeline = Some(pipeline);
@@ -3210,3 +3210,4 @@ pub struct AutoExposureParams {
     pub max_exposure: f32,
     pub min_exposure: f32,
 }
+

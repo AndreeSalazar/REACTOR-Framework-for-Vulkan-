@@ -242,7 +242,7 @@ impl Reactor {
                         shadow_pipe.pipeline,
                     );
 
-                    let cascade = &self.shadow_map.as_ref().unwrap().cascades[layer];
+                    let cascade = &self.shadow_map.as_ref().unwrap().cascades[layer as usize];
                     for object in &scene.objects {
                         if !object.visible {
                             continue;
@@ -756,6 +756,23 @@ impl Reactor {
                         self.swapchain.extent.height,
                         self.msaa_samples,
                     );
+                }
+
+                if let Some(hiz) = self.hiz_pyramid.as_ref() {
+                    let src_depth_view = if self.msaa_samples == vk::SampleCountFlags::TYPE_1 {
+                        self.depth_image_view.unwrap()
+                    } else {
+                        self.post_process.depth_resolved_images[image_index as usize].view
+                    };
+                    if let Some(sampler) = self.post_process.sampler {
+                        hiz.build(
+                            self.context.ash_device(),
+                            command_buffer,
+                            image_index as usize,
+                            src_depth_view,
+                            sampler,
+                        );
+                    }
                 }
 
                 // ── GTAO Compute Pass (after depth resolve, before TAA) ──

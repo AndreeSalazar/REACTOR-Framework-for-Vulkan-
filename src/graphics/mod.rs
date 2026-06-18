@@ -8,6 +8,7 @@ pub mod depth;
 pub mod descriptors;
 pub mod framebuffer;
 pub mod gbuffer;
+pub mod hiz;
 pub mod ibl;
 pub mod image;
 pub mod msaa;
@@ -28,6 +29,7 @@ pub use descriptors::{
 };
 pub use framebuffer::{Framebuffer, FramebufferSet};
 pub use gbuffer::{GBuffer, GBufferAttachment};
+pub use hiz::HiZPyramid;
 pub use ibl::{IblBaker, IblImage, IblTextures};
 pub use image::Image;
 pub use msaa::MsaaTarget;
