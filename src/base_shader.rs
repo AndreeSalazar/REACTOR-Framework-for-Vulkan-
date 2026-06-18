@@ -117,6 +117,7 @@ pub enum BaseShaderAsset {
     DepthResolve,
     TaaResolve,
     Gtao,
+    LightCull,
     IblEquirectToCube,
     IblIrradiance,
     IblPrefilter,
@@ -147,6 +148,7 @@ impl BaseShaderAsset {
         Self::DepthResolve,
         Self::TaaResolve,
         Self::Gtao,
+        Self::LightCull,
         Self::IblEquirectToCube,
         Self::IblIrradiance,
         Self::IblPrefilter,
@@ -174,6 +176,7 @@ impl BaseShaderAsset {
             Self::DepthResolve => "post.depth_resolve.comp",
             Self::TaaResolve => "post.taa_resolve.comp",
             Self::Gtao => "post.gtao.comp",
+            Self::LightCull => "compute.light_cull.comp",
             Self::IblEquirectToCube => "ibl.equirect_to_cube.comp",
             Self::IblIrradiance => "ibl.irradiance.comp",
             Self::IblPrefilter => "ibl.prefilter.comp",
@@ -201,6 +204,7 @@ impl BaseShaderAsset {
             | Self::DepthResolve
             | Self::TaaResolve
             | Self::Gtao
+            | Self::LightCull
             | Self::IblEquirectToCube
             | Self::IblIrradiance
             | Self::IblPrefilter
@@ -220,7 +224,8 @@ impl BaseShaderAsset {
             | Self::BloomUpsample
             | Self::DepthResolve
             | Self::TaaResolve
-            | Self::Gtao => BaseShaderFamily::PostCompute,
+            | Self::Gtao
+            | Self::LightCull => BaseShaderFamily::PostCompute,
             Self::IblEquirectToCube
             | Self::IblIrradiance
             | Self::IblPrefilter
@@ -255,6 +260,7 @@ impl BaseShaderAsset {
             Self::DepthResolve => "Depth MSAA → single-sample R32F (mín sample)",
             Self::TaaResolve => "TAA resolve: reproyección + neighborhood clip + depth reject",
             Self::Gtao => "GTAO compute: 8 dirs × 4 steps con rotación temporal",
+            Self::LightCull => "Clustered light culling: 16x16 tiles, 256 lights max per tile",
             Self::IblEquirectToCube => "IBL: equirectangular HDR 2D → cubemap radiance",
             Self::IblIrradiance => "IBL: irradiance cubemap difuso (Lambert)",
             Self::IblPrefilter => "IBL: prefilter especular GGX (5 mips, Karis 2014)",
@@ -282,6 +288,7 @@ impl BaseShaderAsset {
             Self::DepthResolve => "shaders/post/depth_resolve.spv",
             Self::TaaResolve => "shaders/post/taa_resolve.spv",
             Self::Gtao => "shaders/post/gtao.spv",
+            Self::LightCull => "shaders/compute/light_cull.spv",
             Self::IblEquirectToCube => "shaders/ibl/equirect_to_cube.spv",
             Self::IblIrradiance => "shaders/ibl/irradiance.spv",
             Self::IblPrefilter => "shaders/ibl/prefilter.spv",
@@ -312,6 +319,7 @@ impl BaseShaderAsset {
             Self::DepthResolve => Some("shaders/post/depth_resolve.comp"),
             Self::TaaResolve => Some("shaders/post/taa_resolve.comp"),
             Self::Gtao => Some("shaders/post/gtao.comp"),
+            Self::LightCull => Some("shaders/compute/light_cull.comp"),
             Self::IblEquirectToCube => Some("shaders/ibl/equirect_to_cube.comp"),
             Self::IblIrradiance => Some("shaders/ibl/irradiance.comp"),
             Self::IblPrefilter => Some("shaders/ibl/prefilter.comp"),
@@ -339,6 +347,7 @@ impl BaseShaderAsset {
             Self::DepthResolve => include_bytes!("../shaders/post/depth_resolve.spv"),
             Self::TaaResolve => include_bytes!("../shaders/post/taa_resolve.spv"),
             Self::Gtao => include_bytes!("../shaders/post/gtao.spv"),
+            Self::LightCull => include_bytes!("../shaders/compute/light_cull.spv"),
             Self::IblEquirectToCube => include_bytes!("../shaders/ibl/equirect_to_cube.spv"),
             Self::IblIrradiance => include_bytes!("../shaders/ibl/irradiance.spv"),
             Self::IblPrefilter => include_bytes!("../shaders/ibl/prefilter.spv"),
@@ -434,6 +443,7 @@ pub struct PostComputeKit {
     pub depth_resolve: Vec<u32>,
     pub taa_resolve: Vec<u32>,
     pub gtao: Vec<u32>,
+    pub light_cull: Vec<u32>,
 }
 
 impl Default for PostComputeKit {
@@ -444,6 +454,7 @@ impl Default for PostComputeKit {
             depth_resolve: BaseShaderAsset::DepthResolve.words(),
             taa_resolve: BaseShaderAsset::TaaResolve.words(),
             gtao: BaseShaderAsset::Gtao.words(),
+            light_cull: BaseShaderAsset::LightCull.words(),
         }
     }
 }
@@ -510,6 +521,7 @@ pub struct BaseShaderCookbook {
     pub depth_resolve: Vec<u32>,
     pub taa_resolve: Vec<u32>,
     pub gtao: Vec<u32>,
+    pub light_cull: Vec<u32>,
     pub ibl_equirect_to_cube: Vec<u32>,
     pub ibl_irradiance: Vec<u32>,
     pub ibl_prefilter: Vec<u32>,
@@ -557,6 +569,7 @@ impl Default for BaseShaderCookbook {
             depth_resolve: BaseShaderAsset::DepthResolve.words(),
             taa_resolve: BaseShaderAsset::TaaResolve.words(),
             gtao: BaseShaderAsset::Gtao.words(),
+            light_cull: BaseShaderAsset::LightCull.words(),
             ibl_equirect_to_cube: BaseShaderAsset::IblEquirectToCube.words(),
             ibl_irradiance: BaseShaderAsset::IblIrradiance.words(),
             ibl_prefilter: BaseShaderAsset::IblPrefilter.words(),

@@ -750,6 +750,71 @@ impl Reactor {
                     );
                 }
 
+                // ── GTAO Compute Pass (after depth resolve, before TAA) ──
+                if self.post_process.gtao_pipeline.is_some() {
+                    // Lazy-init GTAO descriptor sets on first dispatch
+                    if self.post_process.gtao_descriptor_sets.is_empty() {
+                        if let (Some(depth_view), Some(gb)) = (
+                            self.depth_image_view,
+                            self.gbuffer.as_ref(),
+                        ) {
+                            let _ = self.post_process.init_gtao(
+                                &self.context,
+                                self.allocator.clone(),
+                                self.swapchain.extent.width,
+                                self.swapchain.extent.height,
+                                self.swapchain.images.len() as u32,
+                                depth_view,
+                                gb.normal_material.view,
+                            );
+                        }
+                    }
+
+                    let depth_view = if self.msaa_samples == vk::SampleCountFlags::TYPE_1 {
+                        self.depth_image_view.unwrap()
+                    } else {
+                        self.post_process.depth_resolved_images[image_index as usize].view
+                    };
+
+                    let proj_x = self.camera_proj.x_axis.x;
+                    let proj_y = self.camera_proj.y_axis.y;
+
+                    self.post_process.dispatch_gtao(
+                        self.context.ash_device(),
+                        command_buffer,
+                        image_index as usize,
+                        self.swapchain.extent.width,
+                        self.swapchain.extent.height,
+                        proj_x,
+                        proj_y,
+                        self.camera_near,
+                        self.camera_far,
+                        self.post_process.last_time,
+                    );
+                }
+
+                // ── Light Culling Compute Pass ──
+                if self.post_process.light_cull_pipeline.is_some() {
+                    let depth_view = if self.msaa_samples == vk::SampleCountFlags::TYPE_1 {
+                        self.depth_image_view.unwrap()
+                    } else {
+                        self.post_process.depth_resolved_images[image_index as usize].view
+                    };
+
+                    self.post_process.dispatch_light_cull(
+                        self.context.ash_device(),
+                        command_buffer,
+                        image_index as usize,
+                        self.swapchain.extent.width,
+                        self.swapchain.extent.height,
+                        self.camera_view,
+                        self.camera_proj,
+                        self.camera_proj.inverse(),
+                        0, // light_count: 0 for now (infrastructure ready)
+                        depth_view,
+                    );
+                }
+
                 if self.post_process.bloom_downsample_pipeline.is_some() {
                     self.post_process.dispatch_bloom(
                         self.context.ash_device(),

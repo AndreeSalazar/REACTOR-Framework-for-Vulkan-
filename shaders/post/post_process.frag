@@ -14,6 +14,7 @@ layout(binding = 3) readonly buffer ExposureBuffer {
 layout(binding = 4) uniform sampler2D lutTexture;
 layout(binding = 5) uniform sampler2D motionTexture;
 layout(binding = 6) uniform sampler2D fogTexture;
+layout(binding = 7) uniform sampler2D aoTexture;
 
 layout(push_constant) uniform PostProcessSettings {
     // Vignette
@@ -948,6 +949,12 @@ void main() {
     if ((settings.effect_mask & EFFECT_CONTACT_SHADOWS) != 0) {
         float contactShadow = contact_shadow_trace(uv, texelSize);
         color *= contactShadow;
+    }
+
+    // 7.51. GTAO — Ground Truth Ambient Occlusion (from compute pass)
+    {
+        float gtao = texture(aoTexture, uv).r;
+        color *= gtao;
     }
 
     // 7.55. Screen-Space Motion Blur (velocity-based directional blur)

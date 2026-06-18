@@ -386,6 +386,24 @@ pub struct PostProcessPipeline {
     pub fog_descriptor_sets: Vec<vk::DescriptorSet>,
     pub fog_output_images: Vec<crate::graphics::Image>,
 
+    // ── GTAO (Compute) ──
+    pub gtao_pipeline: Option<crate::compute::ComputePipeline>,
+    pub gtao_descriptor_layout: Option<vk::DescriptorSetLayout>,
+    pub gtao_descriptor_pool: Option<vk::DescriptorPool>,
+    pub gtao_descriptor_sets: Vec<vk::DescriptorSet>,
+    pub gtao_ao_images: Vec<crate::graphics::Image>,
+    pub gtao_initialized: Vec<bool>,
+
+    // ── Light Culling (Compute) ──
+    pub light_cull_pipeline: Option<crate::compute::ComputePipeline>,
+    pub light_cull_descriptor_layout: Option<vk::DescriptorSetLayout>,
+    pub light_cull_descriptor_pool: Option<vk::DescriptorPool>,
+    pub light_cull_descriptor_sets: Vec<vk::DescriptorSet>,
+    pub light_cull_tile_buffer: Option<crate::graphics::Buffer>,
+    pub light_cull_index_buffer: Option<crate::graphics::Buffer>,
+    pub light_cull_atomic_buffer: Option<crate::graphics::Buffer>,
+    pub light_cull_light_buffer: Option<crate::graphics::Buffer>,
+
     pub lut_texture: Option<crate::resources::texture::Texture>,
     pub device: Option<crate::core::arc_handle::ArcDevice>,
 }
@@ -430,6 +448,20 @@ impl PostProcessPipeline {
             fog_descriptor_pool: None,
             fog_descriptor_sets: Vec::new(),
             fog_output_images: Vec::new(),
+            gtao_pipeline: None,
+            gtao_descriptor_layout: None,
+            gtao_descriptor_pool: None,
+            gtao_descriptor_sets: Vec::new(),
+            gtao_ao_images: Vec::new(),
+            gtao_initialized: Vec::new(),
+            light_cull_pipeline: None,
+            light_cull_descriptor_layout: None,
+            light_cull_descriptor_pool: None,
+            light_cull_descriptor_sets: Vec::new(),
+            light_cull_tile_buffer: None,
+            light_cull_index_buffer: None,
+            light_cull_atomic_buffer: None,
+            light_cull_light_buffer: None,
             lut_texture: None,
             device: None,
         }
@@ -479,6 +511,20 @@ impl PostProcessPipeline {
             fog_descriptor_pool: None,
             fog_descriptor_sets: Vec::new(),
             fog_output_images: Vec::new(),
+            gtao_pipeline: None,
+            gtao_descriptor_layout: None,
+            gtao_descriptor_pool: None,
+            gtao_descriptor_sets: Vec::new(),
+            gtao_ao_images: Vec::new(),
+            gtao_initialized: Vec::new(),
+            light_cull_pipeline: None,
+            light_cull_descriptor_layout: None,
+            light_cull_descriptor_pool: None,
+            light_cull_descriptor_sets: Vec::new(),
+            light_cull_tile_buffer: None,
+            light_cull_index_buffer: None,
+            light_cull_atomic_buffer: None,
+            light_cull_light_buffer: None,
             lut_texture: None,
             device: None,
         }
@@ -543,6 +589,11 @@ impl PostProcessPipeline {
                 .stage_flags(vk::ShaderStageFlags::FRAGMENT),
             vk::DescriptorSetLayoutBinding::default()
                 .binding(6)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(7)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                 .descriptor_count(1)
                 .stage_flags(vk::ShaderStageFlags::FRAGMENT),
@@ -674,7 +725,7 @@ impl PostProcessPipeline {
         let pool_sizes = [
             vk::DescriptorPoolSize::default()
                 .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .descriptor_count(image_count * 6),
+                .descriptor_count(image_count * 7),
             vk::DescriptorPoolSize::default()
                 .ty(vk::DescriptorType::STORAGE_BUFFER)
                 .descriptor_count(image_count),
@@ -729,6 +780,8 @@ impl PostProcessPipeline {
         // Clean old resources
         self.destroy_bloom_resources(device);
         self.destroy_depth_resolve_resources(device);
+        self.destroy_gtao_resources(device);
+        self.destroy_light_cull_resources(device);
         self.exposure_buffers.clear();
         self.auto_exposure_pipeline = None;
         self.offscreen_images.clear();
@@ -783,7 +836,7 @@ impl PostProcessPipeline {
             let pool_sizes = [
                 vk::DescriptorPoolSize::default()
                     .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .descriptor_count(image_count * 6),
+                    .descriptor_count(image_count * 7),
                 vk::DescriptorPoolSize::default()
                     .ty(vk::DescriptorType::STORAGE_BUFFER)
                     .descriptor_count(image_count),
@@ -914,7 +967,10 @@ impl PostProcessPipeline {
         self.init_bloom(ctx, allocator.clone(), width, height, image_count)?;
 
         // Initialize Volumetric Fog compute resources
-        self.init_fog(ctx, allocator, width, height, image_count)?;
+        self.init_fog(ctx, allocator.clone(), width, height, image_count)?;
+
+        // Initialize Light Culling compute resources (GTAO deferred to first dispatch)
+        self.init_light_cull(ctx, allocator.clone(), width, height, image_count, 1024)?;
 
         // Write binding 6 (fog texture) to each descriptor set
         if !self.fog_output_images.is_empty() {
@@ -932,6 +988,32 @@ impl PostProcessPipeline {
                     .image_info(std::slice::from_ref(&fog_info));
                 unsafe {
                     device.update_descriptor_sets(&[fog_write], &[]);
+                }
+            }
+        }
+
+        // Write binding 7 (GTAO AO texture) — placeholder until GTAO is lazily initialized
+        {
+            let ao_sampler = self.sampler.unwrap();
+            for i in 0..image_count as usize {
+                let ao_view = if !self.gtao_ao_images.is_empty() {
+                    self.gtao_ao_images[i].view
+                } else {
+                    // Use offscreen image as placeholder
+                    self.offscreen_images[i].view
+                };
+                let ao_info = vk::DescriptorImageInfo::default()
+                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    .image_view(ao_view)
+                    .sampler(ao_sampler);
+                let ao_write = vk::WriteDescriptorSet::default()
+                    .dst_set(self.descriptor_sets[i])
+                    .dst_binding(7)
+                    .dst_array_element(0)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .image_info(std::slice::from_ref(&ao_info));
+                unsafe {
+                    device.update_descriptor_sets(&[ao_write], &[]);
                 }
             }
         }
@@ -2381,6 +2463,356 @@ impl PostProcessPipeline {
             );
         }
     }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // GTAO — Ground Truth Ambient Occlusion
+    // ══════════════════════════════════════════════════════════════════════════
+
+    fn destroy_gtao_resources(&mut self, device: &ash::Device) {
+        self.gtao_descriptor_sets.clear();
+        self.gtao_pipeline = None;
+        self.gtao_ao_images.clear();
+        self.gtao_initialized.clear();
+        unsafe {
+            if let Some(pool) = self.gtao_descriptor_pool.take() {
+                device.destroy_descriptor_pool(pool, None);
+            }
+            if let Some(layout) = self.gtao_descriptor_layout.take() {
+                device.destroy_descriptor_set_layout(layout, None);
+            }
+        }
+    }
+
+    pub fn init_gtao(
+        &mut self,
+        ctx: &crate::core::VulkanContext,
+        allocator: std::sync::Arc<std::sync::Mutex<gpu_allocator::vulkan::Allocator>>,
+        width: u32,
+        height: u32,
+        image_count: u32,
+        depth_view: vk::ImageView,
+        gbuffer_normal_view: vk::ImageView,
+    ) -> crate::core::error::ReactorResult<()> {
+        let device = ctx.ash_device();
+
+        let bindings = [
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::COMPUTE),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(1)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::COMPUTE),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(2)
+                .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::COMPUTE),
+        ];
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+        let descriptor_layout =
+            unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
+        self.gtao_descriptor_layout = Some(descriptor_layout);
+
+        let spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
+            "../../shaders/post/gtao.spv"
+        )))
+        .unwrap();
+        let pipeline =
+            crate::compute::ComputePipeline::new(ctx, &spv, &[descriptor_layout], Some(32))?;
+        self.gtao_pipeline = Some(pipeline);
+
+        let sampler = self.sampler.unwrap();
+        self.gtao_ao_images.clear();
+        self.gtao_initialized.clear();
+        for _ in 0..image_count as usize {
+            let img = crate::graphics::Image::new(
+                ctx,
+                allocator.clone(),
+                width,
+                height,
+                vk::Format::R16_SFLOAT,
+                vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::STORAGE,
+                vk::ImageAspectFlags::COLOR,
+                1,
+            )?;
+            self.gtao_ao_images.push(img);
+            self.gtao_initialized.push(false);
+        }
+
+        let pool_sizes = [
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(image_count * 2),
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::STORAGE_IMAGE)
+                .descriptor_count(image_count),
+        ];
+        let pool_info = vk::DescriptorPoolCreateInfo::default()
+            .pool_sizes(&pool_sizes)
+            .max_sets(image_count)
+            .flags(vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND);
+        let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None)? };
+        self.gtao_descriptor_pool = Some(descriptor_pool);
+
+        let layouts = vec![descriptor_layout; image_count as usize];
+        let alloc_info = vk::DescriptorSetAllocateInfo::default()
+            .descriptor_pool(descriptor_pool)
+            .set_layouts(&layouts);
+        self.gtao_descriptor_sets =
+            unsafe { device.allocate_descriptor_sets(&alloc_info)? };
+
+        for i in 0..image_count as usize {
+            let depth_info = vk::DescriptorImageInfo::default()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(depth_view)
+                .sampler(sampler);
+            let normal_info = vk::DescriptorImageInfo::default()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(gbuffer_normal_view)
+                .sampler(sampler);
+            let ao_info = vk::DescriptorImageInfo::default()
+                .image_layout(vk::ImageLayout::GENERAL)
+                .image_view(self.gtao_ao_images[i].view);
+
+            let writes = [
+                vk::WriteDescriptorSet::default()
+                    .dst_set(self.gtao_descriptor_sets[i])
+                    .dst_binding(0)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .image_info(std::slice::from_ref(&depth_info)),
+                vk::WriteDescriptorSet::default()
+                    .dst_set(self.gtao_descriptor_sets[i])
+                    .dst_binding(1)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .image_info(std::slice::from_ref(&normal_info)),
+                vk::WriteDescriptorSet::default()
+                    .dst_set(self.gtao_descriptor_sets[i])
+                    .dst_binding(2)
+                    .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                    .image_info(std::slice::from_ref(&ao_info)),
+            ];
+            unsafe { device.update_descriptor_sets(&writes, &[]); }
+        }
+
+        Ok(())
+    }
+
+    pub fn dispatch_gtao(
+        &self,
+        device: &ash::Device,
+        command_buffer: vk::CommandBuffer,
+        image_index: usize,
+        width: u32,
+        height: u32,
+        proj_x: f32,
+        proj_y: f32,
+        near: f32,
+        far: f32,
+        frame_index: f32,
+    ) {
+        let Some(pipeline) = self.gtao_pipeline.as_ref() else { return; };
+        let Some(descriptor_set) = self.gtao_descriptor_sets.get(image_index) else { return; };
+        let Some(ao_image) = self.gtao_ao_images.get(image_index) else { return; };
+        let initialized = self.gtao_initialized.get(image_index).copied().unwrap_or(false);
+
+        let to_general = vk::ImageMemoryBarrier::default()
+            .old_layout(if initialized { vk::ImageLayout::GENERAL } else { vk::ImageLayout::UNDEFINED })
+            .new_layout(vk::ImageLayout::GENERAL)
+            .src_access_mask(if initialized { vk::AccessFlags::SHADER_READ } else { vk::AccessFlags::empty() })
+            .dst_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .image(ao_image.handle)
+            .subresource_range(vk::ImageSubresourceRange::default()
+                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .base_mip_level(0).level_count(1).base_array_layer(0).layer_count(1));
+
+        unsafe {
+            device.cmd_pipeline_barrier(command_buffer,
+                if initialized { vk::PipelineStageFlags::FRAGMENT_SHADER } else { vk::PipelineStageFlags::TOP_OF_PIPE },
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(), &[], &[], &[to_general]);
+
+            pipeline.bind(command_buffer, device);
+            device.cmd_bind_descriptor_sets(command_buffer, vk::PipelineBindPoint::COMPUTE,
+                pipeline.layout, 0, &[*descriptor_set], &[]);
+
+            let push_bytes = [
+                proj_x.to_ne_bytes(), proj_y.to_ne_bytes(),
+                near.to_ne_bytes(), far.to_ne_bytes(),
+                (width as f32 * 0.05).to_ne_bytes(),
+                0.5f32.to_ne_bytes(), 1.5f32.to_ne_bytes(),
+                frame_index.to_ne_bytes(),
+            ].concat();
+
+            device.cmd_push_constants(command_buffer, pipeline.layout,
+                vk::ShaderStageFlags::COMPUTE, 0, &push_bytes);
+            device.cmd_dispatch(command_buffer, (width + 7) / 8, (height + 7) / 8, 1);
+
+            let ready = vk::ImageMemoryBarrier::default()
+                .old_layout(vk::ImageLayout::GENERAL)
+                .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ)
+                .image(ao_image.handle)
+                .subresource_range(vk::ImageSubresourceRange::default()
+                    .aspect_mask(vk::ImageAspectFlags::COLOR)
+                    .base_mip_level(0).level_count(1).base_array_layer(0).layer_count(1));
+            device.cmd_pipeline_barrier(command_buffer,
+                vk::PipelineStageFlags::COMPUTE_SHADER, vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::DependencyFlags::empty(), &[], &[], &[ready]);
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // Light Culling — Clustered/Tiled Light Culling
+    // ══════════════════════════════════════════════════════════════════════════
+
+    fn destroy_light_cull_resources(&mut self, device: &ash::Device) {
+        self.light_cull_descriptor_sets.clear();
+        self.light_cull_pipeline = None;
+        unsafe {
+            if let Some(mut buf) = self.light_cull_tile_buffer.take() { buf.destroy(); }
+            if let Some(mut buf) = self.light_cull_index_buffer.take() { buf.destroy(); }
+            if let Some(mut buf) = self.light_cull_atomic_buffer.take() { buf.destroy(); }
+            if let Some(mut buf) = self.light_cull_light_buffer.take() { buf.destroy(); }
+            if let Some(pool) = self.light_cull_descriptor_pool.take() {
+                device.destroy_descriptor_pool(pool, None);
+            }
+            if let Some(layout) = self.light_cull_descriptor_layout.take() {
+                device.destroy_descriptor_set_layout(layout, None);
+            }
+        }
+    }
+
+    pub fn init_light_cull(
+        &mut self,
+        ctx: &crate::core::VulkanContext,
+        allocator: std::sync::Arc<std::sync::Mutex<gpu_allocator::vulkan::Allocator>>,
+        width: u32,
+        height: u32,
+        image_count: u32,
+        max_lights: u32,
+    ) -> crate::core::error::ReactorResult<()> {
+        use crate::graphics::Buffer;
+        let device = ctx.ash_device();
+        let tile_count_x = (width + 15) / 16;
+        let tile_count_y = (height + 15) / 16;
+        let tile_count = (tile_count_x * tile_count_y) as usize;
+
+        let bindings = [
+            vk::DescriptorSetLayoutBinding::default().binding(0).descriptor_type(vk::DescriptorType::STORAGE_BUFFER).descriptor_count(1).stage_flags(vk::ShaderStageFlags::COMPUTE),
+            vk::DescriptorSetLayoutBinding::default().binding(1).descriptor_type(vk::DescriptorType::STORAGE_BUFFER).descriptor_count(1).stage_flags(vk::ShaderStageFlags::COMPUTE),
+            vk::DescriptorSetLayoutBinding::default().binding(2).descriptor_type(vk::DescriptorType::STORAGE_BUFFER).descriptor_count(1).stage_flags(vk::ShaderStageFlags::COMPUTE),
+            vk::DescriptorSetLayoutBinding::default().binding(3).descriptor_type(vk::DescriptorType::STORAGE_BUFFER).descriptor_count(1).stage_flags(vk::ShaderStageFlags::COMPUTE),
+            vk::DescriptorSetLayoutBinding::default().binding(4).descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER).descriptor_count(1).stage_flags(vk::ShaderStageFlags::COMPUTE),
+        ];
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+        let descriptor_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
+        self.light_cull_descriptor_layout = Some(descriptor_layout);
+
+        let spv = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
+            "../../shaders/compute/light_cull.spv"
+        ))).unwrap();
+        let pipeline = crate::compute::ComputePipeline::new(ctx, &spv, &[descriptor_layout], Some(220))?;
+        self.light_cull_pipeline = Some(pipeline);
+
+        let light_buffer = Buffer::new(ctx, allocator.clone(), (max_lights as usize * 32) as u64,
+            vk::BufferUsageFlags::STORAGE_BUFFER, gpu_allocator::MemoryLocation::CpuToGpu)?;
+        self.light_cull_light_buffer = Some(light_buffer);
+
+        let tile_buffer = Buffer::new(ctx, allocator.clone(), (tile_count * 8) as u64,
+            vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+            gpu_allocator::MemoryLocation::GpuOnly)?;
+        self.light_cull_tile_buffer = Some(tile_buffer);
+
+        let index_buffer = Buffer::new(ctx, allocator.clone(), (tile_count * 256 * 4) as u64,
+            vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+            gpu_allocator::MemoryLocation::GpuOnly)?;
+        self.light_cull_index_buffer = Some(index_buffer);
+
+        let atomic_buffer = Buffer::new(ctx, allocator.clone(), 4,
+            vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+            gpu_allocator::MemoryLocation::GpuOnly)?;
+        self.light_cull_atomic_buffer = Some(atomic_buffer);
+
+        let pool_sizes = [
+            vk::DescriptorPoolSize::default().ty(vk::DescriptorType::STORAGE_BUFFER).descriptor_count(image_count * 4),
+            vk::DescriptorPoolSize::default().ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER).descriptor_count(image_count),
+        ];
+        let pool_info = vk::DescriptorPoolCreateInfo::default().pool_sizes(&pool_sizes).max_sets(image_count)
+            .flags(vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND);
+        let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None)? };
+        self.light_cull_descriptor_pool = Some(descriptor_pool);
+
+        let layouts = vec![descriptor_layout; image_count as usize];
+        let alloc_info = vk::DescriptorSetAllocateInfo::default().descriptor_pool(descriptor_pool).set_layouts(&layouts);
+        self.light_cull_descriptor_sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
+
+        Ok(())
+    }
+
+    pub fn dispatch_light_cull(
+        &self,
+        device: &ash::Device,
+        command_buffer: vk::CommandBuffer,
+        image_index: usize,
+        width: u32,
+        height: u32,
+        view: glam::Mat4,
+        projection: glam::Mat4,
+        inv_projection: glam::Mat4,
+        light_count: u32,
+        depth_view: vk::ImageView,
+    ) {
+        let Some(pipeline) = self.light_cull_pipeline.as_ref() else { return; };
+        let Some(descriptor_set) = self.light_cull_descriptor_sets.get(image_index) else { return; };
+        let sampler = match self.sampler { Some(s) => s, None => return };
+        let tile_count_x = (width + 15) / 16;
+        let tile_count_y = (height + 15) / 16;
+
+        unsafe {
+            pipeline.bind(command_buffer, device);
+            device.cmd_bind_descriptor_sets(command_buffer, vk::PipelineBindPoint::COMPUTE,
+                pipeline.layout, 0, &[*descriptor_set], &[]);
+
+            let mut pb = [0u8; 220];
+            let mut o = 0usize;
+            for &v in &view.to_cols_array() { pb[o..o+4].copy_from_slice(&v.to_ne_bytes()); o += 4; }
+            for &v in &projection.to_cols_array() { pb[o..o+4].copy_from_slice(&v.to_ne_bytes()); o += 4; }
+            for &v in &inv_projection.to_cols_array() { pb[o..o+4].copy_from_slice(&v.to_ne_bytes()); o += 4; }
+            pb[o..o+4].copy_from_slice(&light_count.to_ne_bytes()); o += 4;
+            pb[o..o+4].copy_from_slice(&tile_count_x.to_ne_bytes()); o += 4;
+            pb[o..o+4].copy_from_slice(&tile_count_y.to_ne_bytes()); o += 4;
+            pb[o..o+4].copy_from_slice(&width.to_ne_bytes()); o += 4;
+            pb[o..o+4].copy_from_slice(&height.to_ne_bytes()); o += 4;
+            pb[o..o+4].copy_from_slice(&0.1f32.to_ne_bytes()); o += 4;
+            pb[o..o+4].copy_from_slice(&1000f32.to_ne_bytes()); o += 4;
+            pb[o..o+4].copy_from_slice(&256u32.to_ne_bytes());
+
+            device.cmd_push_constants(command_buffer, pipeline.layout,
+                vk::ShaderStageFlags::COMPUTE, 0, &pb);
+            device.cmd_dispatch(command_buffer, tile_count_x, tile_count_y, 1);
+        }
+
+        let barriers = [
+            vk::BufferMemoryBarrier::default()
+                .src_access_mask(vk::AccessFlags::SHADER_WRITE).dst_access_mask(vk::AccessFlags::SHADER_READ)
+                .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED).dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                .buffer(self.light_cull_tile_buffer.as_ref().unwrap().handle).offset(0).size(vk::WHOLE_SIZE),
+            vk::BufferMemoryBarrier::default()
+                .src_access_mask(vk::AccessFlags::SHADER_WRITE).dst_access_mask(vk::AccessFlags::SHADER_READ)
+                .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED).dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                .buffer(self.light_cull_index_buffer.as_ref().unwrap().handle).offset(0).size(vk::WHOLE_SIZE),
+        ];
+        unsafe {
+            device.cmd_pipeline_barrier(command_buffer,
+                vk::PipelineStageFlags::COMPUTE_SHADER, vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::DependencyFlags::empty(), &[], &barriers, &[]);
+        }
+    }
 }
 
 impl Drop for PostProcessPipeline {
@@ -2392,6 +2824,8 @@ impl Drop for PostProcessPipeline {
             self.destroy_bloom_resources(&device);
             self.destroy_taa_resources(&device);
             self.destroy_fog_resources(&device);
+            self.destroy_gtao_resources(&device);
+            self.destroy_light_cull_resources(&device);
             unsafe {
                 if let Some(sampler) = self.sampler.take() {
                     device.destroy_sampler(sampler, None);
