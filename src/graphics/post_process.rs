@@ -857,7 +857,7 @@ impl PostProcessPipeline {
             let pool_sizes = [
                 vk::DescriptorPoolSize::default()
                     .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .descriptor_count(image_count * 7),
+                    .descriptor_count(image_count * 9),
                 vk::DescriptorPoolSize::default()
                     .ty(vk::DescriptorType::STORAGE_BUFFER)
                     .descriptor_count(image_count),

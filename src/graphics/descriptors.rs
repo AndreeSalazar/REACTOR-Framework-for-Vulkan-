@@ -32,7 +32,9 @@ impl DescriptorSetLayout {
             })
             .collect();
 
-        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&vk_bindings);
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default()
+            .bindings(&vk_bindings)
+            .flags(vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL);
 
         let device = ctx.ash_device();
         let handle = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
@@ -105,7 +107,10 @@ impl DescriptorPool {
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .pool_sizes(&vk_sizes)
             .max_sets(max_sets)
-            .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET);
+            .flags(
+                vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET
+                    | vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND,
+            );
 
         let device = ctx.ash_device();
         let handle = unsafe { device.create_descriptor_pool(&pool_info, None)? };

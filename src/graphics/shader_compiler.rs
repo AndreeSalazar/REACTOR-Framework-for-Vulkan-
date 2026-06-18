@@ -379,7 +379,9 @@ impl ShaderReflection {
                 })
                 .collect();
 
-            let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&vk_bindings);
+            let layout_info = vk::DescriptorSetLayoutCreateInfo::default()
+                .bindings(&vk_bindings)
+                .flags(vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL);
 
             let layout = unsafe {
                 device

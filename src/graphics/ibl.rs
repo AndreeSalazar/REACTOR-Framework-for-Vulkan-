@@ -1079,7 +1079,8 @@ fn create_bake_descriptor_pool(
     ];
     let info = vk::DescriptorPoolCreateInfo::default()
         .max_sets(max_sets)
-        .pool_sizes(&sizes);
+        .pool_sizes(&sizes)
+        .flags(vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND);
     unsafe {
         ctx.ash_device()
             .create_descriptor_pool(&info, None)
@@ -1110,7 +1111,9 @@ fn create_final_descriptor_layout(ctx: &VulkanContext) -> ReactorResult<vk::Desc
             .descriptor_count(1)
             .stage_flags(vk::ShaderStageFlags::FRAGMENT),
     ];
-    let info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+    let info = vk::DescriptorSetLayoutCreateInfo::default()
+        .bindings(&bindings)
+        .flags(vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL);
     unsafe {
         ctx.ash_device()
             .create_descriptor_set_layout(&info, None)
@@ -1130,7 +1133,10 @@ fn create_final_descriptor_pool(ctx: &VulkanContext) -> ReactorResult<vk::Descri
     let info = vk::DescriptorPoolCreateInfo::default()
         .max_sets(1)
         .pool_sizes(&sizes)
-        .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET);
+        .flags(
+            vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET
+                | vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND,
+        );
     unsafe {
         ctx.ash_device()
             .create_descriptor_pool(&info, None)
@@ -1423,7 +1429,9 @@ impl ComputePass {
         let layout_set = unsafe {
             device
                 .create_descriptor_set_layout(
-                    &vk::DescriptorSetLayoutCreateInfo::default().bindings(bindings),
+                    &vk::DescriptorSetLayoutCreateInfo::default()
+                        .bindings(bindings)
+                        .flags(vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL),
                     None,
                 )
                 .map_err(verr)?

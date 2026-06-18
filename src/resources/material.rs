@@ -140,7 +140,9 @@ impl Material {
             .stage_flags(vk::ShaderStageFlags::FRAGMENT);
 
         let bindings = [sampler_binding];
-        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default()
+            .bindings(&bindings)
+            .flags(vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL);
 
         let descriptor_layout = unsafe {
             ctx.device
@@ -155,7 +157,8 @@ impl Material {
         let pool_sizes = [pool_size];
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .pool_sizes(&pool_sizes)
-            .max_sets(1);
+            .max_sets(1)
+            .flags(vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND);
 
         let descriptor_pool = unsafe { ctx.device.create_descriptor_pool(&pool_info, None)? };
 
