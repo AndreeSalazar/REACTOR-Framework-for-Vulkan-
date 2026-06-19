@@ -327,14 +327,16 @@ pub struct ModelSpawnInfo {
 ///
 /// This is the "inheritance" — ReactorContext inherits:
 ///   VulkanContext → Reactor → Camera + Scene + Lighting + Physics + Debug
+///
+/// IMPORTANT: `reactor` is the LAST field on purpose. Rust drops struct fields
+/// in declaration order, so placing the device-owning `Reactor` last ensures
+/// every `Arc<Mesh>` / `Arc<Material>` held in earlier fields is dropped
+/// (and its `Drop` runs `device.destroy_*`) while the device is still alive.
 pub struct ReactorContext {
-    // Engine core
-    pub reactor: Reactor,
+    // Game systems — ALL inherited and ready
     pub window: Arc<Window>,
     pub time: Time,
     pub config: ReactorConfig,
-
-    // Game systems — ALL inherited and ready
     pub camera: crate::scene::camera::Camera,
     pub scene: crate::systems::scene::Scene,
     pub lighting: crate::systems::lighting::LightingSystem,
@@ -342,7 +344,6 @@ pub struct ReactorContext {
     pub culling: crate::systems::frustum::CullingSystem,
     pub debug: crate::graphics::debug_renderer::DebugRenderer,
 
-    // 🎨 Asset Pipeline (Fase 3)
     pub asset_manager: AssetManager,
     pub gltf_loader: GltfLoader,
     pub asset_db: AssetDatabase,
@@ -354,9 +355,11 @@ pub struct ReactorContext {
         tokio::sync::mpsc::UnboundedReceiver<crate::resources::asset_hot_reload::AssetReloadEvent>,
     >,
 
-    // 🌑 Blob shadows (Fase 4.3 — fallback HOTD-style sin shadow maps GPU)
     pub(crate) blob_shadow_mesh: Option<std::sync::Arc<crate::resources::mesh::Mesh>>,
     pub(crate) blob_shadow_material: Option<std::sync::Arc<crate::resources::material::Material>>,
+
+    // Engine core — LAST so its drop runs after all Arc holders above
+    pub reactor: Reactor,
 
     // Internal
     fixed_accumulator: f32,
@@ -364,22 +367,16 @@ pub struct ReactorContext {
 
 impl Drop for ReactorContext {
     fn drop(&mut self) {
-        // CRITICAL: Clear scene BEFORE reactor is dropped
-        // This releases Arc references to Mesh/Material which contain Vulkan resources
-        // that need the allocator (which is inside reactor) to be freed
-        self.scene.clear();
+        // Clear all Arc<Mesh>/Arc<Material> holders before reactor is dropped.
+        // reactor is the LAST field, so it will be dropped after everything above
+        // by Rust's automatic field-drop order, while the device is still alive.
+        self.scene.objects.clear();
+        self.scene.lights.clear();
         self.blob_shadow_mesh = None;
         self.blob_shadow_material = None;
         self.asset_manager.clear();
-
-        // SAFETY: device_wait_idle() blocks until all GPU operations complete.
-        // This is safe to call at any time and has no aliasing requirements.
-        // We call it here to ensure all GPU operations complete before
-        // Vulkan resources are dropped by the Reactor destructor.
-        // The device handle is still valid at this point (Drop hasn't run yet).
-        unsafe {
-            let _ = self.reactor.context.device.device_wait_idle();
-        }
+        self.asset_hot_reload = None;
+        self.hot_reload_rx = None;
     }
 }
 

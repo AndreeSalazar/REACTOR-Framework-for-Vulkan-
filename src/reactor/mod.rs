@@ -229,6 +229,14 @@ impl Drop for Reactor {
                 .destroy_command_pool(self.command_pool, None);
         }
 
+        // ── PostProcess (drop BEFORE swapchain so all descriptors die first) ──
+        // We move post_process into a local that drops at end of this function.
+        // Its Drop impl needs a live device (still alive at this point).
+        let _post_process = std::mem::replace(
+            &mut self.post_process,
+            crate::graphics::post_process::PostProcessPipeline::new(),
+        );
+
         // ── Swapchain ──
         self.swapchain.destroy(self.context.ash_device());
 
