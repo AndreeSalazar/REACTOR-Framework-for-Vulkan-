@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex};
 
 pub fn generate_value_noise_3d(size: u32, seed: u32) -> Vec<u8> {
     let n = size as usize;
-    let mut rng = seed.wrapping_mul(2_654_435_761);
+    let rng = seed.wrapping_mul(2_654_435_761u32);
     let mut data = vec![0u8; n * n * n * 4];
     for z in 0..n {
         for y in 0..n {
@@ -189,7 +189,7 @@ impl VolumetricClouds {
             ctx,
             &spv,
             &[descriptor_layout],
-            Some(120),
+            Some(144),
         )?;
 
         let pool_sizes = [
@@ -360,7 +360,7 @@ impl VolumetricClouds {
             );
         }
 
-        let mut push_bytes = [0u8; 120];
+        let mut push_bytes = [0u8; 144];
         let mut o = 0usize;
         for col in inv_view_proj.to_cols_array() {
             push_bytes[o..o + 4].copy_from_slice(&col.to_ne_bytes());
@@ -677,8 +677,8 @@ fn create_3d_noise_image(
     unsafe {
         device.free_command_buffers(command_pool, &[cmd]);
     }
-    let mut staging_buffer = staging_buffer;
-    staging_buffer.destroy();
+    let staging_buffer = staging_buffer;
+    drop(staging_buffer);
 
     let view_info = vk::ImageViewCreateInfo::default()
         .image(image)
