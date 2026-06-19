@@ -320,6 +320,41 @@ impl Reactor {
         )?;
         log::info!("SSGI Hi-Z compute pipeline ready");
 
+        let linear_sampler_info = vk::SamplerCreateInfo::default()
+            .mag_filter(vk::Filter::LINEAR)
+            .min_filter(vk::Filter::LINEAR)
+            .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .border_color(vk::BorderColor::FLOAT_OPAQUE_BLACK)
+            .unnormalized_coordinates(false)
+            .compare_enable(false)
+            .compare_op(vk::CompareOp::ALWAYS);
+        let linear_sampler = unsafe {
+            context
+                .device
+                .create_sampler(&linear_sampler_info, None)
+                .map_err(|e| {
+                    ReactorError::with_source(
+                        ErrorCode::VulkanImageCreation,
+                        "Failed to create linear sampler for clouds",
+                        e,
+                    )
+                })?
+        };
+
+        let volumetric_clouds = crate::graphics::post_process::VolumetricClouds::new(
+            &context,
+            allocator.clone(),
+            command_pool,
+            context.graphics_queue,
+            swapchain.extent.width,
+            swapchain.extent.height,
+            swapchain.images.len() as u32,
+            linear_sampler,
+        )?;
+        log::info!("Volumetric clouds pipeline ready (2x 3D noise + dispatch)");
+
         let mut reactor = Self {
             context,
             swapchain,
@@ -349,6 +384,7 @@ impl Reactor {
             temporal_history: Some(temporal_history),
             hiz_pyramid: Some(hiz_pyramid),
             ssgi_hiz: Some(ssgi_hiz),
+            volumetric_clouds: Some(volumetric_clouds),
             pixel_intelligent: crate::core::PixelIntelligent::default(),
             msaa_samples,
             msaa_image,

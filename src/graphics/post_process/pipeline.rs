@@ -3089,6 +3089,45 @@ impl PostProcessPipeline {
         light_count: u32,
         depth_view: vk::ImageView,
     ) {
+        let light_count = light_count.min(1024);
+        self.dispatch_light_cull_inner(
+            device,
+            command_buffer,
+            image_index,
+            width,
+            height,
+            view,
+            projection,
+            inv_projection,
+            light_count,
+            depth_view,
+        );
+    }
+
+    pub fn update_lights(&mut self, lights: &[crate::graphics::post_process::PointLightGpu]) {
+        if let Some(buf) = self.light_cull_light_buffer.as_mut() {
+            if lights.is_empty() {
+                return;
+            }
+            let max_count = (buf.size as usize) / std::mem::size_of::<crate::graphics::post_process::PointLightGpu>();
+            let to_write = lights.len().min(max_count);
+            buf.write(&lights[..to_write]);
+        }
+    }
+
+    fn dispatch_light_cull_inner(
+        &self,
+        device: &ash::Device,
+        command_buffer: vk::CommandBuffer,
+        image_index: usize,
+        width: u32,
+        height: u32,
+        view: glam::Mat4,
+        projection: glam::Mat4,
+        inv_projection: glam::Mat4,
+        light_count: u32,
+        depth_view: vk::ImageView,
+    ) {
         let Some(pipeline) = self.light_cull_pipeline.as_ref() else { return; };
         let Some(descriptor_set) = self.light_cull_descriptor_sets.get(image_index) else { return; };
         let sampler = match self.sampler { Some(s) => s, None => return };

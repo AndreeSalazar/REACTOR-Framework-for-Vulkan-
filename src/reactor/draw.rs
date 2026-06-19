@@ -775,6 +775,42 @@ impl Reactor {
                     }
                 }
 
+                if let (Some(ssgi), Some(sampler), Some(hiz)) = (
+                    self.ssgi_hiz.as_mut(),
+                    self.post_process.sampler,
+                    self.hiz_pyramid.as_ref(),
+                ) {
+                    if let Some(gb) = self.gbuffer.as_ref() {
+                        let color_view = self.post_process.offscreen_images[image_index as usize]
+                            .view;
+                        let depth_view = if self.msaa_samples == vk::SampleCountFlags::TYPE_1 {
+                            self.depth_image_view.unwrap()
+                        } else {
+                            self.post_process.depth_resolved_images[image_index as usize].view
+                        };
+                        let normal_view = gb.normal_material.view;
+                        let hiz_mip0 = hiz.mip_view(image_index as usize, 0);
+                        let vp = self.camera_proj * self.camera_view;
+                        let inv_vp = vp.inverse();
+                        ssgi.dispatch(
+                            self.context.ash_device(),
+                            command_buffer,
+                            image_index as usize,
+                            self.swapchain.extent.width,
+                            self.swapchain.extent.height,
+                            vp,
+                            inv_vp,
+                            self.camera_pos,
+                            color_view,
+                            depth_view,
+                            normal_view,
+                            hiz_mip0,
+                            sampler,
+                            self.post_process.settings.ssgi_intensity,
+                        );
+                    }
+                }
+
                 // ── GTAO Compute Pass (after depth resolve, before TAA) ──
                 if self.post_process.gtao_pipeline.is_some() {
                     // Lazy-init GTAO descriptor sets on first dispatch
@@ -826,6 +862,16 @@ impl Reactor {
                         self.post_process.depth_resolved_images[image_index as usize].view
                     };
 
+                    let mut gpu_lights: Vec<crate::graphics::post_process::PointLightGpu> =
+                        Vec::with_capacity(scene.lights.len());
+                    crate::graphics::post_process::lights_to_gpu_buffer(
+                        &scene.lights,
+                        &mut gpu_lights,
+                    );
+                    let light_count = gpu_lights.len() as u32;
+
+                    self.post_process.update_lights(&gpu_lights);
+
                     self.post_process.dispatch_light_cull(
                         self.context.ash_device(),
                         command_buffer,
@@ -835,7 +881,7 @@ impl Reactor {
                         self.camera_view,
                         self.camera_proj,
                         self.camera_proj.inverse(),
-                        0, // light_count: 0 for now (infrastructure ready)
+                        light_count,
                         depth_view,
                     );
                 }
@@ -902,6 +948,32 @@ impl Reactor {
                         self.camera_far,
                         self.post_process.last_time + self.post_process.delta_time,
                     );
+                }
+
+                if let (Some(clouds), Some(sampler)) = (
+                    self.volumetric_clouds.as_mut(),
+                    self.post_process.sampler,
+                ) {
+                    let inv_vp = (self.camera_proj * self.camera_view).inverse();
+                    let depth_view = if self.msaa_samples == vk::SampleCountFlags::TYPE_1 {
+                        self.depth_image_view.unwrap()
+                    } else {
+                        self.post_process.depth_resolved_images[image_index as usize].view
+                    };
+                    clouds.dispatch(
+                        self.context.ash_device(),
+                        command_buffer,
+                        image_index as usize,
+                        self.swapchain.extent.width,
+                        self.swapchain.extent.height,
+                        inv_vp,
+                        self.camera_pos,
+                        scene.sun_direction,
+                        glam::Vec3::new(1.0, 0.95, 0.85),
+                        depth_view,
+                        sampler,
+                    );
+                    clouds.advance_time(self.post_process.delta_time);
                 }
 
                 if self.post_process.lens_flare_pipeline.is_some()
@@ -1166,6 +1238,10 @@ impl Reactor {
         }
 
         self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
+
+        if let Some(ssgi) = self.ssgi_hiz.as_mut() {
+            ssgi.advance_frame();
+        }
 
         Ok(())
     }

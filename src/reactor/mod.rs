@@ -84,6 +84,7 @@ pub struct Reactor {
     pub temporal_history: Option<crate::graphics::TemporalHistory>,
     pub hiz_pyramid: Option<crate::graphics::HiZPyramid>,
     pub ssgi_hiz: Option<crate::graphics::post_process::SsgiHiZ>,
+    pub volumetric_clouds: Option<crate::graphics::post_process::VolumetricClouds>,
     pub pixel_intelligent: PixelIntelligent,
 
     // ── Contexto Vulkan (al final: se libera al final por orden de Drop) ──
@@ -148,6 +149,7 @@ impl Drop for Reactor {
             self.temporal_history = None;
             self.hiz_pyramid = None;
             self.ssgi_hiz = None;
+            self.volumetric_clouds = None;
             self.decals.clear();
             self.decal_cube_mesh = None;
             if let Some(layout) = self.decal_descriptor_layout.take() {

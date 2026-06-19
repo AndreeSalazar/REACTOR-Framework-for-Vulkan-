@@ -1,5 +1,6 @@
 use crate::resources::material::Material;
 use crate::resources::mesh::Mesh;
+use crate::systems::lighting::Light;
 use glam::Mat4;
 use std::sync::Arc;
 
@@ -47,6 +48,7 @@ pub struct Scene {
     pub ambient_light: glam::Vec3,
     pub sun_direction: glam::Vec3,
     pub sun_color: glam::Vec3,
+    pub lights: Vec<Light>,
 }
 
 impl Scene {
@@ -56,6 +58,7 @@ impl Scene {
             ambient_light: glam::Vec3::splat(0.1),
             sun_direction: glam::Vec3::new(-0.5, -1.0, -0.5).normalize(),
             sun_color: glam::Vec3::ONE,
+            lights: Vec::new(),
         }
     }
 
@@ -122,6 +125,10 @@ impl Scene {
 
     pub fn set_ambient(&mut self, color: glam::Vec3) {
         self.ambient_light = color;
+    }
+
+    pub fn add_light(&mut self, light: Light) {
+        self.lights.push(light);
     }
 }
 

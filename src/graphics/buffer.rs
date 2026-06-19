@@ -163,6 +163,14 @@ impl Buffer {
         }
     }
 
+    pub fn write_slice(&self, data: &[u8]) {
+        if let Some(ptr) = self.map::<u8>() {
+            unsafe {
+                ptr.copy_from_nonoverlapping(data.as_ptr(), data.len());
+            }
+        }
+    }
+
     pub fn destroy(&mut self) {
         if self.handle != vk::Buffer::null() {
             unsafe {
