@@ -676,8 +676,9 @@ fn create_3d_noise_image(
     }
     unsafe {
         device.free_command_buffers(command_pool, &[cmd]);
-        device.destroy_buffer(staging_buffer.handle, None);
     }
+    let mut staging_buffer = staging_buffer;
+    staging_buffer.destroy();
 
     let view_info = vk::ImageViewCreateInfo::default()
         .image(image)

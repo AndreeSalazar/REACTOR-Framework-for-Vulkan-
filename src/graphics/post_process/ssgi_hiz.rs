@@ -91,7 +91,7 @@ impl SsgiHiZ {
             ctx,
             &spv,
             &[descriptor_layout],
-            Some(128),
+            Some(192),
         )?;
 
         let pool_sizes = [
@@ -267,7 +267,7 @@ impl SsgiHiZ {
             device.update_descriptor_sets(&writes, &[]);
         }
 
-        let mut push_bytes = [0u8; 128];
+        let mut push_bytes = [0u8; 192];
         let mut o = 0usize;
         for col in view_proj.to_cols_array() {
             push_bytes[o..o + 4].copy_from_slice(&col.to_ne_bytes());

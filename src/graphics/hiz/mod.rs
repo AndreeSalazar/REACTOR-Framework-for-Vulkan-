@@ -237,7 +237,7 @@ impl HiZPyramid {
             };
 
             let src_info = vk::DescriptorImageInfo::default()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_layout(vk::ImageLayout::GENERAL)
                 .image_view(src_view)
                 .sampler(sampler);
             let dst_info = vk::DescriptorImageInfo::default()

@@ -385,6 +385,7 @@ impl Reactor {
             hiz_pyramid: Some(hiz_pyramid),
             ssgi_hiz: Some(ssgi_hiz),
             volumetric_clouds: Some(volumetric_clouds),
+            clouds_sampler: Some(linear_sampler),
             pixel_intelligent: crate::core::PixelIntelligent::default(),
             msaa_samples,
             msaa_image,
