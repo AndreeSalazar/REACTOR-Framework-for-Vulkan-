@@ -75,6 +75,7 @@ pub use resources::font::FontAsset;
 pub use resources::material::Material;
 pub use resources::mesh::Mesh;
 pub use resources::decal::Decal;
+pub use resources::texture::Texture;
 pub use resources::vertex::Vertex;
 pub use scene::camera::Camera;
 pub use scene::transform::Transform;
@@ -83,7 +84,11 @@ pub use systems::audio::AudioClip;
 // Re-export system types
 pub use systems::lighting::{Light, LightType, LightingSystem};
 pub use systems::physics::{PhysicsWorld, Ray, RigidBody, Sphere, AABB};
-pub use systems::scene::Scene;
+pub use systems::scene::{Scene, SceneObject};
+
+// High-level convenience API on top of ReactorContext
+pub mod app_helpers;
+pub mod reactorapp;
 
 // Re-export utility types
 pub use utils::{CPUDetector, ResolutionDetector};
@@ -154,12 +159,15 @@ pub mod prelude {
 
         RigidBody,
         Scene,
+        SceneObject,
         Sphere,
         Transform,
         // Math
         Vec2,
         Vec3,
         Vec4,
+        Vertex,
+        Texture,
         VrsCapabilities,
         VrsRate,
         VrsSupportedRate,

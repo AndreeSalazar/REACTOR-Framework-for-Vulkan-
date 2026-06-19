@@ -2,90 +2,68 @@
 // cube.rs — Simple Rotating Cube Example
 // =============================================================================
 // The simplest possible 3D example: a colored cube rotating in space.
-// Demonstrates:
-//   - ReactorApp trait implementation
-//   - Mesh creation with vertices and indices
-//   - Material/shader loading
-//   - Scene management
-//   - Camera setup
-//   - Basic input handling
-//   - Cambios
+// All engine API is imported from `reactorapp::*` — the single high-level
+// entry point of REACTOR. No other imports needed.
 // =============================================================================
 
-use reactor_vulkan::prelude::*;
-use reactor_vulkan::Vertex;
-use std::sync::Arc;
-use winit::keyboard::KeyCode;
+#[path = "shared/mod.rs"]
+mod shared;
 
-/// Simple cube application
-struct CubeDemo {
+use reactor_vulkan::reactorapp::*;
+use reactor_vulkan::ReactorApp;
+use shared::camera_input::{CameraInput, CameraInputSettings, CameraMode};
+use shared::fps_counter::FpsCounter;
+
+fn cube_vertices() -> [Vertex; 8] {
+    use glam::Vec2;
+    [
+        Vertex::new(Vec3::new(-0.5, -0.5, 0.5), Vec3::new(1.0, 0.0, 0.0), Vec2::ZERO),
+        Vertex::new(Vec3::new(0.5, -0.5, 0.5), Vec3::new(0.0, 1.0, 0.0), Vec2::ZERO),
+        Vertex::new(Vec3::new(0.5, 0.5, 0.5), Vec3::new(0.0, 0.0, 1.0), Vec2::ZERO),
+        Vertex::new(Vec3::new(-0.5, 0.5, 0.5), Vec3::new(1.0, 1.0, 0.0), Vec2::ZERO),
+        Vertex::new(Vec3::new(-0.5, -0.5, -0.5), Vec3::new(1.0, 0.0, 1.0), Vec2::ZERO),
+        Vertex::new(Vec3::new(0.5, -0.5, -0.5), Vec3::new(0.0, 1.0, 1.0), Vec2::ZERO),
+        Vertex::new(Vec3::new(0.5, 0.5, -0.5), Vec3::new(1.0, 1.0, 1.0), Vec2::ZERO),
+        Vertex::new(Vec3::new(-0.5, 0.5, -0.5), Vec3::new(0.5, 0.5, 0.5), Vec2::ZERO),
+    ]
+}
+
+fn cube_indices() -> [u32; 36] {
+    [
+        0, 1, 2, 2, 3, 0,
+        1, 5, 6, 6, 2, 1,
+        5, 4, 7, 7, 6, 5,
+        4, 0, 3, 3, 7, 4,
+        3, 2, 6, 6, 7, 3,
+        4, 5, 1, 1, 0, 4,
+    ]
+}
+
+pub struct CubeDemo {
+    camera_input: CameraInput,
+    fps: FpsCounter,
+    cube_index: Option<usize>,
     rotation: f32,
 }
 
 impl CubeDemo {
-    fn new() -> Self {
-        Self { rotation: 0.0 }
+    pub fn new() -> Self {
+        let mut settings = CameraInputSettings::default();
+        settings.mode = CameraMode::Orbit;
+        settings.orbit_radius = 4.0;
+        settings.orbit_speed = 0.6;
+        Self {
+            camera_input: CameraInput::new(settings),
+            fps: FpsCounter::default(),
+            cube_index: None,
+            rotation: 0.0,
+        }
     }
+}
 
-    /// Create cube vertices with colors
-    fn cube_vertices() -> [Vertex; 8] {
-        [
-            // Front face (z = 0.5)
-            Vertex::new(
-                Vec3::new(-0.5, -0.5, 0.5),
-                Vec3::new(1.0, 0.0, 0.0),
-                Vec2::ZERO,
-            ), // Red
-            Vertex::new(
-                Vec3::new(0.5, -0.5, 0.5),
-                Vec3::new(0.0, 1.0, 0.0),
-                Vec2::ZERO,
-            ), // Green
-            Vertex::new(
-                Vec3::new(0.5, 0.5, 0.5),
-                Vec3::new(0.0, 0.0, 1.0),
-                Vec2::ZERO,
-            ), // Blue
-            Vertex::new(
-                Vec3::new(-0.5, 0.5, 0.5),
-                Vec3::new(1.0, 1.0, 0.0),
-                Vec2::ZERO,
-            ), // Yellow
-            // Back face (z = -0.5)
-            Vertex::new(
-                Vec3::new(-0.5, -0.5, -0.5),
-                Vec3::new(1.0, 0.0, 1.0),
-                Vec2::ZERO,
-            ), // Magenta
-            Vertex::new(
-                Vec3::new(0.5, -0.5, -0.5),
-                Vec3::new(0.0, 1.0, 1.0),
-                Vec2::ZERO,
-            ), // Cyan
-            Vertex::new(
-                Vec3::new(0.5, 0.5, -0.5),
-                Vec3::new(1.0, 1.0, 1.0),
-                Vec2::ZERO,
-            ), // White
-            Vertex::new(
-                Vec3::new(-0.5, 0.5, -0.5),
-                Vec3::new(0.5, 0.5, 0.5),
-                Vec2::ZERO,
-            ), // Gray
-        ]
-    }
-
-    /// Create cube indices (36 indices for 12 triangles)
-    fn cube_indices() -> [u32; 36] {
-        [
-            // Front face
-            0, 1, 2, 2, 3, 0, // Right face
-            1, 5, 6, 6, 2, 1, // Back face
-            5, 4, 7, 7, 6, 5, // Left face
-            4, 0, 3, 3, 7, 4, // Top face
-            3, 2, 6, 6, 7, 3, // Bottom face
-            4, 5, 1, 1, 0, 4,
-        ]
+impl Default for CubeDemo {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -98,116 +76,45 @@ impl ReactorApp for CubeDemo {
         println!("╔══════════════════════════════════════════════════════════════╗");
         println!("║              🎲 REACTOR Cube Demo                            ║");
         println!("╠══════════════════════════════════════════════════════════════╣");
-        println!("║  Controls:                                                   ║");
-        println!("║    ESC     - Exit                                            ║");
-        println!("║    WASD    - Move camera                                     ║");
-        println!("║    Space   - Move up                                         ║");
-        println!("║    Shift   - Move down                                       ║");
+        println!("║  ESC         — Exit                                          ║");
+        println!("║  Camera      — auto-orbiting around origin                   ║");
         println!("╚══════════════════════════════════════════════════════════════╝");
 
-        // Setup camera - looking at origin from a distance
-        ctx.camera.position = Vec3::new(0.0, 2.0, 4.0);
-        ctx.camera.set_rotation(-0.3, 0.0); // Look slightly down
+        let mut app = App::new(ctx);
+        app.camera()
+            .look_at(Vec3::new(0.0, 2.0, 4.0), Vec3::ZERO, 45.0);
+        app.lighting().default_three_point();
 
-        // Setup lighting
-        ctx.lighting.add_light(Light::directional(
-            Vec3::new(-0.5, -1.0, -0.3).normalize(),
-            Vec3::new(1.0, 0.98, 0.95), // Warm white
-            1.0,
-        ));
-
-        // Add a second directional light for fill
-        ctx.lighting.add_light(Light::directional(
-            Vec3::new(0.5, -0.5, 0.5).normalize(),
-            Vec3::new(0.3, 0.3, 0.4), // Cool fill
-            0.3,
-        ));
-
-        // Create cube mesh
-        let vertices = Self::cube_vertices();
-        let indices = Self::cube_indices();
-
-        match ctx.create_mesh(&vertices, &indices) {
-            Ok(mesh) => {
-                let mesh = Arc::new(mesh);
-
-                // Load shaders
-                let vert = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
-                    "../shaders/vert.spv"
-                )))
-                .expect("Failed to load vertex shader");
-
-                let frag = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(
-                    "../shaders/frag.spv"
-                )))
-                .expect("Failed to load fragment shader");
-
-                match ctx.create_material(&vert, &frag) {
-                    Ok(material) => {
-                        let material = Arc::new(material);
-
-                        // Add cube to scene at origin
-                        ctx.scene.add_object(mesh, material, Mat4::IDENTITY);
-                        println!("[CUBE] ✓ Cube added to scene");
-                    }
-                    Err(e) => eprintln!("[CUBE] ✗ Failed to create material: {}", e),
-                }
-            }
-            Err(e) => eprintln!("[CUBE] ✗ Failed to create mesh: {}", e),
-        }
+        self.cube_index = Some(
+            app.mesh()
+                .vertices(&cube_vertices())
+                .indices(&cube_indices())
+                .use_cookbook_forward_material()
+                .name("cube")
+                .transform(Mat4::IDENTITY)
+                .spawn()
+                .expect("cube spawn"),
+        );
     }
 
     fn update(&mut self, ctx: &mut ReactorContext) {
+        self.camera_input.update(ctx);
+
         let dt = ctx.time.delta();
-
-        // Exit on Escape
-        if ctx.input().is_key_down(KeyCode::Escape) {
-            ctx.reactor.exit_requested = true;
-        }
-
-        // Camera movement
-        let speed = 3.0 * dt;
-        if ctx.input().is_key_down(KeyCode::KeyW) {
-            ctx.camera.position.z -= speed;
-        }
-        if ctx.input().is_key_down(KeyCode::KeyS) {
-            ctx.camera.position.z += speed;
-        }
-        if ctx.input().is_key_down(KeyCode::KeyA) {
-            ctx.camera.position.x -= speed;
-        }
-        if ctx.input().is_key_down(KeyCode::KeyD) {
-            ctx.camera.position.x += speed;
-        }
-        if ctx.input().is_key_down(KeyCode::Space) {
-            ctx.camera.position.y += speed;
-        }
-        if ctx.input().is_key_down(KeyCode::ShiftLeft) {
-            ctx.camera.position.y -= speed;
-        }
-
-        // Rotate cube
         self.rotation += dt * 1.5;
-        let rotation =
-            Mat4::from_rotation_y(self.rotation) * Mat4::from_rotation_x(self.rotation * 0.7);
+        let transform = Mat4::from_rotation_y(self.rotation) * Mat4::from_rotation_x(self.rotation * 0.7);
 
-        // Update cube transform in scene
-        if !ctx.scene.objects.is_empty() {
-            ctx.scene.objects[0].transform = rotation;
+        if let Some(idx) = self.cube_index {
+            if let Some(obj) = ctx.scene.get_mut(idx) {
+                obj.transform = transform;
+            }
         }
 
-        // Update window title with FPS
-        ctx.set_title(&format!(
-            "🎲 REACTOR Cube Demo | FPS: {:.0} | Rotation: {:.1}°",
-            ctx.fps(),
-            self.rotation.to_degrees() % 360.0
-        ));
+        ctx.set_title(&self.fps.format_title(ctx, "🎲 REACTOR Cube Demo"));
     }
-
-    // render() uses default implementation which renders ctx.scene with ctx.camera
 }
 
 fn main() {
     println!("\n🚀 Starting REACTOR Cube Demo...\n");
-    reactor_vulkan::run(CubeDemo::new());
+    reactor_vulkan::reactorapp::launch(CubeDemo::new());
 }
