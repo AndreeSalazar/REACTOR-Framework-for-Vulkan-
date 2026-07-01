@@ -19,7 +19,6 @@ pub struct SsgiHiZ {
     pub descriptor_sets: Vec<vk::DescriptorSet>,
     pub output_images: Vec<Image>,
     pub history_images: Vec<Image>,
-    descriptors_written: Vec<bool>,
     pub frame_index: u32,
     device: ash::Device,
 }
@@ -161,8 +160,6 @@ impl SsgiHiZ {
         oneshot_transition_images(ctx, &output_images, vk::ImageLayout::GENERAL)?;
         oneshot_transition_images(ctx, &history_images, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)?;
 
-        let descriptors_written = vec![false; image_count as usize];
-
         Ok(Self {
             pipeline: Some(pipeline),
             descriptor_layout,
@@ -170,7 +167,6 @@ impl SsgiHiZ {
             descriptor_sets,
             output_images,
             history_images,
-            descriptors_written,
             frame_index: 0,
             device,
         })
@@ -212,9 +208,11 @@ impl SsgiHiZ {
             None => return,
         };
 
-        // Write descriptors once — layouts never change between frames.
-        if !self.descriptors_written.get_mut(image_index).copied().unwrap_or(false) {
-            let infos = [
+        // Write descriptors every frame — the sampler and image views can be
+        // recreated (e.g. on swapchain resize), so we must always pick up
+        // the current handles.  Layouts never change, so the validation
+        // layer sees them match the global tracked layout.
+        let infos = [
                 vk::DescriptorImageInfo::default()
                     .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
                     .image_view(color_view)
@@ -253,10 +251,6 @@ impl SsgiHiZ {
             unsafe {
                 device.update_descriptor_sets(&writes, &[]);
             }
-            if let Some(flag) = self.descriptors_written.get_mut(image_index) {
-                *flag = true;
-            }
-        }
 
         let mut push_bytes = [0u8; 192];
         let mut o = 0usize;
