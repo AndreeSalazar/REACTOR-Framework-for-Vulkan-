@@ -92,6 +92,46 @@ impl Reactor {
 
         let begin_info = vk::CommandBufferBeginInfo::default();
 
+        // ── Pre-update post-process descriptors BEFORE command buffer ──
+        let use_post_process =
+            self.post_process.enabled && !self.post_process.offscreen_images.is_empty();
+        let taa_enabled = self.post_process.enabled
+            && self.post_process.settings.is_effect_enabled(crate::graphics::post_process::PostProcessEffect::TAA)
+            && self.temporal_history.is_some()
+            && self.gbuffer.is_some();
+        if use_post_process {
+            let sampler = self.post_process.sampler.unwrap();
+            let color_view = if taa_enabled {
+                self.temporal_history.as_ref().unwrap().current_color().view
+            } else {
+                self.post_process.offscreen_images[image_index as usize].view
+            };
+            let motion_view = self.gbuffer.as_ref().map(|gb| gb.motion_depth_flags.view).unwrap_or(color_view);
+            let image_info = vk::DescriptorImageInfo::default()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(color_view)
+                .sampler(sampler);
+            let motion_info = vk::DescriptorImageInfo::default()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(motion_view)
+                .sampler(sampler);
+            let writes = [
+                vk::WriteDescriptorSet::default()
+                    .dst_set(self.post_process.descriptor_sets[image_index as usize])
+                    .dst_binding(0)
+                    .dst_array_element(0)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .image_info(std::slice::from_ref(&image_info)),
+                vk::WriteDescriptorSet::default()
+                    .dst_set(self.post_process.descriptor_sets[image_index as usize])
+                    .dst_binding(5)
+                    .dst_array_element(0)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .image_info(std::slice::from_ref(&motion_info)),
+            ];
+            unsafe { self.context.device.update_descriptor_sets(&writes, &[]); }
+        }
+
         unsafe {
             self.context
                 .device
@@ -278,11 +318,6 @@ impl Reactor {
                 );
             }
 
-            let taa_enabled = self.post_process.enabled
-                && self.post_process.settings.is_effect_enabled(crate::graphics::post_process::PostProcessEffect::TAA)
-                && self.temporal_history.is_some()
-                && self.gbuffer.is_some();
-
             let mut local_vp = *view_projection;
             if taa_enabled {
                 if let Some(ref history) = self.temporal_history {
@@ -309,9 +344,6 @@ impl Reactor {
                     local_vp = self.camera_proj * self.camera_view;
                 }
             }
-
-            let use_post_process =
-                self.post_process.enabled && !self.post_process.offscreen_images.is_empty();
 
             let swapchain_view = self.swapchain.image_views[image_index as usize];
             let swapchain_image = self.swapchain.images[image_index as usize];
@@ -978,41 +1010,6 @@ impl Reactor {
                     vk::PipelineBindPoint::GRAPHICS,
                     self.post_process.pipeline.unwrap(),
                 );
-
-                let sampler = self.post_process.sampler.unwrap();
-                let color_view = if taa_enabled {
-                    self.temporal_history.as_ref().unwrap().current_color().view
-                } else {
-                    self.post_process.offscreen_images[image_index as usize].view
-                };
-
-                let image_info = vk::DescriptorImageInfo::default()
-                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                    .image_view(color_view)
-                    .sampler(sampler);
-
-                let motion_view = self.gbuffer.as_ref().map(|gb| gb.motion_depth_flags.view).unwrap_or(color_view);
-                let motion_info = vk::DescriptorImageInfo::default()
-                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                    .image_view(motion_view)
-                    .sampler(sampler);
-
-                let writes = [
-                    vk::WriteDescriptorSet::default()
-                        .dst_set(self.post_process.descriptor_sets[image_index as usize])
-                        .dst_binding(0)
-                        .dst_array_element(0)
-                        .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                        .image_info(std::slice::from_ref(&image_info)),
-                    vk::WriteDescriptorSet::default()
-                        .dst_set(self.post_process.descriptor_sets[image_index as usize])
-                        .dst_binding(5)
-                        .dst_array_element(0)
-                        .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                        .image_info(std::slice::from_ref(&motion_info)),
-                ];
-
-                self.context.device.update_descriptor_sets(&writes, &[]);
 
                 self.context.device.cmd_bind_descriptor_sets(
                     command_buffer,

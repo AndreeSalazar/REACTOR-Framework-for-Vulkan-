@@ -164,7 +164,9 @@ impl PostProcessPipeline {
         }
 
         self.init_bloom(ctx, allocator.clone(), width, height, image_count)?;
+        self.destroy_fog_resources(device);
         self.init_fog(ctx, allocator.clone(), width, height, image_count)?;
+        self.destroy_lens_flare_resources(device);
         self.init_lens_flare(ctx, allocator.clone(), width, height, image_count)?;
         self.init_light_cull(ctx, allocator.clone(), width, height, image_count, 1024)?;
 
