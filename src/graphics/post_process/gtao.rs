@@ -64,7 +64,7 @@ impl PostProcessPipeline {
         }
     }
 
-    pub fn dispatch_gtao(&self, device: &ash::Device, command_buffer: vk::CommandBuffer, image_index: usize, width: u32, height: u32, proj_x: f32, proj_y: f32, near: f32, far: f32, frame_index: f32) {
+    pub fn dispatch_gtao(&mut self, device: &ash::Device, command_buffer: vk::CommandBuffer, image_index: usize, width: u32, height: u32, proj_x: f32, proj_y: f32, near: f32, far: f32, frame_index: f32) {
         let Some(pipeline) = self.gtao_pipeline.as_ref() else { return; };
         let Some(descriptor_set) = self.gtao_descriptor_sets.get(image_index) else { return; };
         let Some(ao_image) = self.gtao_ao_images.get(image_index) else { return; };
@@ -88,6 +88,10 @@ impl PostProcessPipeline {
 
             let ready = vk::ImageMemoryBarrier::default().old_layout(vk::ImageLayout::GENERAL).new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL).src_access_mask(vk::AccessFlags::SHADER_WRITE).dst_access_mask(vk::AccessFlags::SHADER_READ).image(ao_image.handle).subresource_range(vk::ImageSubresourceRange::default().aspect_mask(vk::ImageAspectFlags::COLOR).base_mip_level(0).level_count(1).base_array_layer(0).layer_count(1));
             device.cmd_pipeline_barrier(command_buffer, vk::PipelineStageFlags::COMPUTE_SHADER, vk::PipelineStageFlags::FRAGMENT_SHADER, vk::DependencyFlags::empty(), &[], &[], &[ready]);
+
+            if let Some(flag) = self.gtao_initialized.get_mut(image_index) {
+                *flag = true;
+            }
         }
     }
 }

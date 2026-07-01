@@ -1,3 +1,4 @@
+use crate::core::error::{ErrorCode, ReactorError};
 use crate::core::{ReactorResult, VulkanContext};
 use crate::graphics::Image;
 use ash::vk;
@@ -161,6 +162,72 @@ fn create_history_image(
         .name_image(image.handle, &format!("Image: {}", name));
     ctx.debug_namer()
         .name_image_view(image.view, &format!("ImageView: {}", name));
+
+    // Transition from UNDEFINED → SHADER_READ_ONLY_OPTIMAL immediately so that
+    // any CPU-side descriptor writes (e.g. update_post_descriptors) referencing
+    // this image see a valid layout from frame 0.
+    let device = ctx.ash_device();
+    let pool_info = vk::CommandPoolCreateInfo::default()
+        .queue_family_index(ctx.queue_family_index)
+        .flags(vk::CommandPoolCreateFlags::TRANSIENT);
+    let pool = unsafe { device.create_command_pool(&pool_info, None) }
+        .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool,
+            "temporal: create transient pool", e))?;
+
+    let alloc_info = vk::CommandBufferAllocateInfo::default()
+        .command_pool(pool)
+        .level(vk::CommandBufferLevel::PRIMARY)
+        .command_buffer_count(1);
+    let cmd = unsafe { device.allocate_command_buffers(&alloc_info) }
+        .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool,
+            "temporal: allocate one-shot", e))?[0];
+
+    let begin = vk::CommandBufferBeginInfo::default()
+        .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+    unsafe { device.begin_command_buffer(cmd, &begin) }
+        .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool,
+            "temporal: begin one-shot", e))?;
+
+    let barrier = vk::ImageMemoryBarrier::default()
+        .old_layout(vk::ImageLayout::UNDEFINED)
+        .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+        .src_access_mask(vk::AccessFlags::empty())
+        .dst_access_mask(vk::AccessFlags::SHADER_READ)
+        .image(image.handle)
+        .subresource_range(vk::ImageSubresourceRange {
+            aspect_mask: vk::ImageAspectFlags::COLOR,
+            base_mip_level: 0,
+            level_count: 1,
+            base_array_layer: 0,
+            layer_count: 1,
+        });
+    unsafe {
+        device.cmd_pipeline_barrier(
+            cmd,
+            vk::PipelineStageFlags::TOP_OF_PIPE,
+            vk::PipelineStageFlags::FRAGMENT_SHADER,
+            vk::DependencyFlags::empty(),
+            &[],
+            &[],
+            &[barrier],
+        );
+        device.end_command_buffer(cmd)
+            .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool,
+                "temporal: end one-shot", e))?;
+    }
+
+    let cmd_bufs = [cmd];
+    let submit = vk::SubmitInfo::default().command_buffers(&cmd_bufs);
+    unsafe {
+        device.queue_submit(ctx.graphics_queue, &[submit], vk::Fence::null())
+            .map_err(|e| ReactorError::with_source(ErrorCode::VulkanSynchronization,
+                "temporal: submit one-shot", e))?;
+        device.queue_wait_idle(ctx.graphics_queue)
+            .map_err(|e| ReactorError::with_source(ErrorCode::VulkanSynchronization,
+                "temporal: wait idle", e))?;
+        device.free_command_buffers(pool, &[cmd]);
+        device.destroy_command_pool(pool, None);
+    }
 
     Ok(image)
 }

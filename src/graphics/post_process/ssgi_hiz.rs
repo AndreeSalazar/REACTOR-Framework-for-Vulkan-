@@ -19,6 +19,7 @@ pub struct SsgiHiZ {
     pub descriptor_sets: Vec<vk::DescriptorSet>,
     pub output_images: Vec<Image>,
     pub history_images: Vec<Image>,
+    output_initialized: Vec<bool>,
     pub frame_index: u32,
     device: ash::Device,
 }
@@ -156,6 +157,8 @@ impl SsgiHiZ {
             history_images.push(hist);
         }
 
+        let output_initialized = vec![false; image_count as usize];
+
         Ok(Self {
             pipeline: Some(pipeline),
             descriptor_layout,
@@ -163,6 +166,7 @@ impl SsgiHiZ {
             descriptor_sets,
             output_images,
             history_images,
+            output_initialized,
             frame_index: 0,
             device,
         })
@@ -195,34 +199,50 @@ impl SsgiHiZ {
         let Some(set) = self.descriptor_sets.get(image_index) else {
             return;
         };
-        if image_index >= self.output_images.len() {
-            return;
-        }
+        let output = match self.output_images.get(image_index) {
+            Some(img) => img,
+            None => return,
+        };
+        let history = match self.history_images.get(image_index) {
+            Some(img) => img,
+            None => return,
+        };
 
-        let history_view = self.history_images[image_index].view;
+        let init = self.output_initialized.get_mut(image_index).copied().unwrap_or(false);
 
+        let subres = vk::ImageSubresourceRange {
+            aspect_mask: vk::ImageAspectFlags::COLOR,
+            base_mip_level: 0,
+            level_count: 1,
+            base_array_layer: 0,
+            layer_count: 1,
+        };
+
+        // Output: UNDEFINED→GENERAL (first frame) or SHADER_READ_ONLY_OPTIMAL→GENERAL
         let to_general = vk::ImageMemoryBarrier::default()
-            .old_layout(vk::ImageLayout::UNDEFINED)
+            .old_layout(if init { vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL } else { vk::ImageLayout::UNDEFINED })
             .new_layout(vk::ImageLayout::GENERAL)
-            .src_access_mask(vk::AccessFlags::empty())
+            .src_access_mask(if init { vk::AccessFlags::SHADER_READ } else { vk::AccessFlags::empty() })
             .dst_access_mask(vk::AccessFlags::SHADER_WRITE)
-            .image(self.output_images[image_index].handle)
-            .subresource_range(vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                base_mip_level: 0,
-                level_count: 1,
-                base_array_layer: 0,
-                layer_count: 1,
-            });
+            .image(output.handle)
+            .subresource_range(subres);
+        // History: UNDEFINED→SHADER_READ_ONLY_OPTIMAL (safe even every frame)
+        let hist_to_read = vk::ImageMemoryBarrier::default()
+            .old_layout(vk::ImageLayout::UNDEFINED)
+            .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .src_access_mask(vk::AccessFlags::empty())
+            .dst_access_mask(vk::AccessFlags::SHADER_READ)
+            .image(history.handle)
+            .subresource_range(subres);
         unsafe {
             device.cmd_pipeline_barrier(
                 command_buffer,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
+                if init { vk::PipelineStageFlags::FRAGMENT_SHADER } else { vk::PipelineStageFlags::TOP_OF_PIPE },
                 vk::PipelineStageFlags::COMPUTE_SHADER,
                 vk::DependencyFlags::empty(),
                 &[],
                 &[],
-                &[to_general],
+                &[to_general, hist_to_read],
             );
         }
 
@@ -245,11 +265,11 @@ impl SsgiHiZ {
                 .sampler(sampler),
             vk::DescriptorImageInfo::default()
                 .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(history_view)
+                .image_view(history.view)
                 .sampler(sampler),
             vk::DescriptorImageInfo::default()
                 .image_layout(vk::ImageLayout::GENERAL)
-                .image_view(self.output_images[image_index].view),
+                .image_view(output.view),
         ];
 
         let writes: [vk::WriteDescriptorSet; 6] = std::array::from_fn(|i| {
@@ -331,19 +351,18 @@ impl SsgiHiZ {
             device.cmd_dispatch(command_buffer, gx, gy, 1);
         }
 
+        // Mark output as initialized after first dispatch
+        if let Some(flag) = self.output_initialized.get_mut(image_index) {
+            *flag = true;
+        }
+
         let to_read = vk::ImageMemoryBarrier::default()
             .old_layout(vk::ImageLayout::GENERAL)
             .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
             .src_access_mask(vk::AccessFlags::SHADER_WRITE)
             .dst_access_mask(vk::AccessFlags::SHADER_READ)
-            .image(self.output_images[image_index].handle)
-            .subresource_range(vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                base_mip_level: 0,
-                level_count: 1,
-                base_array_layer: 0,
-                layer_count: 1,
-            });
+            .image(output.handle)
+            .subresource_range(subres);
         unsafe {
             device.cmd_pipeline_barrier(
                 command_buffer,
