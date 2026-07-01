@@ -1,25 +1,40 @@
 // =============================================================================
 // REACTOR Bridge — Blender Live Link
-// FASE 0 — Cimientos del protocolo (handshake + ping/pong + errores)
 // =============================================================================
 //
-// Este crate expone el `protocol` y `server` para que tanto el binario
-// standalone (`reactor-bridge-server`) como una futura integración dentro
-// del runtime de REACTOR (plugin) puedan reutilizarlo.
+// Transporte bidireccional REACTOR ⇄ Blender sobre WebSocket localhost.
 //
-// Uso desde el runtime REACTOR (futuras fases):
+// Módulos:
+//   protocol   → tipos de mensaje (Message, Hello, Ping, TransformUpdated…)
+//   server     → WebSocket server (acepta conexiones del addon Blender)
+//   client     → WebSocket client (conecta a un servidor bridge)
 //
+// Uso (servidor):
 // ```ignore
-// let handle = reactor_bridge::server::spawn(BridgeConfig::default()).await?;
+// let handle = reactor_bridge::server::spawn(cfg, tx).await?;
 // // ... reactor.run(...) ...
 // handle.shutdown().await;
 // ```
 
+pub mod client;
 pub mod protocol;
 pub mod server;
 
+pub use client::{BridgeClient, ClientConfig};
 pub use protocol::{
     Error as ErrorMsg, Goodbye, Hello, HelloAck, Message, Ping, Pong, TransformUpdated,
     PROTOCOL_VERSION,
 };
 pub use server::{BridgeConfig, BridgeHandle};
+
+// ---------------------------------------------------------------------------
+// Error type
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("serialization error: {0}")]
+    Serialize(#[from] serde_json::Error),
+    #[error("channel closed")]
+    ChannelClosed,
+}

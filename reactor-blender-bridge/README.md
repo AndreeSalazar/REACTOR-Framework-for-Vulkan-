@@ -4,8 +4,9 @@ Sincronización en tiempo real entre **Blender** (DCC) y **REACTOR** (runtime
 Vulkan) sobre WebSocket localhost.
 
 > **Estado actual: FASE 0 — Cimientos del protocolo** ✅
-> Handshake, ping/pong y errores. Las fases siguientes (mesh, materials,
-> lights, animations…) se construyen sobre este transporte.
+> Handshake, ping/pong, sync de transformaciones y materiales PBR.
+> Las fases siguientes (mesh geometry, animaciones, luces, bidireccional…)
+> se construyen sobre este transporte.
 
 ---
 
@@ -13,29 +14,53 @@ Vulkan) sobre WebSocket localhost.
 
 ```text
 reactor-blender-bridge/
-├── README.md                ← este archivo
+├── README.md                       ← este archivo
 ├── proto/
-│   └── messages.md          ← especificación del protocolo (cross-lang)
-├── reactor_bridge/          ← crate Rust (servidor WebSocket)
-│   ├── Cargo.toml
-│   └── src/
-│       ├── lib.rs
-│       ├── protocol.rs
-│       ├── server.rs
-│       └── bin/
-│           └── reactor-bridge-server.rs
-├── blender_addon/           ← addon Python (cliente)
+│   └── messages.md                 ← especificación del protocolo (cross-lang)
+│
+├── rust/
+│   └── reactor_bridge/             ← crate Rust (servidor + cliente WebSocket)
+│       ├── Cargo.toml
+│       └── src/
+│           ├── lib.rs              ← re-exports
+│           ├── protocol.rs         ← Message enum + payload types
+│           ├── server.rs           ← WebSocket server (tokio-tungstenite)
+│           ├── client.rs           ← WebSocket client (para diagnóstico)
+│           └── bin/
+│               └── reactor_bridge_server.rs  ← binario standalone
+│
+├── python/                         ← Python package standalone
+│   ├── __init__.py
+│   ├── transport/                  ← capa de transporte (sin Blender deps)
+│   │   ├── __init__.py
+│   │   ├── protocol.py             ← tipos de mensaje, serialización
+│   │   └── websocket_client.py     ← WebSocket client stdlib puro
+│   ├── scripts/
+│   │   └── empaquetar_addon.py     ← empaquetador del addon para Blender
+│   └── tests/
+│       ├── test_protocol.py        ← unit tests del protocolo
+│       └── test_handshake.py       ← integración con servidor real
+│
+├── blender_addon/                  ← addon Blender (cliente)
 │   ├── __init__.py
 │   ├── manifest.toml
 │   ├── prefs.py
 │   ├── panel.py
-│   ├── transport/
-│   │   ├── protocol.py
-│   │   └── websocket_client.py
-│   └── operators/
-│       └── connect.py
-└── tests/
-    └── ping_pong.py         ← test standalone (sin Blender)
+│   ├── transport/                  ← re-export desde python.transport
+│   │   └── __init__.py
+│   ├── operators/
+│   │   └── connect.py              ← WebSocket client + Blender operators
+│   ├── handlers/
+│   │   └── depsgraph.py            ← auto-sync de escena Blender
+│   └── encoders/
+│       └── transform.py            ← Z-Up → Y-Up matrix conversion
+│
+└── shaders/
+    └── live_link/                  ← shaders PBR para Live Link
+        ├── blender_live.vert
+        ├── blender_live.frag       ← PBR completo (IBL + CSM + SSS + …)
+        ├── shadow.vert
+        └── shadow.frag
 ```
 
 ---
