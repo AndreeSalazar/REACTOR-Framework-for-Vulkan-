@@ -19,7 +19,7 @@ pub struct SsgiHiZ {
     pub descriptor_sets: Vec<vk::DescriptorSet>,
     pub output_images: Vec<Image>,
     pub history_images: Vec<Image>,
-    output_initialized: Vec<bool>,
+    descriptors_written: Vec<bool>,
     pub frame_index: u32,
     device: ash::Device,
 }
@@ -157,7 +157,11 @@ impl SsgiHiZ {
             history_images.push(hist);
         }
 
-        let output_initialized = vec![false; image_count as usize];
+        // One-shot: transition output→GENERAL and history→SHADER_READ_ONLY_OPTIMAL
+        oneshot_transition_images(ctx, &output_images, vk::ImageLayout::GENERAL)?;
+        oneshot_transition_images(ctx, &history_images, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)?;
+
+        let descriptors_written = vec![false; image_count as usize];
 
         Ok(Self {
             pipeline: Some(pipeline),
@@ -166,7 +170,7 @@ impl SsgiHiZ {
             descriptor_sets,
             output_images,
             history_images,
-            output_initialized,
+            descriptors_written,
             frame_index: 0,
             device,
         })
@@ -208,83 +212,50 @@ impl SsgiHiZ {
             None => return,
         };
 
-        let init = self.output_initialized.get_mut(image_index).copied().unwrap_or(false);
-
-        let subres = vk::ImageSubresourceRange {
-            aspect_mask: vk::ImageAspectFlags::COLOR,
-            base_mip_level: 0,
-            level_count: 1,
-            base_array_layer: 0,
-            layer_count: 1,
-        };
-
-        // Output: UNDEFINED→GENERAL (first frame) or SHADER_READ_ONLY_OPTIMAL→GENERAL
-        let to_general = vk::ImageMemoryBarrier::default()
-            .old_layout(if init { vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL } else { vk::ImageLayout::UNDEFINED })
-            .new_layout(vk::ImageLayout::GENERAL)
-            .src_access_mask(if init { vk::AccessFlags::SHADER_READ } else { vk::AccessFlags::empty() })
-            .dst_access_mask(vk::AccessFlags::SHADER_WRITE)
-            .image(output.handle)
-            .subresource_range(subres);
-        // History: UNDEFINED→SHADER_READ_ONLY_OPTIMAL (safe even every frame)
-        let hist_to_read = vk::ImageMemoryBarrier::default()
-            .old_layout(vk::ImageLayout::UNDEFINED)
-            .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .src_access_mask(vk::AccessFlags::empty())
-            .dst_access_mask(vk::AccessFlags::SHADER_READ)
-            .image(history.handle)
-            .subresource_range(subres);
-        unsafe {
-            device.cmd_pipeline_barrier(
-                command_buffer,
-                if init { vk::PipelineStageFlags::FRAGMENT_SHADER } else { vk::PipelineStageFlags::TOP_OF_PIPE },
-                vk::PipelineStageFlags::COMPUTE_SHADER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[to_general, hist_to_read],
-            );
-        }
-
-        let infos = [
-            vk::DescriptorImageInfo::default()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(color_view)
-                .sampler(sampler),
-            vk::DescriptorImageInfo::default()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(depth_view)
-                .sampler(sampler),
-            vk::DescriptorImageInfo::default()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(normal_view)
-                .sampler(sampler),
-            vk::DescriptorImageInfo::default()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(hiz_mip0_view)
-                .sampler(sampler),
-            vk::DescriptorImageInfo::default()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(history.view)
-                .sampler(sampler),
-            vk::DescriptorImageInfo::default()
-                .image_layout(vk::ImageLayout::GENERAL)
-                .image_view(output.view),
-        ];
-
-        let writes: [vk::WriteDescriptorSet; 6] = std::array::from_fn(|i| {
-            vk::WriteDescriptorSet::default()
-                .dst_set(*set)
-                .dst_binding(i as u32)
-                .descriptor_type(if i == 5 {
-                    vk::DescriptorType::STORAGE_IMAGE
-                } else {
-                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER
-                })
-                .image_info(std::slice::from_ref(&infos[i]))
-        });
-        unsafe {
-            device.update_descriptor_sets(&writes, &[]);
+        // Write descriptors once — layouts never change between frames.
+        if !self.descriptors_written.get_mut(image_index).copied().unwrap_or(false) {
+            let infos = [
+                vk::DescriptorImageInfo::default()
+                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    .image_view(color_view)
+                    .sampler(sampler),
+                vk::DescriptorImageInfo::default()
+                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    .image_view(depth_view)
+                    .sampler(sampler),
+                vk::DescriptorImageInfo::default()
+                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    .image_view(normal_view)
+                    .sampler(sampler),
+                vk::DescriptorImageInfo::default()
+                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    .image_view(hiz_mip0_view)
+                    .sampler(sampler),
+                vk::DescriptorImageInfo::default()
+                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    .image_view(history.view)
+                    .sampler(sampler),
+                vk::DescriptorImageInfo::default()
+                    .image_layout(vk::ImageLayout::GENERAL)
+                    .image_view(output.view),
+            ];
+            let writes: [vk::WriteDescriptorSet; 6] = std::array::from_fn(|i| {
+                vk::WriteDescriptorSet::default()
+                    .dst_set(*set)
+                    .dst_binding(i as u32)
+                    .descriptor_type(if i == 5 {
+                        vk::DescriptorType::STORAGE_IMAGE
+                    } else {
+                        vk::DescriptorType::COMBINED_IMAGE_SAMPLER
+                    })
+                    .image_info(std::slice::from_ref(&infos[i]))
+            });
+            unsafe {
+                device.update_descriptor_sets(&writes, &[]);
+            }
+            if let Some(flag) = self.descriptors_written.get_mut(image_index) {
+                *flag = true;
+            }
         }
 
         let mut push_bytes = [0u8; 192];
@@ -350,30 +321,6 @@ impl SsgiHiZ {
             let gy = (height + 7) / 8;
             device.cmd_dispatch(command_buffer, gx, gy, 1);
         }
-
-        // Mark output as initialized after first dispatch
-        if let Some(flag) = self.output_initialized.get_mut(image_index) {
-            *flag = true;
-        }
-
-        let to_read = vk::ImageMemoryBarrier::default()
-            .old_layout(vk::ImageLayout::GENERAL)
-            .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
-            .dst_access_mask(vk::AccessFlags::SHADER_READ)
-            .image(output.handle)
-            .subresource_range(subres);
-        unsafe {
-            device.cmd_pipeline_barrier(
-                command_buffer,
-                vk::PipelineStageFlags::COMPUTE_SHADER,
-                vk::PipelineStageFlags::FRAGMENT_SHADER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[to_read],
-            );
-        }
     }
 }
 
@@ -387,4 +334,94 @@ impl Drop for SsgiHiZ {
                 .destroy_descriptor_set_layout(self.descriptor_layout, None);
         }
     }
+}
+
+fn oneshot_transition_images(
+    ctx: &VulkanContext,
+    images: &[Image],
+    target_layout: vk::ImageLayout,
+) -> ReactorResult<()> {
+    let device = ctx.ash_device().clone();
+    let pool_info = vk::CommandPoolCreateInfo::default()
+        .queue_family_index(ctx.queue_family_index)
+        .flags(vk::CommandPoolCreateFlags::TRANSIENT);
+    let pool = unsafe { device.create_command_pool(&pool_info, None) }
+        .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool,
+            "ssgi: create transient pool", e))?;
+
+    let alloc_info = vk::CommandBufferAllocateInfo::default()
+        .command_pool(pool)
+        .level(vk::CommandBufferLevel::PRIMARY)
+        .command_buffer_count(1);
+    let cmd = unsafe { device.allocate_command_buffers(&alloc_info) }
+        .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool,
+            "ssgi: allocate one-shot", e))?[0];
+
+    let begin = vk::CommandBufferBeginInfo::default()
+        .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+    unsafe { device.begin_command_buffer(cmd, &begin) }
+        .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool,
+            "ssgi: begin one-shot", e))?;
+
+    let src_stage = if target_layout == vk::ImageLayout::GENERAL {
+        vk::PipelineStageFlags::TOP_OF_PIPE
+    } else {
+        vk::PipelineStageFlags::TOP_OF_PIPE
+    };
+    let dst_stage = if target_layout == vk::ImageLayout::GENERAL {
+        vk::PipelineStageFlags::COMPUTE_SHADER
+    } else {
+        vk::PipelineStageFlags::FRAGMENT_SHADER
+    };
+    let dst_access = if target_layout == vk::ImageLayout::GENERAL {
+        vk::AccessFlags::SHADER_WRITE
+    } else {
+        vk::AccessFlags::SHADER_READ
+    };
+
+    let barriers: Vec<vk::ImageMemoryBarrier> = images.iter().map(|img| {
+        vk::ImageMemoryBarrier::default()
+            .old_layout(vk::ImageLayout::UNDEFINED)
+            .new_layout(target_layout)
+            .src_access_mask(vk::AccessFlags::empty())
+            .dst_access_mask(dst_access)
+            .image(img.handle)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            })
+    }).collect();
+
+    unsafe {
+        device.cmd_pipeline_barrier(
+            cmd,
+            src_stage,
+            dst_stage,
+            vk::DependencyFlags::empty(),
+            &[],
+            &[],
+            &barriers,
+        );
+        device.end_command_buffer(cmd)
+            .map_err(|e| ReactorError::with_source(ErrorCode::VulkanCommandPool,
+                "ssgi: end one-shot", e))?;
+    }
+
+    let cmd_bufs = [cmd];
+    let submit = vk::SubmitInfo::default().command_buffers(&cmd_bufs);
+    unsafe {
+        device.queue_submit(ctx.graphics_queue, &[submit], vk::Fence::null())
+            .map_err(|e| ReactorError::with_source(ErrorCode::VulkanSynchronization,
+                "ssgi: submit one-shot", e))?;
+        device.queue_wait_idle(ctx.graphics_queue)
+            .map_err(|e| ReactorError::with_source(ErrorCode::VulkanSynchronization,
+                "ssgi: wait idle", e))?;
+        device.free_command_buffers(pool, &[cmd]);
+        device.destroy_command_pool(pool, None);
+    }
+
+    Ok(())
 }

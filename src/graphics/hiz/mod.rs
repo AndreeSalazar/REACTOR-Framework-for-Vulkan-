@@ -236,8 +236,15 @@ impl HiZPyramid {
                 None => return,
             };
 
+            // Level 0 reads the depth image (in SHADER_READ_ONLY_OPTIMAL);
+            // subsequent levels read mip-chain images (always in GENERAL).
+            let src_layout = if level == 0 {
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
+            } else {
+                vk::ImageLayout::GENERAL
+            };
             let src_info = vk::DescriptorImageInfo::default()
-                .image_layout(vk::ImageLayout::GENERAL)
+                .image_layout(src_layout)
                 .image_view(src_view)
                 .sampler(sampler);
             let dst_info = vk::DescriptorImageInfo::default()
