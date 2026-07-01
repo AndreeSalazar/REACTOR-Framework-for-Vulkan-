@@ -55,7 +55,7 @@ pub use app::run;
 
 // Re-export commonly used types at the crate root
 pub use app::app::{quick, quick_with, ReactorApp};
-pub use app::config::{ReactorConfig, RendererMode};
+pub use app::app::{ReactorConfig, RendererMode};
 pub use app::pause_config::{
     PauseConfig, PauseConfigPage, PauseConfigResult, PauseConfiguracion, PauseConfiguration,
 };

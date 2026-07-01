@@ -55,7 +55,7 @@ pub use crate::platform::input::Input;
 pub use crate::platform::time::Time;
 pub use crate::platform::window::ReactorWindow;
 pub use crate::reactor::Reactor;
-pub use crate::app::config::ReactorConfig;
+pub use crate::app::app::ReactorConfig;
 
 pub use glam::{Mat3, Mat4, Quat, Vec2, Vec3, Vec4};
 

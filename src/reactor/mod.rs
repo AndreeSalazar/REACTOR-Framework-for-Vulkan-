@@ -15,7 +15,13 @@
 //! ├── swapchain_recreate.rs — recreate_swapchain
 //! ├── resources.rs          — create_mesh / load_texture / materials
 //! ├── events.rs             — handle_event + queries
-//! └── draw.rs               — draw_scene + draw_frame
+//! └── draw/
+//!     ├── mod.rs            — submodule declarations
+//!     ├── vrs.rs            — apply_pixel_intelligent_vrs
+//!     ├── scene.rs          — draw_scene (escena completa)
+//!     ├── legacy.rs         — draw_frame (single-mesh, legado)
+//!     ├── decals.rs         — draw_screen_space_decals
+//!     └── bind.rs           — bind_reactor_system_descriptors
 //! ```
 //!
 //! El usuario sigue viendo **un solo tipo `Reactor`** (monolito en la API),

@@ -1631,7 +1631,7 @@ sequenceDiagram
 
 - Versión inicial en Rust.
 - Vulkan 1.3 base.
-
+- Reutilizar Everything with A Complete Total Optimization of Resources
 ---
 
 ## 📄 Licencia
