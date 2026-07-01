@@ -1,34 +1,9 @@
-// =============================================================================
-// REACTOR Build Script — Auto-compile GLSL shaders to SPIR-V
-// =============================================================================
-// Requires `glslc` (from Vulkan SDK) to be in PATH.
-//
-// Estructura esperada:
-//
-//   shaders/
-//   ├── lib/        ← snippets reutilizables (.glsl) — solo `#include`,
-//   │                  no se compilan standalone
-//   ├── core/       ← basic + textured (used by built-in pipelines)
-//   ├── post/       ← post_process chain
-//   └── live/       ← Blender Live Link mini-PBR
-//
-// Cada source `.vert`/`.frag` listado en `SHADER_ALIASES` produce un único
-// `.spv` en `shaders/<alias>.spv` (la ruta canónica que esperan los
-// `include_bytes!` del runtime). El resto de shaders (si los hubiera) se
-// compilan en el mismo directorio que la fuente.
-//
-// Los archivos `.glsl` dentro de `shaders/lib/` se exponen al preprocesador
-// vía `-I shaders/lib`, permitiendo `#include "pbr.glsl"` con la extensión
-// GL_GOOGLE_include_directive.
-// =============================================================================
-
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
 use std::time::SystemTime;
 
-/// Filename → ruta canónica de output (relativa al workspace).
 fn shader_aliases() -> HashMap<&'static str, &'static str> {
     let mut m = HashMap::new();
     // ── Core (builtin pipelines) ─────────────────────────────────────────
@@ -39,9 +14,33 @@ fn shader_aliases() -> HashMap<&'static str, &'static str> {
     // ── Deferred / G-Buffer ──────────────────────────────────────────────
     m.insert("gbuffer.vert", "shaders/deferred/gbuffer_vert.spv");
     m.insert("gbuffer.frag", "shaders/deferred/gbuffer_frag.spv");
+    m.insert("lighting_resolve.frag", "shaders/deferred/lighting_resolve.spv");
     // ── Post-process chain ───────────────────────────────────────────────
     m.insert("post_process.vert", "shaders/post_process_vert.spv");
     m.insert("post_process.frag", "shaders/post_process_frag.spv");
+    m.insert("decal.frag", "shaders/post/decal.spv");
+    m.insert("auto_exposure.comp", "shaders/post/auto_exposure.spv");
+    m.insert("bloom_downsample.comp", "shaders/post/bloom_downsample.spv");
+    m.insert("bloom_upsample.comp", "shaders/post/bloom_upsample.spv");
+    m.insert("depth_resolve.comp", "shaders/post/depth_resolve.spv");
+    m.insert("gtao.comp", "shaders/post/gtao.spv");
+    m.insert("hiz_build.comp", "shaders/post/hiz_build.spv");
+    m.insert("lens_flare.comp", "shaders/post/lens_flare.spv");
+    m.insert("ssgi_hiz.comp", "shaders/post/ssgi_hiz.spv");
+    m.insert("taa_resolve.comp", "shaders/post/taa_resolve.spv");
+    m.insert("volumetric_clouds.comp", "shaders/post/volumetric_clouds.spv");
+    m.insert("volumetric_fog.comp", "shaders/post/volumetric_fog.spv");
+    // ── Compute ──────────────────────────────────────────────────────────
+    m.insert("cull.comp", "shaders/compute/cull.spv");
+    m.insert("light_cull.comp", "shaders/compute/light_cull.spv");
+    // ── IBL baking ───────────────────────────────────────────────────────
+    m.insert("equirect_to_cube.comp", "shaders/ibl/equirect_to_cube.spv");
+    m.insert("irradiance.comp", "shaders/ibl/irradiance.spv");
+    m.insert("prefilter.comp", "shaders/ibl/prefilter.spv");
+    m.insert("brdf_lut.comp", "shaders/ibl/brdf_lut.spv");
+    // ── Particles ────────────────────────────────────────────────────────
+    m.insert("particle.vert", "shaders/particles/particle_vert.spv");
+    m.insert("particle.frag", "shaders/particles/particle_frag.spv");
     // ── Blender Live Link ────────────────────────────────────────────────
     m.insert("blender_live.vert", "shaders/blender_live_vert.spv");
     m.insert("blender_live.frag", "shaders/blender_live_frag.spv");
@@ -56,7 +55,6 @@ fn compile_shader(src: &str, dst: &str) {
 
     println!("cargo:rerun-if-changed={}", src);
 
-    // Skip only if output is newer than the source and shared include library.
     if dst_path.exists() {
         if let Ok(dst_meta) = dst_path.metadata() {
             if let Ok(dst_time) = dst_meta.modified() {
@@ -76,8 +74,8 @@ fn compile_shader(src: &str, dst: &str) {
     let status = Command::new("glslc")
         .args([
             "-I",
-            "shaders/lib", // permite `#include "pbr.glsl"` desde cualquier shader
-            "-O",          // optimización por defecto
+            "shaders/lib",
+            "-O",
             src,
             "-o",
             dst,
@@ -88,7 +86,6 @@ fn compile_shader(src: &str, dst: &str) {
         Ok(s) if s.success() => {}
         Ok(s) => {
             eprintln!("glslc failed for {} with exit code: {:?}", src, s.code());
-            // Don't fail the build — shaders may already exist as .spv
         }
         Err(e) => {
             eprintln!("Could not run glslc (is Vulkan SDK installed?): {}", e);
@@ -124,7 +121,6 @@ fn main() {
         return;
     }
 
-    // Re-run cuando cambie cualquier helper de la lib.
     println!("cargo:rerun-if-changed=shaders");
     println!("cargo:rerun-if-changed=shaders/lib");
 
@@ -137,10 +133,7 @@ fn main() {
     {
         let path = entry.path();
 
-        // Procesar .vert / .frag / .comp.
-        let Some(ext) = path.extension() else {
-            continue;
-        };
+        let Some(ext) = path.extension() else { continue };
         let ext_str = ext.to_string_lossy();
         if ext_str != "vert" && ext_str != "frag" && ext_str != "comp" {
             continue;
@@ -149,13 +142,10 @@ fn main() {
         let src = path.to_string_lossy().replace('\\', "/");
         let filename = path.file_name().unwrap().to_string_lossy().to_string();
 
-        // Si el filename tiene un alias canónico, compila SOLO ahí (sin duplicar
-        // un .spv junto al fuente).
         if let Some(&alias_dst) = aliases.get(filename.as_str()) {
             compile_shader(&src, alias_dst);
             compiled += 1;
         } else {
-            // Shader sin alias → output en el mismo directorio que la fuente.
             let dst = src.replace(&format!(".{}", ext_str), ".spv");
             compile_shader(&src, &dst);
             compiled += 1;
