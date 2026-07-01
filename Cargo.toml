@@ -148,7 +148,7 @@ path = "examples/blender_live.rs"
 # =============================================================================
 
 [profile.dev]
-opt-level = 2
+opt-level = 3
 debug = true
 
 [profile.release]
