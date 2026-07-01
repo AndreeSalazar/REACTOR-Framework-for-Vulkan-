@@ -54,8 +54,8 @@ pub mod reactor;
 pub use app::run;
 
 // Re-export commonly used types at the crate root
-pub use app::app::{quick, quick_with, ReactorApp};
-pub use app::app::{ReactorConfig, RendererMode};
+pub use app::{quick, quick_with, ReactorApp};
+pub use app::{ReactorConfig, RendererMode};
 pub use app::pause_config::{
     PauseConfig, PauseConfigPage, PauseConfigResult, PauseConfiguracion, PauseConfiguration,
 };
@@ -176,7 +176,7 @@ pub mod prelude {
     };
 
     // Re-export the ReactorContext type alias if it exists
-    pub use crate::app::app::{GltfBounds, GltfSpawn, ModelSpawnInfo};
+    pub use crate::app::{GltfBounds, GltfSpawn, ModelSpawnInfo};
     pub use crate::app::ReactorContext;
 }
 

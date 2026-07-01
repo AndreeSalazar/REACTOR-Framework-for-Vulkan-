@@ -33,7 +33,7 @@
 //! typical apps touch is curated and re-exported here.
 
 pub use crate::app::ReactorContext;
-pub use crate::app::app::{GltfBounds, GltfSpawn, ModelSpawnInfo, ReactorApp, RendererMode};
+pub use crate::app::{GltfBounds, GltfSpawn, ModelSpawnInfo, ReactorApp, RendererMode};
 pub use crate::app_helpers::App;
 pub use crate::app_helpers::camera_setup::CameraSetup;
 pub use crate::app_helpers::exit_helpers::check_escape;
@@ -55,7 +55,7 @@ pub use crate::platform::input::Input;
 pub use crate::platform::time::Time;
 pub use crate::platform::window::ReactorWindow;
 pub use crate::reactor::Reactor;
-pub use crate::app::app::ReactorConfig;
+pub use crate::app::ReactorConfig;
 
 pub use glam::{Mat3, Mat4, Quat, Vec2, Vec3, Vec4};
 
